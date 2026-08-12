@@ -16,28 +16,55 @@ What Humalien is made of. Prices are what was seen at the time and will drift.
 | Pi NoIR camera + ribbon extender | Night vision, later | CSI, so it reaches the Pi and not the brain. See [hardware.md](hardware.md) |
 | Asus laptop | Brain | Until the Jetson |
 
-## Decided, not yet bought
+## Ordered — eye motion
+
+Everything needed to make eyes move. Ordered 12 Aug 2026, ~$109.
+
+| Part | Chosen | Price |
+| --- | --- | --- |
+| PCA9685 servo driver | HiLetgo, 2-pack | $13.99 |
+| MG90S micro servos | Beffkkip, 8-pack (6 used, 2 spare) | $23.98 |
+| Power supply, 5 V 5 A | ALITOVE, includes screw-terminal adapter | $16.49 |
+| Capacitor, 1000 µF 25 V | Cionyce, 10-pack | $4.49 |
+| Soldering station | YIHUA 926 III, 60 W, with helping hands | $39.99 |
+
+Jumper wires already on hand. The screw-terminal adapter came with the ALITOVE
+supply, so no separate one was needed.
+
+Optional: a roll of **63/37 leaded solder**. The YIHUA kit ships lead-free,
+which needs more heat and flows worse — noticeably harder to learn on.
+
+## Next to buy
 
 | Part | Number | Why this one |
 | --- | --- | --- |
-| Arducam colour global shutter USB camera | **B0385** (OV9782) | Global shutter freezes motion, 100 fps gives the frame picker candidates, board-level mounts in a head, UVC needs no driver |
-| Jetson Orin Nano Super Dev Kit 8 GB | **945-13766-0005-000** | $249 at NVIDIA MSRP. Runs 3–4B VLMs locally |
-| NVMe M.2 SSD, 256 GB+ | any | JetPack on SD is miserable |
+| Arducam colour global shutter USB camera | **B0385** (OV9782) | Amazon `B0CLXZ29F9`. Global shutter freezes motion, 100 fps gives the frame picker candidates, board-level mounts in a head, UVC needs no driver |
+| M12 lens with IR-cut filter | — | The B0385 stock lens has none, so colours skew |
 
 **Get B0385, not B0332.** B0332 is the OV9281 *monochrome* sensor. It is
 cheaper, faster and better in low light, and useless here — "what colour is the
 object in my hand" is a question Humalien is expected to answer.
 
-## Planned
+## Buy when the price is sane
+
+| Part | Number |
+| --- | --- |
+| Jetson Orin Nano Super Dev Kit 8 GB | **945-13766-0005-000** |
+| NVMe M.2 SSD, 256 GB+ | any |
+
+$249 was the announcement price. NVIDIA's own marketplace lists **$399**, and
+it is scarce enough that stock trackers exist for it — resellers were asking
+$769. Nothing is blocked on this: the Asus is the brain, and everything runs
+cloud-side today. The Jetson only buys embeddability and local inference,
+neither of which is needed until there is a body. Set an alert on
+nowinstock.net or hotstock.io and buy near MSRP.
+
+## Planned, not yet specified
 
 | Part | Role |
 | --- | --- |
-| PCA9685 | 16-channel servo PWM over I²C. Hardware PWM, so no twitch |
-| 2 × MG90S | Eye pan and tilt |
-| 1 × MG90S | Jaw |
-| 2 × DS3218 class, ~20 kg·cm | Neck yaw and pitch. Size after weighing the head |
-| Servo power supply, 6 V, several amps | Separate rail. Never the Pi's 5 V |
-| M12 lens with IR-cut filter | The B0385 stock lens has none, so colours skew |
+| 2 × DS3218 class, ~20 kg·cm | Neck yaw and pitch. Size only after weighing the head |
+| Servo power for the neck | Separate again, and much beefier than the eyes need |
 
 ## I²C bus
 
@@ -57,6 +84,37 @@ Two connector families are in play. The SHT41 uses **STEMMA QT / Qwiic** and
 has two sockets so it can daisy-chain; the VL53L1X ships with a plain six-wire
 cable. A Qwiic-to-header adapter will be needed to bring both onto the same
 bus, and the Pi 5 has no Qwiic socket of its own.
+
+## Eye mechanism
+
+[Will Cogley's Animatronic Eye Mechanism](https://makerworld.com/en/models/1184807-animatronic-eye-mechanism-e3-2)
+on MakerWorld, also on
+[Printables](https://www.printables.com/model/1220172-animatronic-eye-mechanism-e31).
+Free, and MakerWorld opens straight into Bambu Studio for the A1.
+
+Six micro servos: two pan, one tilt, three eyelid. Printing a proven mechanism
+first answers whether 4 Hz recognition and a 0.12 s smoothing constant read as
+alive, which is the question a custom design would otherwise be built on top of
+untested. Model a bespoke one afterwards, reusing the tuning.
+
+The plan for this head differs from the reference in one way: the **left pupil
+holds the VL53L1X**, so distance is measured to whatever Humalien is looking
+at. The right eye stays a plain eyeball and the camera lives in the forehead,
+which keeps the vision loop open — a camera that moves with the eye turns face
+position into an error signal and needs a nulling loop instead.
+
+## Wiring
+
+```
+5V 5A supply ──► PCA9685 V+ screw terminal    servo power, separate rail
+1000uF cap   ──► across V+ and GND            absorbs the start-up spike
+Pi 3.3V/GND  ──► PCA9685 VCC/GND              logic only, tiny draw
+Pi SDA/SCL   ──► PCA9685 SDA/SCL              from the audio hat pass-through
+Pi GND       ──► supply GND                   COMMON GROUND, not optional
+```
+
+The Pi powers the chip. The separate supply powers the servos. They share only
+ground.
 
 ## Things to check before ordering
 
