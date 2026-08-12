@@ -8,6 +8,7 @@ a natural voice conversation you can interrupt and talk over.
 | [architecture.md](architecture.md) | How the brain and the node split the work, and why |
 | [voice-pipeline.md](voice-pipeline.md) | Why the robot was answering itself, and how it's fixed |
 | [hardware.md](hardware.md) | Pi 5, Waveshare hat, audio devices, echo cancellation |
+| [parts.md](parts.md) | What Humalien is made of, and what still needs buying |
 | [vision.md](vision.md) | USB webcam face tracking and the gaze-target contract |
 | [people.md](people.md) | Recognising people, remembering them, and looking on request |
 | [running.md](running.md) | Starting Humalien by hand, and on boot |
