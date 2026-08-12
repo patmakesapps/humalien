@@ -25,6 +25,11 @@ DEFAULT_DB = Path(__file__).resolve().parent / "humalien.db"
 # arrival worth greeting again.
 FORGET_PRESENCE_AFTER = 60.0
 
+# How long a stranger must be genuinely gone before Humalien offers to meet
+# them again. Detection drops out for a frame all the time; without this,
+# a flicker makes it introduce itself over and over.
+RE_OFFER_AFTER = 20.0
+
 
 def log(message: str) -> None:
     print(f"[VOICE CORE] {message}", flush=True)
@@ -201,11 +206,17 @@ async def watch_the_room(
     The model has no reason to suspect the room changed, so it will never
     call a tool to find out. Arrivals have to be pushed. Everything else
     stays pull-only.
+
+    These messages report what happened and nothing else. What to do about
+    it - whether to greet, introduce itself, or stay quiet - belongs to the
+    session instructions, where the character lives. Scripting a reply here
+    would be putting words in its mouth from the outside.
     """
 
     last_seen: dict[int, float] = {}
     greeted: set[int] = set()
     offered_to_meet = False
+    stranger_gone_since: float | None = None
 
     while True:
         await asyncio.sleep(0.5)
@@ -239,7 +250,7 @@ async def watch_the_room(
 
             log(f"{names} came into view")
 
-            context = f"{names} has just come into view. Greet them naturally."
+            context = f"{names} has just come into view."
 
             if remembered:
                 context += " You remember: " + "; ".join(remembered)
@@ -251,19 +262,28 @@ async def watch_the_room(
         stranger = eyes.largest_stranger()
 
         if stranger is None:
-            offered_to_meet = False
+            # Detection drops out for a frame constantly. Only re-arm once
+            # they are genuinely gone, or a flicker makes Humalien introduce
+            # itself over and over.
+            if stranger_gone_since is None:
+                stranger_gone_since = now
 
-        elif not offered_to_meet and idle and not present:
-            offered_to_meet = True
+            elif now - stranger_gone_since > RE_OFFER_AFTER:
+                offered_to_meet = False
 
-            log("A stranger is here")
+        else:
+            stranger_gone_since = None
 
-            await realtime.send_context(
-                "Someone you do not recognise has been in front of you for a "
-                "few seconds. Introduce yourself and ask their name once. If "
-                "they give it, call remember_name."
-            )
-            await realtime.create_response()
+            if not offered_to_meet and idle and not present:
+                offered_to_meet = True
+
+                log("A stranger is here")
+
+                await realtime.send_context(
+                    "A face you do not recognise has been in view for a few "
+                    "seconds."
+                )
+                await realtime.create_response()
 
 
 async def run_voice_core() -> None:
@@ -283,6 +303,8 @@ async def run_voice_core() -> None:
     camera = os.getenv("HUMALIEN_CAMERA", "0")
     database = os.getenv("HUMALIEN_DB", str(DEFAULT_DB))
     vision_model = os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud")
+    show_video = os.getenv("HUMALIEN_SHOW_VIDEO", "0") == "1"
+    greet_on_sight = os.getenv("HUMALIEN_GREET_ON_SIGHT", "1") == "1"
 
     if not api_key:
         raise RuntimeError(f"OPENAI_API_KEY was not found in {ENV_FILE}")
@@ -291,6 +313,7 @@ async def run_voice_core() -> None:
     eyes = Eyes(
         Perception(store),
         camera=int(camera) if camera.isdigit() else camera,
+        show_video=show_video,
     )
     describer = OllamaDescriber(model=vision_model)
 
@@ -329,10 +352,16 @@ async def run_voice_core() -> None:
                     ),
                     asyncio.create_task(playback.run()),
                     asyncio.create_task(eyes.run()),
-                    asyncio.create_task(
-                        watch_the_room(eyes, realtime, playback, store, state)
-                    ),
                 }
+
+                if greet_on_sight:
+                    tasks.add(
+                        asyncio.create_task(
+                            watch_the_room(eyes, realtime, playback, store, state)
+                        )
+                    )
+                else:
+                    log("Speaking on sight is off - Humalien waits to be spoken to")
 
                 done, pending = await asyncio.wait(
                     tasks,
