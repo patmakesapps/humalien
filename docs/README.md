@@ -10,6 +10,7 @@ a natural voice conversation you can interrupt and talk over.
 | [hardware.md](hardware.md) | Pi 5, Waveshare hat, audio devices, echo cancellation |
 | [vision.md](vision.md) | USB webcam face tracking and the gaze-target contract |
 | [people.md](people.md) | Recognising people, remembering them, and looking on request |
+| [running.md](running.md) | Starting Humalien by hand, and on boot |
 
 ## The two machines
 
@@ -47,9 +48,14 @@ python -m humalien_node.server
 ```bash
 cd brain
 python -m pip install -r requirements.txt
-cp .env.example .env        # then fill in OPENAI_API_KEY
-python voice_core.py
+python tools/fetch_models.py    # face models, ~38 MB, once per machine
+cp .env.example .env            # then fill in OPENAI_API_KEY
+python humalien.py
 ```
+
+`humalien.py` is the master entry point — it preflights, then supervises and
+reconnects. Run `voice_core.py` directly while developing, when you want a
+crash to be loud rather than retried. See [running.md](running.md).
 
 **Without a Pi** (testing on a laptop with headphones), run the simulator
 instead of the Pi node, and point `HUMALIEN_PI_URL` at `ws://127.0.0.1:8765`:

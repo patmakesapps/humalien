@@ -1,0 +1,26 @@
+[Unit]
+Description=Humalien brain - conversation, eyes and memory
+# The Pi node is reached over the network, so wait for one to exist.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=humalien
+WorkingDirectory=/opt/humalien/brain
+ExecStart=/opt/humalien/brain/.venv/bin/python humalien.py
+
+# humalien.py already reconnects on its own. This is the backstop for the
+# cases it cannot recover from, such as the process being killed outright.
+Restart=always
+RestartSec=5
+
+# Journal gets the logs. `journalctl -u humalien-brain -f` to watch.
+StandardOutput=journal
+StandardError=journal
+
+# Cameras and audio devices.
+SupplementaryGroups=video audio
+
+[Install]
+WantedBy=multi-user.target

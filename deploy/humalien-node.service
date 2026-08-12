@@ -1,0 +1,23 @@
+[Unit]
+Description=Humalien node - microphone and speaker
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=humalien
+WorkingDirectory=/opt/humalien/node
+ExecStart=/usr/bin/python3 -m humalien_node.server
+
+# The node is a server and the brain reconnects to it, so it only has to
+# stay alive.
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+SupplementaryGroups=audio
+
+[Install]
+WantedBy=multi-user.target
