@@ -310,7 +310,7 @@ async def watch_the_room(
 
 
 async def run_voice_core() -> None:
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
 
     api_key = os.getenv("OPENAI_API_KEY")
     pi_url = os.getenv("HUMALIEN_PI_URL", "ws://10.0.0.83:8765")

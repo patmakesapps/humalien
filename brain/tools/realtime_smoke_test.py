@@ -16,7 +16,7 @@ ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
 async def main():
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
 
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1")

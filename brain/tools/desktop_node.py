@@ -223,7 +223,7 @@ async def handle_connection(
 
 
 async def main() -> None:
-    load_dotenv(ENV_FILE)
+    load_dotenv(ENV_FILE, override=True)
 
     input_device = int(
         os.getenv("HUMALIEN_DESKTOP_INPUT_DEVICE", "12")

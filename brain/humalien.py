@@ -37,7 +37,9 @@ def log(message: str) -> None:
 def preflight() -> tuple[list[str], list[str]]:
     """Check what Humalien needs. Returns (fatal, degraded)."""
 
-    load_dotenv(ENV_FILE)
+    # override=True: .env is the configuration, so it must win over stale
+    # OPENAI_API_KEY values inherited from the shell.
+    load_dotenv(ENV_FILE, override=True)
 
     fatal, degraded = [], []
 

@@ -36,7 +36,7 @@ STRANGER_COLOR = (0, 180, 255)
 
 def parse_args() -> argparse.Namespace:
     # Same settings the robot itself uses, so the preview matches it.
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--camera", default=os.getenv("HUMALIEN_CAMERA", "0"))
