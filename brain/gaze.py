@@ -32,6 +32,23 @@ class FaceBox:
     def area(self) -> int:
         return self.width * self.height
 
+    def mirrored(self, frame_width: int) -> "FaceBox":
+        """Reflect this box across the vertical center line of the frame.
+
+        OpenCV's profile cascade only finds faces turned one way, so the
+        other direction is found by flipping the image and detecting
+        again. Those coordinates then have to be flipped back.
+        """
+        if frame_width <= 0:
+            raise ValueError("Frame width must be positive")
+
+        return FaceBox(
+            x=frame_width - self.x - self.width,
+            y=self.y,
+            width=self.width,
+            height=self.height,
+        )
+
     def normalized_center(
         self,
         frame_width: int,

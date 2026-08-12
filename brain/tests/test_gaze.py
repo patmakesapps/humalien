@@ -22,6 +22,29 @@ class FaceBoxTests(unittest.TestCase):
 
         self.assertEqual(face.normalized_center(100, 100), (1.0, -1.0))
 
+    def test_mirroring_reflects_across_the_frame(self):
+        # A face found in a flipped frame has to be flipped back, or the
+        # eyes track a profile to the wrong side of the room.
+        face = FaceBox(x=10, y=30, width=20, height=40)
+
+        mirrored = face.mirrored(100)
+
+        self.assertEqual(mirrored.x, 70)
+        self.assertEqual((mirrored.y, mirrored.width, mirrored.height), (30, 20, 40))
+
+    def test_mirroring_twice_is_the_original(self):
+        face = FaceBox(x=10, y=30, width=20, height=40)
+
+        self.assertEqual(face.mirrored(100).mirrored(100), face)
+
+    def test_mirrored_center_is_reflected(self):
+        face = FaceBox(x=70, y=40, width=20, height=20)
+
+        original, _ = face.normalized_center(100, 100)
+        flipped, _ = face.mirrored(100).normalized_center(100, 100)
+
+        self.assertAlmostEqual(original, -flipped)
+
     def test_largest_face_is_primary(self):
         small = FaceBox(x=0, y=0, width=20, height=20)
         large = FaceBox(x=20, y=20, width=60, height=40)

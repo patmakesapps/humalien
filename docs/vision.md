@@ -61,7 +61,43 @@ Detector misses should not make the eyes twitch. The controller:
 2. Holds the last target for 350 ms after a miss.
 3. Eases back to camera center if the face stays lost.
 
-The current detector is OpenCV's bundled frontal-face Haar cascade. It requires
-no separate model download, making it a good hardware bring-up baseline. Once
-we have representative lighting and head-angle footage, detection can be
-upgraded without changing the gaze target or future servo interface.
+## Detection, and its limits
+
+Detection runs OpenCV's bundled Haar cascades, which need no model download —
+a good hardware bring-up baseline.
+
+The frontal cascade is tried first, because a face looking at the robot is both
+the common case and the most reliable detection. If it finds nothing, the
+profile cascade runs. That cascade is trained on **one** direction only, so if
+it also finds nothing the frame is flipped horizontally and it runs again, with
+the resulting coordinates mirrored back by `FaceBox.mirrored()`.
+
+Cost: a face looking at you is one cascade pass. A head turned side on is two.
+An empty room is three, every frame. That's the expensive case, and it's the one
+that runs whenever nobody is there.
+
+**This improves profile tracking. It does not make it good.** Known limits:
+
+- **The three-quarter dead zone.** Somewhere between straight-on and full
+  profile, neither cascade fires reliably. Haar cascades are trained on discrete
+  poses and don't interpolate between them. Expect a wobble as you rotate
+  through roughly 45°, which `HOLDING` will paper over only if you pass through
+  it quickly.
+- **Profile detection is noisier.** More false positives than frontal.
+  `select_primary_face` picks the largest box, which absorbs some of that, but
+  not all.
+- **Back of the head is not a face.** Turn fully away and tracking is gone. The
+  hold-then-recenter behavior is what covers this, and it's the correct
+  response — there is genuinely nothing to look at.
+
+### Upgrading the detector
+
+When the dead zone becomes the limiting factor, the fix is a better detector,
+not more cascades. OpenCV ships `cv2.FaceDetectorYN` (YuNet): a small CNN,
+roughly 340 KB, that handles pose, scale, and lighting far better than Haar and
+still runs comfortably on CPU.
+
+The tradeoff is a model file to vendor or fetch, which is why it isn't the
+starting point. Nothing else has to change — `detect()` returns `FaceBox`
+objects, and the gaze contract above is deliberately independent of how they
+were found.

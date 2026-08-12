@@ -46,6 +46,19 @@ class PacedPlayback:
 
     @property
     def is_speaking(self) -> bool:
+        """True while sound is actually coming out of the head.
+
+        This is the signal to drive a jaw servo from, and the reason to
+        resist `response.output_audio.delta`. Those events describe the
+        model generating audio, which finishes roughly ten times sooner
+        than the speaker finishes playing it. A jaw wired to them stops
+        moving mid-sentence while the head keeps talking.
+
+        For a jaw that opens with volume rather than on and off, take an
+        RMS envelope of each chunk in `run` as it is released. That is
+        the moment the audio and the clock line up.
+        """
+
         if not self.chunks.empty():
             return True
 

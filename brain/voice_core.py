@@ -113,7 +113,6 @@ async def realtime_to_pi(
             if not answering:
                 answering = True
                 log("Humalien started answering")
-                # Future: send mouth.speaking = true to the Pi.
 
             model_audio = realtime.decode_audio_delta(event)
 
@@ -126,10 +125,12 @@ async def realtime_to_pi(
 
             adapter = ModelToPiAudio()
 
+            # "Answering" means the model has finished generating, not that
+            # the head has finished talking. PacedPlayback is still draining
+            # for as long as it takes to speak. Drive a jaw from there.
             if answering:
                 answering = False
                 log("Humalien finished answering")
-                # Future: send mouth.speaking = false to the Pi.
 
         elif event_type == "response.output_audio_transcript.done":
             transcript = event.get("transcript")
