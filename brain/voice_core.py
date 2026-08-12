@@ -15,7 +15,7 @@ from people import PeopleStore
 from perception import Perception
 from playback import PacedPlayback
 from realtime_client import RealtimeClient, load_persona
-from robot_tools import TOOL_DEFINITIONS, RobotTools
+from robot_tools import Robot, tools
 
 
 ENV_FILE = Path(__file__).resolve().parent / ".env"
@@ -87,17 +87,12 @@ async def pi_to_realtime(pi_websocket, realtime: RealtimeClient, gate) -> None:
 
 async def run_tool_call(
     realtime: RealtimeClient,
-    tools: RobotTools,
+    robot: Robot,
     call_id: str,
     name: str,
     raw_arguments: str,
 ) -> None:
-    try:
-        arguments = json.loads(raw_arguments or "{}")
-    except json.JSONDecodeError:
-        arguments = {}
-
-    result = await tools.call(name, arguments)
+    result = await tools.execute(robot, name, raw_arguments)
 
     await realtime.send_function_output(call_id, result)
     await realtime.create_response()
@@ -106,7 +101,7 @@ async def run_tool_call(
 async def realtime_to_pi(
     realtime: RealtimeClient,
     playback: PacedPlayback,
-    tools: RobotTools,
+    robot: Robot,
     state: ConversationState,
 ) -> None:
     adapter = ModelToPiAudio()
@@ -152,7 +147,7 @@ async def realtime_to_pi(
             asyncio.create_task(
                 run_tool_call(
                     realtime,
-                    tools,
+                    robot,
                     event.get("call_id"),
                     event.get("name"),
                     event.get("arguments"),
@@ -330,7 +325,7 @@ async def run_voice_core() -> None:
 
             playback = PacedPlayback(pi_websocket)
             gate = build_mic_gate(gate_name, playback)
-            tools = RobotTools(eyes, store, describer)
+            robot = Robot(eyes=eyes, store=store, describer=describer)
             state = ConversationState()
 
             log(f"Microphone gate: {gate.name}")
@@ -343,7 +338,7 @@ async def run_voice_core() -> None:
                 eagerness=eagerness,
                 noise_reduction=noise_reduction,
                 transcription_model=transcription_model,
-                tools=TOOL_DEFINITIONS,
+                tools=tools.definitions(),
                 persona=load_persona(persona_file),
             ) as realtime:
                 log("Connected to OpenAI Realtime")
@@ -353,7 +348,7 @@ async def run_voice_core() -> None:
                         pi_to_realtime(pi_websocket, realtime, gate)
                     ),
                     asyncio.create_task(
-                        realtime_to_pi(realtime, playback, tools, state)
+                        realtime_to_pi(realtime, playback, robot, state)
                     ),
                     asyncio.create_task(playback.run()),
                     asyncio.create_task(eyes.run()),

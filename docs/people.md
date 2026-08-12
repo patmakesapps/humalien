@@ -215,6 +215,31 @@ stalls audio. Tool calls are dispatched as **separate tasks** rather than
 awaited inline, for the same reason: `look` would otherwise block the event
 loop that is feeding the speaker.
 
+### The registry
+
+Tools are declared in `robot_tools.py` with a decorator that keeps the schema
+and the handler in one place:
+
+```python
+@tools.tool("look", "Look through your camera...",
+            properties={"question": {"type": "string"}},
+            required=["question"])
+async def look(robot: Robot, question: str) -> dict:
+```
+
+`tool_registry.py` turns those into the `session.tools` payload, validates
+incoming arguments, and runs the handler. Three things it buys:
+
+- **No drift.** A schema and a dispatch table maintained separately fail only
+  when the model calls the tool. A test now asserts every handler can accept
+  what its schema declares.
+- **Forgiving coercion.** Models send `"2"` for `2` and `"yes"` for `true`
+  constantly. Those are corrected rather than failed.
+- **One error contract.** Everything comes back as `{"success": ..., "data"}`
+  or `{"success": false, "error"}`. A tool that broke can never come back
+  looking like one that worked and happened to mention an error — raising
+  `ToolError` sends the message straight to the model, which can act on it.
+
 ### Arrivals are pushed, depth is pulled
 
 The model has no reason to suspect the room changed, so it will never call a
