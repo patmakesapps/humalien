@@ -1,8 +1,8 @@
 # People: identity, memory, and looking
 
-Humalien should know who walked into the room, remember them tomorrow, and be
-able to answer a question about what it can see — without a model running
-constantly or a bill that scales with uptime.
+Humalien should know who it is talking to, remember them tomorrow, and be able
+to answer a question about what it can see — without a model running constantly
+or a bill that scales with uptime.
 
 ## Three layers, three clocks
 
@@ -12,8 +12,9 @@ rates, and conflating them is what makes systems like this expensive.
 | Layer | What runs | When | Cost |
 | --- | --- | --- | --- |
 | **Identity** | YuNet detect + SFace embed + dot product | Continuously, ~4 Hz | ~15 ms CPU. No model API. |
-| **Looking** | Vision model over one frame | Only when the conversation asks | One call, a few per conversation |
-| **Consolidation** | Small LLM over a finished transcript | After a conversation ends | Handful per day, nobody waiting |
+| **Talking** | OpenAI Realtime | Live conversation | The expensive one |
+| **Looking** | Vision model over one frame | Only when the conversation asks | A few calls per conversation |
+| **Writing** | Gemma over a finished transcript | After a conversation ends | A handful per day |
 
 The important line is the first one. **Identity is not a language problem.**
 
@@ -24,18 +25,60 @@ asked *"is this Patrick?"* is slow, costs a call every time, and is confidently
 wrong in exactly the way that matters — it will say yes to the wrong person.
 
 A face recognition net turns a face crop into a 128-dimensional unit vector.
-Recognition is then cosine similarity against everyone seen before, which at
+Recognition is then cosine similarity against everyone known, which at
 household scale is a dot product against a few dozen rows. Milliseconds, no
 network, no tokens.
 
-That single substitution is what makes the "can't have it constantly running"
-problem disappear. It was only a problem because an LLM was doing an
-embedding's job.
+That single substitution is what makes always-on recognition viable. It was
+only ever a resource problem because an LLM was doing an embedding's job.
 
 `recognizer.py` uses SFace, paired with YuNet in `vision.py` — YuNet supplies
 the five facial landmarks SFace needs to align a crop before embedding it.
 Feeding SFace an unaligned crop quietly degrades matching for turned heads,
 which are the ones we care about.
+
+**Running recognition costs nothing.** No API, no tokens, no network. Only
+`describe.py` and the Realtime session cost money.
+
+## Only confirmed people are stored
+
+This is the core v1 decision, and it is what keeps everything else simple.
+
+```
+face detected, nobody introduces them  → nothing stored
+somebody says who they are             → enrolled, with a name
+known face seen again                  → sighting recorded
+```
+
+`Perception.poll()` writes exactly one thing: a sighting of a person who is
+*already known*. Enrolling is a deliberate act — `Perception.enroll()` — driven
+by the conversation, never a side effect of being looked at.
+
+### Why not track unknowns
+
+The first version did, giving every unfamiliar face an anonymous record to be
+named later. It was a mistake, and worth recording so it does not get
+reinvented:
+
+- A face caught mid-turn scores just below the match threshold and becomes a
+  new record. One person quietly fragments into several.
+- Those orphans then **steal sightings**, because matching takes the best face
+  across everyone.
+- Worse, a creation-time threshold cannot prevent it. A person's stored views
+  accumulate, so a face that genuinely resembled nobody when first seen can
+  match confidently later. Real measurements: one orphan reached **0.605**
+  against the person it belonged to while still being a separate record.
+
+That needed a movement check to reject photographs, a "too ambiguous to
+enroll" band, a periodic consolidation pass, and a pruning policy — four
+mechanisms, all defending against records nobody asked for.
+
+Storing only confirmed people deletes the entire problem. A photograph on the
+wall never introduces itself.
+
+The cost is that Humalien cannot remember having *already asked* somebody who
+declined to give a name, so it will ask again next time. Add that exception
+the first time it is actually annoying, not before.
 
 ## Storage
 
@@ -44,10 +87,13 @@ because **a robot head gets unplugged mid-write**. WAL mode gives atomic,
 journaled writes. A JSON file rewrite does not.
 
 ```sql
-people (id, name, name_source, first_seen_at, last_seen_at, sighting_count)
+people (id, name NOT NULL, first_seen_at, last_seen_at, sighting_count)
 faces  (id, person_id, embedding BLOB, added_at)
 facts  (id, person_id, text, source, created_at)
 ```
+
+`name` is `NOT NULL`. The schema enforces the invariant: there is no such thing
+as an anonymous person.
 
 Embeddings are `BLOB`s, loaded into one numpy matrix at startup and cached.
 **No vector index, no Chroma, no FAISS.** Brute force over thirty vectors is
@@ -55,50 +101,22 @@ microseconds; an index would be pure ceremony.
 
 `faces` is deliberately many-per-person. One enrollment shot is fragile —
 matching collapses under different lighting or angle. `record_sighting` adds a
-new view only when it differs meaningfully from what's stored (cosine below
-`NOVEL_BELOW`), capped at `MAX_FACES_PER_PERSON`. That one detail is most of
-the difference between recognition that feels magic and recognition that keeps
-forgetting you.
+new view only when it differs meaningfully from what is stored, capped at
+`MAX_FACES_PER_PERSON`. This is safe now in a way it was not before: views are
+only ever added to somebody already confidently matched.
 
-## The unknown-face lifecycle
+`facts` rows hang off `person_id`, which is what lets memory about a person
+survive a rename and accumulate across conversations.
 
-There is **no separate table for unconfirmed people.** `name IS NULL` means
-unidentified. A person is a person whether or not you know what to call them.
-
-Two tables would mean rewriting foreign keys from `faces` and `facts` on
-promotion, duplicating schema, and turning "we learned their name" into a
-migration. Instead:
-
-```sql
-UPDATE people SET name = ?, name_source = 'asked' WHERE id = ?
-```
-
-Every embedding and fact already attached comes along for free.
-
-The part that makes it work is that **every detection matches against everyone,
-named or not**:
-
-```
-detect → embed → match against all people
-  ├─ matches a named person    → greet them
-  ├─ matches an unnamed person → attach the sighting to that record
-  └─ matches nobody            → create a new record, name NULL
-```
-
-So unnamed people accumulate embeddings and history *before* you know who they
-are. Learn the name later and all of it attaches retroactively — the robot can
-say "you were here Tuesday too." That behavior is free; it falls out of the
-schema.
-
-### Thresholds
+## Thresholds
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
-| `CREATE_BELOW` | 0.30 | Unlike anyone known. Safe to enroll as new. |
-| `MATCH_THRESHOLD` | 0.40 | Same person. Attach the sighting. |
+| `MATCH_THRESHOLD` | 0.40 | Same person. |
 | `GREET_THRESHOLD` | 0.50 | Confident enough to say the name out loud. |
 
-SFace's documented operating point is 0.363; these are stricter.
+SFace's documented operating point is 0.363; both are stricter, because using
+the wrong name is worse than staying quiet.
 
 ### Measured on real faces
 
@@ -111,111 +129,55 @@ From a live session with two people, using the `d` key in `people_preview.py`:
 | Two different people | ~0.28 |
 | Unrelated faces | 0.02 – 0.25 |
 
-That first session produced five orphan records — one-sighting ghosts of a
-known person caught mid-turn, scoring 0.383 and landing just under
-`MATCH_THRESHOLD`. Recognition itself was fine (279 sightings in a single
-record), but every near miss was spawning a stranger.
+Note the overlap: an awkward angle (0.38) scores lower than the threshold, and
+not far above two different people (0.28). That narrow gap is exactly why
+tracking unknowns was fragile, and why `d` exists — the winning similarity
+alone looks healthy, and only the margin over the runner-up reveals trouble.
 
-Hence the **ambiguous band** between `CREATE_BELOW` and `MATCH_THRESHOLD`. A
-face in that range is neither matched nor enrolled — perception simply waits
-for a cleaner look. Real strangers at 0.28 still enroll; the same person at
-0.38 no longer litters the database.
+## Who writes what
 
-Note this is fitted to one session with two faces. If a genuinely new person
-struggles to get recorded, `CREATE_BELOW` is the knob, and the `d` key is how
-to see whether it's actually the problem.
+The Realtime model talks. **Gemma does the writing**, over the finished
+transcript, after the conversation ends.
 
-### A threshold alone cannot fix this
+- **Cost** — Realtime tokens are the expensive ones. Tool definitions sit in
+  context all session and every call burns a round trip. Bookkeeping has no
+  business there.
+- **Latency** — fact extraction has zero urgency. It can run a minute later.
+- **Better facts** — reading a whole transcript beats deciding turn by turn.
+- **Re-runnable** — keep the transcripts and the extraction prompt can be
+  improved and re-run over history.
 
-The first fix was incomplete, and the audit tool showed why. An orphan created
-early scored **0.605** against the person it belonged to once that person had
-accumulated more views — far above `MATCH_THRESHOLD`, yet still a separate
-record. Another was created *with* `CREATE_BELOW` active and still ended up at
-0.437.
+**One exception: names write immediately.** If somebody says "I'm Derrick," the
+rest of the conversation depends on it, and a crash would lose it. That is a
+live tool call. The rule is *write immediately what the conversation depends
+on, defer everything else.*
 
-A person's stored representation grows over time. A face that genuinely
-resembled nobody when first seen can match confidently later, so no
-creation-time threshold can prevent duplicates on its own. Left alone those
-orphans actively **steal sightings**, because matching takes the best face
-across everyone.
-
-`consolidate()` re-checks unnamed records against named people and folds in
-anything that now matches. It runs on `people_preview` startup. Only
-unnamed → named; merging two named people is destructive and stays a human
-decision.
-
-Folding ghosts back in is not just cleanup — those records are usually the
-awkward angles the person's own record was missing, so consolidation *improves*
-coverage rather than merely tidying.
-
-`tools/people_audit.py` inspects before acting, and clears clutter:
-
-```bash
-python tools/people_audit.py                      # report only
-python tools/people_audit.py --merge-above 0.40   # fold in the ghosts
-python tools/people_audit.py --forget-unnamed     # drop every unnamed record
-```
-
-### Why the cutoffs are strict
-
-The failure costs aren't symmetric:
-
-- **Two people merged into one record** — bad. Mixed embeddings poison the
-  record and you will eventually name it wrong.
-- **One person split into two records** — mild. Duplicate unknowns.
-
-So both cutoffs stay strict and we accept some splitting, with
-`PeopleStore.merge()` as the repair. Without a merge you'd be hand-editing the
-database after every clustering mistake.
-
-## When to ask a name
-
-Not on first detection — someone crossing the frame shouldn't trigger an
-interrogation. `Sighting.should_ask_name()` waits until the face has been
-present for `SECONDS_BEFORE_ASKING_NAME`, which is the natural conversational
-moment and the point at which you'd get a real answer.
-
-Enrollment should be **conversational**, not silent. Unknown face appears,
-Humalien says "I don't think we've met." That's better UX than a robot quietly
-building dossiers on house guests, and it attaches a name at the moment of
-capture instead of leaving an orphaned vector to label later.
-
-## Two things that will bite you
-
-**Junk accumulation.** A camera in a room will enroll the mailman, a delivery
-driver, and faces on the television. `prune_unnamed()` forgets unnamed records
-with few sightings that haven't been seen in a while. Named people are never
-touched.
-
-**Static faces.** A photo on the wall is a perfect, permanently detected face.
-`Sighting.looks_alive` requires both a run of consecutive frames *and* actual
-movement before committing anyone to the database — a photograph never shifts
-by a pixel, a real face never holds still.
+The transcripts are already arriving and being discarded —
+`conversation.item.input_audio_transcription.completed` and
+`response.output_audio_transcript.done` are both logged in `voice_core.py`
+today.
 
 ## Looking
 
 `describe.py` is the expensive path, so it is **pull-only**: it runs when the
 conversation model calls a tool, never on a timer and never per frame. That
-single decision is worth more than any local-vs-cloud choice — it's the
-difference between a handful of calls per conversation and thirty per second.
+single decision is worth more than any local-vs-cloud choice.
 
-Frames are downscaled to 512 px on the longest edge before encoding. Bigger
-images cost more and answer no better for "what is this" questions.
-
-The describer takes the **user's actual question**, not a generic "describe this
-image". You get a targeted, short answer instead of a paragraph of caption to
-read aloud.
+Frames are downscaled to 512 px on the longest edge. Bigger images cost more
+and answer no better for "what is this" questions. The describer takes the
+**user's actual question**, so the answer is short and targeted rather than a
+paragraph of caption to read aloud.
 
 ### Model
 
-`gemma4:cloud` via Ollama — multimodal, and available on Ollama's free cloud
-tier. Swap with `--model` or run a local model with the same interface; the
-call shape is identical either way.
+`gemma4:cloud` via Ollama — multimodal, on the free cloud tier. Note that
+despite running through Ollama it is **not local**: frames leave the building
+on every call. That is a privacy consideration for a robot in a house, and a
+better argument for a local model on the Jetson than cost is.
 
-**Measured latency: about 8 seconds cold.** That is a long silence in a
-conversation. When this is wired into the voice loop, Humalien needs to say
-"let me look" *before* the call, or the pause reads as a crash. Treat that as a
-requirement, not a nicety.
+**Measured latency: about 8 seconds cold.** That is a long silence. Humalien
+needs to say "let me look" *before* the call fires, or the pause reads as a
+crash. Treat that as a requirement, not a nicety.
 
 ## Try it
 
@@ -227,9 +189,11 @@ python tools/people_preview.py
 
 | Key | Does |
 | --- | --- |
-| `n` | Name the largest face on screen |
+| `n` | Introduce the largest face on screen |
+| `d` | Score that face against everyone known |
 | `l` | Ask a question about what the camera sees |
-| `p` | List everyone Humalien has met |
+| `p` | List everyone Humalien knows |
+| `f` | Forget somebody |
 | `q` | Quit |
 
 The database defaults to `brain/humalien.db` and is gitignored, as are the
@@ -237,17 +201,19 @@ downloaded models. Delete the `.db` to start over.
 
 ## Not built yet
 
-The perception layer, the store, and the describer all work and are testable.
-What isn't wired:
+Perception, the store, and the describer all work and are testable. What is not
+wired:
 
-- **Realtime tool wiring** — `session.tools` with `look` and `recall_person`,
-  plus a `function_call_output` handler in `voice_core.py`.
+- **Realtime tool wiring** — `session.tools` with `look`, `who_is_here` and
+  `remember_name`, plus a `function_call_output` handler in `voice_core.py`.
+  Until this lands, voice and vision are separate programs.
 - **Identity push** — when a known person appears, the model should be told
-  unprompted so it can greet them. Depth about a person stays pull-only;
-  identity is small enough to push.
-- **Consolidation** — the small LLM that turns a finished transcript into rows
-  in `facts`.
+  unprompted so it can greet them. Depth about a person stays pull-only.
+- **Transcripts and fact extraction** — persist both sides, then run Gemma over
+  a finished conversation.
 - **Who is *talking*** — face-in-room is not the same question as
-  who-is-speaking. With two people in frame, nothing currently decides which
-  one is the speaker. Largest/most central face is the cheap first answer;
-  audio speaker embeddings are the real one.
+  who-is-speaking. With two people in frame nothing decides which is the
+  speaker. The answer is the same architecture again: voice embeddings in a
+  `voices` table beside `faces`, auto-enrolled whenever exactly one known face
+  is present and somebody speaks. `input_audio_buffer.speech_started` and
+  `speech_stopped` already bracket each utterance for free.

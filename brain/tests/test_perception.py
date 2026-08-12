@@ -2,24 +2,14 @@ import unittest
 
 import numpy as np
 
-from people import PeopleStore, normalize
-from perception import FRAMES_BEFORE_ENROLLING, Perception
-from vision import Detection
-
 from gaze import FaceBox
+from people import PeopleStore, normalize
+from perception import SECONDS_BEFORE_INTRODUCING, Perception
+from vision import Detection
 
 
 def base_embedding(seed: int = 0) -> np.ndarray:
     return normalize(np.random.default_rng(seed).normal(size=128).astype(np.float32))
-
-
-def at_similarity(base: np.ndarray, target: float) -> np.ndarray:
-    """Build a vector whose cosine similarity to `base` is exactly `target`."""
-
-    other = np.random.default_rng(99).normal(size=len(base)).astype(np.float32)
-    other = normalize(other - base * float(other @ base))
-
-    return normalize(base * target + other * (1 - target**2) ** 0.5)
 
 
 class FakeDetector:
@@ -29,10 +19,9 @@ class FakeDetector:
     def detect(self, frame):
         box = self.boxes.pop(0) if self.boxes else None
 
-        if box is None:
-            return []
-
-        return [Detection(box=box, row=np.zeros(15, dtype=np.float32))]
+        return [] if box is None else [
+            Detection(box=box, row=np.zeros(15, dtype=np.float32))
+        ]
 
 
 class FakeRecognizer:
@@ -43,12 +32,8 @@ class FakeRecognizer:
         return self.embedding
 
 
-def moving_boxes(count: int, *, step: int = 4) -> list[FaceBox]:
-    return [FaceBox(x=100 + i * step, y=100, width=80, height=80) for i in range(count)]
-
-
-def still_boxes(count: int) -> list[FaceBox]:
-    return [FaceBox(x=100, y=100, width=80, height=80) for _ in range(count)]
+def boxes(count: int) -> list[FaceBox]:
+    return [FaceBox(x=100 + i * 4, y=100, width=80, height=80) for i in range(count)]
 
 
 class PerceptionTests(unittest.TestCase):
@@ -59,59 +44,74 @@ class PerceptionTests(unittest.TestCase):
     def tearDown(self):
         self.store.close()
 
-    def run_polls(self, boxes, embedding):
-        perception = Perception(
+    def build(self, count, embedding):
+        return Perception(
             self.store,
-            detector=FakeDetector(list(boxes)),
+            detector=FakeDetector(boxes(count)),
             recognizer=FakeRecognizer(embedding),
         )
 
-        for index in range(len(boxes)):
-            perception.poll(self.frame, now=float(index))
+    def run_polls(self, perception, count, *, step: float = 1.0):
+        last = []
 
-    def test_a_moving_stranger_is_enrolled(self):
-        self.run_polls(moving_boxes(FRAMES_BEFORE_ENROLLING + 2), base_embedding())
+        for index in range(count):
+            last = perception.poll(self.frame, now=index * step)
 
-        self.assertEqual(len(self.store.people()), 1)
+        return last
 
-    def test_a_motionless_face_is_never_enrolled(self):
-        # A photograph on the wall is a perfect, permanently detected face.
-        self.run_polls(still_boxes(30), base_embedding())
+    def test_watching_a_stranger_stores_nothing(self):
+        # The whole point of v1: a face nobody has introduced leaves no
+        # trace, so there is nothing to clean up later.
+        perception = self.build(50, base_embedding())
 
-        self.assertEqual(self.store.people(), [])
-
-    def test_a_brief_glimpse_is_not_enough(self):
-        self.run_polls(moving_boxes(FRAMES_BEFORE_ENROLLING - 1), base_embedding())
+        self.run_polls(perception, 50)
 
         self.assertEqual(self.store.people(), [])
 
-    def test_a_near_miss_does_not_create_a_second_record(self):
-        # 0.38 is the observed score for a known person at an awkward angle:
-        # under MATCH_THRESHOLD, but far too similar to be a stranger.
+    def test_a_stranger_is_reported_but_unmatched(self):
+        perception = self.build(3, base_embedding())
+
+        sightings = self.run_polls(perception, 3)
+
+        self.assertEqual(len(sightings), 1)
+        self.assertIsNone(sightings[0].match)
+
+    def test_a_lingering_stranger_is_worth_introducing(self):
+        perception = self.build(10, base_embedding())
+
+        sightings = self.run_polls(perception, 10)
+        now = 9.0
+
+        self.assertGreater(now, SECONDS_BEFORE_INTRODUCING)
+        self.assertTrue(sightings[0].is_a_stranger(now))
+
+    def test_a_glimpse_is_not_worth_introducing(self):
+        perception = self.build(2, base_embedding())
+
+        sightings = self.run_polls(perception, 2, step=0.1)
+
+        self.assertFalse(sightings[0].is_a_stranger(0.1))
+
+    def test_enrolling_makes_the_face_recognised(self):
         known = base_embedding()
-        self.store.create_person(known)
+        perception = self.build(6, known)
 
-        self.run_polls(moving_boxes(20), at_similarity(known, 0.38))
+        sightings = self.run_polls(perception, 3)
+        perception.enroll("Pat", sightings[0], now=0.0)
 
-        self.assertEqual(len(self.store.people()), 1)
+        sightings = self.run_polls(perception, 3)
 
-    def test_a_genuinely_different_person_still_enrolls(self):
-        # Two different people measured around 0.28, so the guard must not
-        # be so wide that real strangers can never be recorded.
+        self.assertEqual(sightings[0].name, "Pat")
+
+    def test_seeing_a_known_person_records_the_sighting(self):
         known = base_embedding()
-        self.store.create_person(known)
+        perception = self.build(6, known)
 
-        self.run_polls(moving_boxes(20), at_similarity(known, 0.28))
+        sightings = self.run_polls(perception, 1)
+        perception.enroll("Pat", sightings[0], now=0.0)
 
-        self.assertEqual(len(self.store.people()), 2)
+        self.run_polls(perception, 5)
 
-    def test_a_returning_face_reuses_its_record(self):
-        known = base_embedding()
-
-        self.run_polls(moving_boxes(20), known)
-        self.run_polls(moving_boxes(20), at_similarity(known, 0.85))
-
-        self.assertEqual(len(self.store.people()), 1)
         self.assertGreater(self.store.people()[0].sighting_count, 1)
 
 

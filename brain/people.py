@@ -1,8 +1,11 @@
-"""Who Humalien has met, and what it knows about them.
+"""Who Humalien knows, and what it knows about them.
+
+Only confirmed people are stored. A face nobody has introduced leaves no
+trace, which is what keeps this simple: there are no anonymous records to
+accumulate, clean up, or confuse with real people.
 
 Identity is an embedding problem, not a language problem. Faces become unit
-vectors, and recognition is a dot product against everyone seen before. The
-small language model never touches this path.
+vectors and recognition is a dot product. No language model is involved.
 """
 
 import sqlite3
@@ -13,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 
-# Cosine similarity above which two faces are the same person. SFace's own
+# Cosine similarity above which a face is someone we know. SFace's own
 # documented operating point is 0.363; a little stricter suits a robot that
 # would rather stay quiet than use the wrong name.
 MATCH_THRESHOLD = 0.40
@@ -21,23 +24,15 @@ MATCH_THRESHOLD = 0.40
 # Confident enough to say the name out loud, unprompted.
 GREET_THRESHOLD = 0.50
 
-# Below this, a face is unlike anyone we know and deserves its own record.
-# Between here and MATCH_THRESHOLD is the ambiguous band: too different to
-# call a match, too similar to be confident it is somebody new. Measured
-# separation on real faces was ~0.28 between two different people and ~0.38
-# for one person at an awkward angle, so the uncertainty sits in between.
-CREATE_BELOW = 0.30
-
-# A new view of a known face is only worth storing if it differs from what we
-# already have. Near-duplicates add storage without adding robustness.
+# A new view of a known face is only worth storing if it differs from what
+# we already have. Near-duplicates add storage without adding robustness.
 NOVEL_BELOW = 0.75
 MAX_FACES_PER_PERSON = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS people (
     id             INTEGER PRIMARY KEY,
-    name           TEXT,
-    name_source    TEXT,
+    name           TEXT NOT NULL,
     first_seen_at  REAL NOT NULL,
     last_seen_at   REAL NOT NULL,
     sighting_count INTEGER NOT NULL DEFAULT 0
@@ -78,13 +73,9 @@ def normalize(embedding) -> np.ndarray:
 @dataclass(frozen=True)
 class Person:
     id: int
-    name: str | None
+    name: str
     sighting_count: int
     last_seen_at: float
-
-    @property
-    def is_known(self) -> bool:
-        return self.name is not None
 
 
 @dataclass(frozen=True)
@@ -94,7 +85,7 @@ class Match:
 
     @property
     def confident_enough_to_greet(self) -> bool:
-        return self.person.is_known and self.similarity >= GREET_THRESHOLD
+        return self.similarity >= GREET_THRESHOLD
 
 
 class PeopleStore:
@@ -169,8 +160,25 @@ class PeopleStore:
 
         return [row["text"] for row in rows]
 
+    def match(self, embedding) -> Match | None:
+        matrix, owners = self._embeddings()
+
+        if len(owners) == 0:
+            return None
+
+        similarities = matrix @ normalize(embedding)
+        best = int(np.argmax(similarities))
+        similarity = float(similarities[best])
+
+        if similarity < MATCH_THRESHOLD:
+            return None
+
+        person = self.person(owners[best])
+
+        return None if person is None else Match(person, similarity)
+
     def rank(self, embedding) -> list[tuple[Person, float]]:
-        """Every known person, scored against this face, best first.
+        """Everyone scored against this face, best first.
 
         `match` only reports the winner, which hides the number that
         actually matters: the gap between first and second place. A
@@ -194,70 +202,39 @@ class PeopleStore:
                 best[person_id] = score
 
         ranked = [
-            (self.person(person_id), score)
-            for person_id, score in best.items()
+            (self.person(person_id), score) for person_id, score in best.items()
         ]
-
         ranked = [(person, score) for person, score in ranked if person]
         ranked.sort(key=lambda pair: pair[1], reverse=True)
 
         return ranked
 
-    def best_similarity(self, embedding) -> float:
-        """How much this face resembles the closest thing we have seen.
-
-        Reported even when it is too low to count as a match, because
-        "resembles nobody at all" and "nearly matched someone" need very
-        different handling.
-        """
-
-        matrix, owners = self._embeddings()
-
-        if len(owners) == 0:
-            return 0.0
-
-        return float(np.max(matrix @ normalize(embedding)))
-
-    def match(self, embedding) -> Match | None:
-        """Find who this face belongs to, named or not.
-
-        Matching against unnamed people as well as named ones is what stops
-        one stranger becoming four hundred separate records.
-        """
-
-        matrix, owners = self._embeddings()
-
-        if len(owners) == 0:
-            return None
-
-        similarities = matrix @ normalize(embedding)
-        best = int(np.argmax(similarities))
-        similarity = float(similarities[best])
-
-        if similarity < MATCH_THRESHOLD:
-            return None
-
-        person = self.person(owners[best])
-
-        return None if person is None else Match(person, similarity)
-
     # -- writing ---------------------------------------------------------
 
-    def create_person(self, embedding, *, now: float | None = None) -> Person:
+    def enroll(self, name: str, embedding, *, now: float | None = None) -> Person:
+        """Record someone who has introduced themselves.
+
+        This is the only way a person enters the database. Detecting a face
+        is not enough; somebody has to say who it belongs to.
+        """
+
+        if not name.strip():
+            raise ValueError("A person needs a name")
+
         now = time.time() if now is None else now
 
         cursor = self.connection.execute(
             "INSERT INTO people"
-            " (name, name_source, first_seen_at, last_seen_at, sighting_count)"
-            " VALUES (NULL, NULL, ?, ?, 1)",
-            (now, now),
+            " (name, first_seen_at, last_seen_at, sighting_count)"
+            " VALUES (?, ?, ?, 1)",
+            (name.strip(), now, now),
         )
         person_id = int(cursor.lastrowid)
 
         self._add_face(person_id, embedding, now)
         self.connection.commit()
 
-        return Person(person_id, None, 1, now)
+        return Person(person_id, name.strip(), 1, now)
 
     def record_sighting(
         self,
@@ -276,7 +253,8 @@ class PeopleStore:
             (now, person_id),
         )
 
-        # Store a genuinely different view, not the same angle again.
+        # Store a genuinely different view, not the same angle again. Safe
+        # because we only ever add to a person we have confidently matched.
         if embedding is not None and (
             similarity is None or similarity < NOVEL_BELOW
         ):
@@ -297,22 +275,13 @@ class PeopleStore:
         )
         self._cache = None
 
-    def name_person(
-        self,
-        person_id: int,
-        name: str,
-        *,
-        source: str = "asked",
-    ) -> None:
-        """Promote an unidentified record. Everything already attached stays.
-
-        This is why there is no separate table for unknowns: learning a name
-        is an UPDATE, not a migration.
-        """
+    def rename(self, person_id: int, name: str) -> None:
+        if not name.strip():
+            raise ValueError("A person needs a name")
 
         self.connection.execute(
-            "UPDATE people SET name = ?, name_source = ? WHERE id = ?",
-            (name, source, person_id),
+            "UPDATE people SET name = ? WHERE id = ?",
+            (name.strip(), person_id),
         )
         self.connection.commit()
 
@@ -333,13 +302,15 @@ class PeopleStore:
         )
         self.connection.commit()
 
-    def merge(self, keep_id: int, drop_id: int) -> None:
-        """Fold one record into another after a mistaken split.
+    def forget(self, person_id: int) -> None:
+        """Remove someone entirely. Faces and facts go with them."""
 
-        Clustering is deliberately strict, which means it splits one person
-        into several records rather than merging two people into one. This is
-        the repair for that, and it is the reason strict is the safe default.
-        """
+        self.connection.execute("DELETE FROM people WHERE id = ?", (person_id,))
+        self.connection.commit()
+        self._cache = None
+
+    def merge(self, keep_id: int, drop_id: int) -> None:
+        """Fold one record into another, if somebody was enrolled twice."""
 
         if keep_id == drop_id:
             raise ValueError("Cannot merge a person into themselves")
@@ -374,100 +345,3 @@ class PeopleStore:
         self.connection.execute("DELETE FROM people WHERE id = ?", (drop_id,))
         self.connection.commit()
         self._cache = None
-
-    def consolidate(self, *, threshold: float = MATCH_THRESHOLD) -> int:
-        """Fold unnamed records into named people they now match.
-
-        A creation-time threshold cannot prevent duplicates on its own,
-        because a person's stored views accumulate. A face that genuinely
-        resembled nobody when it was first seen can match confidently once
-        the same person has been seen from that angle a few more times.
-
-        Left alone those orphans actively steal sightings, since matching
-        takes the best face across everyone. Re-checking them is what keeps
-        one person from slowly fragmenting into several.
-
-        Only unnamed records are folded, and only into named ones. Merging
-        two named people is destructive and stays a human decision.
-        """
-
-        faces: dict[int, list[np.ndarray]] = {}
-
-        for row in self.connection.execute(
-            "SELECT person_id, embedding FROM faces"
-        ):
-            faces.setdefault(row["person_id"], []).append(
-                np.frombuffer(row["embedding"], dtype=np.float32)
-            )
-
-        people = self.people()
-        named = [person for person in people if person.name]
-        unnamed = [person for person in people if not person.name]
-
-        merged = 0
-
-        for orphan in unnamed:
-            mine = faces.get(orphan.id)
-
-            if not mine:
-                continue
-
-            mine = np.stack(mine)
-            best_person, best_score = None, threshold
-
-            for person in named:
-                theirs = faces.get(person.id)
-
-                if not theirs:
-                    continue
-
-                score = float(np.max(mine @ np.stack(theirs).T))
-
-                if score >= best_score:
-                    best_person, best_score = person, score
-
-            if best_person is not None:
-                self.merge(best_person.id, orphan.id)
-                merged += 1
-
-        return merged
-
-    def forget_unnamed(self) -> int:
-        """Delete every unidentified record, whatever its history.
-
-        Faces and facts cascade with them. Named people are untouched.
-        Anyone deleted who turns up again simply gets enrolled afresh.
-        """
-
-        cursor = self.connection.execute("DELETE FROM people WHERE name IS NULL")
-        self.connection.commit()
-        self._cache = None
-
-        return cursor.rowcount
-
-    def prune_unnamed(
-        self,
-        *,
-        min_sightings: int = 3,
-        older_than_seconds: float = 7 * 24 * 3600,
-        now: float | None = None,
-    ) -> int:
-        """Forget strangers, never acquaintances.
-
-        A camera in a room will enroll the mailman, a delivery driver, and
-        faces on the television. Named people are never touched.
-        """
-
-        now = time.time() if now is None else now
-
-        cursor = self.connection.execute(
-            "DELETE FROM people"
-            " WHERE name IS NULL"
-            " AND sighting_count < ?"
-            " AND last_seen_at < ?",
-            (min_sightings, now - older_than_seconds),
-        )
-        self.connection.commit()
-        self._cache = None
-
-        return cursor.rowcount

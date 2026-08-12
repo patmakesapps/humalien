@@ -1,10 +1,11 @@
 """Live test rig for recognition, enrollment and looking.
 
 Keys:
-  n  name the largest face on screen
+  n  introduce the largest face on screen
   d  score the largest face against everyone known
   l  ask a question about what the camera sees
-  p  list everyone Humalien has met
+  p  list everyone Humalien knows
+  f  forget somebody
   q  quit
 """
 
@@ -19,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cv2
 
 from describe import OllamaDescriber
-from gaze import select_primary_face
 from people import GREET_THRESHOLD, MATCH_THRESHOLD, PeopleStore
 from perception import Perception
 
@@ -29,7 +29,7 @@ WINDOW_NAME = "Humalien people preview"
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "humalien.db"
 
 KNOWN_COLOR = (80, 220, 80)
-UNKNOWN_COLOR = (0, 180, 255)
+STRANGER_COLOR = (0, 180, 255)
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,17 +53,21 @@ def camera_source(value: str) -> int | str:
         return value
 
 
+def largest(sightings):
+    if not sightings:
+        return None
+
+    return max(sightings, key=lambda sighting: sighting.detection.area)
+
+
 def label_for(sighting) -> tuple[str, tuple[int, int, int]]:
     if sighting.match is None:
-        return "seen", UNKNOWN_COLOR
+        return "stranger", STRANGER_COLOR
 
-    person = sighting.match.person
-    similarity = sighting.match.similarity
-
-    if person.name:
-        return f"{person.name} ({similarity:.2f})", KNOWN_COLOR
-
-    return f"unknown #{person.id} ({similarity:.2f})", UNKNOWN_COLOR
+    return (
+        f"{sighting.name} ({sighting.match.similarity:.2f})",
+        KNOWN_COLOR,
+    )
 
 
 def draw(frame, sightings, answer: str) -> None:
@@ -89,7 +93,9 @@ def draw(frame, sightings, answer: str) -> None:
             cv2.LINE_AA,
         )
 
-    for index, line in enumerate(["n name  d score  l look  p people  q quit", answer]):
+    lines = ["n meet  d score  l look  p people  f forget  q quit", answer]
+
+    for index, line in enumerate(lines):
         if not line:
             continue
 
@@ -105,37 +111,34 @@ def draw(frame, sightings, answer: str) -> None:
         )
 
 
-def name_primary(store: PeopleStore, sightings) -> str:
-    primary = select_primary_face([s.detection for s in sightings])
+def introduce(perception: Perception, sightings) -> str:
+    sighting = largest(sightings)
 
-    if primary is None:
-        return "No face on screen to name."
+    if sighting is None:
+        return "No face on screen."
 
-    sighting = next(s for s in sightings if s.detection is primary)
+    if sighting.match is not None:
+        print(f"\nThat is already {sighting.name}.")
+        return f"Already know {sighting.name}"
 
-    if sighting.match is None:
-        return "That face is not settled yet - hold still a moment."
-
-    person = sighting.match.person
-    print(f"\nNaming person #{person.id} (currently {person.name!r})")
-    name = input("Name: ").strip()
+    name = input("\nWho is this? ").strip()
 
     if not name:
         return "Cancelled."
 
-    store.name_person(person.id, name)
-    return f"Saved: #{person.id} is {name}"
+    person = perception.enroll(name, sighting)
+    return f"Met {person.name} (#{person.id})"
 
 
-def diagnose(store: PeopleStore, perception: Perception, frame, sightings) -> str:
+def diagnose(store: PeopleStore, sightings) -> str:
     """Score the current face against everyone, so margins are visible."""
 
-    primary = select_primary_face([s.detection for s in sightings])
+    sighting = largest(sightings)
 
-    if primary is None:
+    if sighting is None:
         return "No face on screen to score."
 
-    ranked = store.rank(perception.recognizer.embed(frame, primary))
+    ranked = store.rank(sighting.embedding)
 
     if not ranked:
         return "Nobody known yet."
@@ -143,8 +146,6 @@ def diagnose(store: PeopleStore, perception: Perception, frame, sightings) -> st
     print("\nSimilarity against everyone known:")
 
     for person, score in ranked:
-        label = person.name or f"(unnamed #{person.id})"
-
         if score >= GREET_THRESHOLD:
             verdict = "GREET"
         elif score >= MATCH_THRESHOLD:
@@ -152,7 +153,7 @@ def diagnose(store: PeopleStore, perception: Perception, frame, sightings) -> st
         else:
             verdict = "-"
 
-        print(f"  {score: .3f}  {verdict:<6} {label}")
+        print(f"  {score: .3f}  {verdict:<6} {person.name}")
 
     if len(ranked) > 1:
         margin = ranked[0][1] - ranked[1][1]
@@ -169,14 +170,28 @@ def list_people(store: PeopleStore) -> str:
     print(f"\n{len(people)} people known")
 
     for person in people:
-        label = person.name or f"(unnamed #{person.id})"
-        facts = store.facts(person.id)
-        print(f"  #{person.id:<4} {label:<20} seen {person.sighting_count}x")
+        print(f"  #{person.id:<4} {person.name:<20} seen {person.sighting_count}x")
 
-        for fact in facts:
+        for fact in store.facts(person.id):
             print(f"         - {fact}")
 
     return f"{len(people)} people - see terminal"
+
+
+def forget(store: PeopleStore) -> str:
+    list_people(store)
+    answer = input("\nForget which id? ").strip()
+
+    if not answer.isdigit():
+        return "Cancelled."
+
+    person = store.person(int(answer))
+
+    if person is None:
+        return f"No person #{answer}"
+
+    store.forget(person.id)
+    return f"Forgot {person.name}"
 
 
 def main() -> None:
@@ -193,13 +208,7 @@ def main() -> None:
 
     print(f"Database: {args.db}")
     print(f"Describer: {args.model}")
-
-    # Orphans left over from earlier sessions steal sightings from the person
-    # they actually belong to, so fold them in before recognising anything.
-    folded = store.consolidate()
-
-    if folded:
-        print(f"Consolidated {folded} stray record(s) into known people")
+    print(f"{len(store.people())} people known")
 
     sightings = []
     answer = ""
@@ -229,13 +238,16 @@ def main() -> None:
                 return
 
             if key == ord("n"):
-                answer = name_primary(store, sightings)
+                answer = introduce(perception, sightings)
 
             elif key == ord("d"):
-                answer = diagnose(store, perception, frame, sightings)
+                answer = diagnose(store, sightings)
 
             elif key == ord("p"):
                 answer = list_people(store)
+
+            elif key == ord("f"):
+                answer = forget(store)
 
             elif key == ord("l"):
                 question = input("\nAsk about the view: ").strip()
