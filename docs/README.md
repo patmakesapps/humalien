@@ -8,6 +8,7 @@ a natural voice conversation you can interrupt and talk over.
 | [architecture.md](architecture.md) | How the brain and the node split the work, and why |
 | [voice-pipeline.md](voice-pipeline.md) | Why the robot was answering itself, and how it's fixed |
 | [hardware.md](hardware.md) | Pi 5, Waveshare hat, audio devices, echo cancellation |
+| [vision.md](vision.md) | USB webcam face tracking and the gaze-target contract |
 
 ## The two machines
 
@@ -53,6 +54,8 @@ cd brain
 python tools/list_audio_devices.py   # pick your real mic, not a loopback
 python tools/desktop_node.py
 ```
+
+To preview face tracking with a USB webcam, see [vision.md](vision.md).
 
 ## Tests
 

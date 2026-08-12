@@ -19,6 +19,8 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 | `playback.py` | Releases the model's audio at the speed it is spoken. |
 | `mic_gate.py` | Decides whether the microphone is listening right now. |
 | `audio_adapter.py` | 48 kHz stereo ↔ 24 kHz mono resampling. |
+| `vision.py` | OpenCV face detection for the USB camera prototype. |
+| `gaze.py` | Servo-independent target coordinates and smoothing. |
 
 `tools/` holds things you run by hand, not part of the robot:
 
@@ -26,6 +28,7 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 - `list_audio_devices.py` — find the right input/output device indices
 - `realtime_smoke_test.py` — confirm the API key and model work
 - `audio_roundtrip.py` — record 3 s through the Pi and play it back
+- `vision_preview.py` — preview face tracking and normalized gaze targets
 
 ### Node — `node/`
 
@@ -72,6 +75,15 @@ miserable to debug across two machines.
 The current design needs **zero** control protocol between brain and node. The
 brain never has to tell the Pi to stop talking, because it never gave the Pi more
 than ~150 ms of audio in the first place. That's the whole trick.
+
+## Vision before servos
+
+The first eye-tracking slice stays on the brain. It turns a face in the webcam
+frame into normalized `x` and `y` gaze targets, but it does not know about PWM,
+servo reversal, or mechanical limits. That boundary lets the camera pipeline be
+tested now and the actuator mapping be calibrated later without rewriting it.
+
+See [vision.md](vision.md) for the target contract and preview command.
 
 ## What's not built yet
 
