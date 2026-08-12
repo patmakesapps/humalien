@@ -27,6 +27,7 @@ Everything needed to make eyes move. Ordered 12 Aug 2026, ~$109.
 | Power supply, 5 V 5 A | ALITOVE, includes screw-terminal adapter | $16.49 |
 | Capacitor, 1000 µF 25 V | Cionyce, 10-pack | $4.49 |
 | Soldering station | YIHUA 926 III, 60 W, with helping hands | $39.99 |
+| Camera | Arducam **B0385** / OV9782, Amazon `B0CLXZ29F9` | $64.99 |
 
 Jumper wires already on hand. The screw-terminal adapter came with the ALITOVE
 supply, so no separate one was needed.
@@ -34,16 +35,17 @@ supply, so no separate one was needed.
 Optional: a roll of **63/37 leaded solder**. The YIHUA kit ships lead-free,
 which needs more heat and flows worse — noticeably harder to learn on.
 
+The camera is **B0385, not B0332**. B0332 is the OV9281 *monochrome* sensor,
+which looks near-identical in listings — cheaper, faster, better in low light,
+and useless here, since "what colour is the object in my hand" is a question
+Humalien is expected to answer. Check the listing says OV9782.
+
 ## Next to buy
 
-| Part | Number | Why this one |
-| --- | --- | --- |
-| Arducam colour global shutter USB camera | **B0385** (OV9782) | Amazon `B0CLXZ29F9`. Global shutter freezes motion, 100 fps gives the frame picker candidates, board-level mounts in a head, UVC needs no driver |
-| M12 lens with IR-cut filter | — | The B0385 stock lens has none, so colours skew |
-
-**Get B0385, not B0332.** B0332 is the OV9281 *monochrome* sensor. It is
-cheaper, faster and better in low light, and useless here — "what colour is the
-object in my hand" is a question Humalien is expected to answer.
+| Part | Why |
+| --- | --- |
+| M12 lens with IR-cut filter | The B0385 stock lens has none, so colours skew towards IR |
+| 63/37 leaded solder | Optional. The YIHUA kit ships lead-free, which is harder to learn on |
 
 ## Buy when the price is sane
 
