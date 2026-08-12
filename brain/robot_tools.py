@@ -21,6 +21,14 @@ from tool_registry import ToolError, ToolRegistry
 REALTIME = "realtime"
 OLLAMA = "ollama"
 
+# Travels with the picture, in the same conversation item. The model has no
+# other way to tell its own eyes from a photograph somebody handed it, and
+# without this it says things like "in the image you sent me".
+OWN_EYES = (
+    "This is your own camera, from the moment they were asking. Nobody sent "
+    "it to you. Talk about it as what you can see, not as a picture."
+)
+
 tools = ToolRegistry()
 
 
@@ -39,8 +47,15 @@ class Robot:
     realtime: object | None = None
     vision: str = REALTIME
 
+    # The picture currently in front of the model, if any. Only ever one.
+    showing: str | None = None
+    looks: int = 0
+
     def looks_with_realtime(self) -> bool:
         return self.vision == REALTIME and self.realtime is not None
+
+    def forget_showing(self) -> None:
+        self.showing = None
 
     def fall_back_to_ollama(self, why: str) -> None:
         """Stop using Realtime vision for the rest of this session.
@@ -90,18 +105,28 @@ async def look(robot: Robot, question: str) -> dict:
 
     if robot.looks_with_realtime():
         try:
-            await robot.realtime.send_image(to_jpeg(frame))
+            # Take the previous picture away first, so only one is ever
+            # being re-sent with every later turn. Follow-up questions still
+            # work, because the one being discussed is the one still there.
+            if robot.showing:
+                await robot.realtime.delete_item(robot.showing)
 
-            log("look -> handed the frame to the model")
+            robot.looks += 1
+            item_id = f"humalien_look_{robot.looks}"
 
-            return {
-                "note": (
-                    "You are now looking at what was in front of you when "
-                    "they asked. Answer from the image."
-                )
-            }
+            robot.showing = await robot.realtime.send_image(
+                to_jpeg(frame),
+                item_id=item_id,
+                caption=OWN_EYES,
+            )
+
+            log(f"look -> handed the frame to the model ({item_id})")
+
+            # Deliberately bare. Anything readable here gets read out.
+            return {"looked": True}
 
         except Exception as error:
+            robot.forget_showing()
             robot.fall_back_to_ollama(f"{type(error).__name__}: {error}")
 
     # Several seconds of network call. Never on the event loop.

@@ -52,12 +52,20 @@ class FakeRealtime:
     def __init__(self, *, fails=False):
         self.fails = fails
         self.images = []
+        self.captions = []
+        self.deleted = []
 
-    async def send_image(self, jpeg):
+    async def send_image(self, jpeg, *, item_id, caption):
         if self.fails:
             raise ConnectionError("session gone")
 
-        self.images.append(jpeg)
+        self.images.append(item_id)
+        self.captions.append(caption)
+
+        return item_id
+
+    async def delete_item(self, item_id):
+        self.deleted.append(item_id)
 
 
 class FakeDescriber:
@@ -145,6 +153,62 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(realtime.images), 1)
         # Ollama was never asked, because the model looked itself.
         self.assertIsNone(self.describer.asked)
+
+    async def test_only_one_image_is_ever_in_context(self):
+        # Otherwise every look is re-sent with every later turn, and the
+        # cost of a long conversation climbs with each glance.
+        realtime = FakeRealtime()
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        await self.run_tool(robot, "look", '{"question": "first"}')
+        await self.run_tool(robot, "look", '{"question": "second"}')
+        await self.run_tool(robot, "look", '{"question": "third"}')
+
+        self.assertEqual(len(realtime.images), 3)
+        # Every picture but the newest has been taken back out.
+        self.assertEqual(realtime.deleted, realtime.images[:-1])
+        self.assertEqual(robot.showing, realtime.images[-1])
+
+    async def test_the_first_look_deletes_nothing(self):
+        realtime = FakeRealtime()
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertEqual(realtime.deleted, [])
+
+    async def test_the_picture_is_labelled_as_its_own_eyes(self):
+        # Without this the model talks about "the image you sent me".
+        realtime = FakeRealtime()
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertIn("your own camera", realtime.captions[0].lower())
+
+    async def test_the_tool_result_says_nothing_worth_reading_out(self):
+        realtime = FakeRealtime()
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        result = await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertEqual(result["data"], {"looked": True})
 
     async def test_realtime_failure_falls_back_to_ollama(self):
         realtime = FakeRealtime(fails=True)

@@ -193,11 +193,39 @@ at 4 Hz; picking a sharp frame out of a moving hand needs candidates.
 reason to make it read somebody else's description of a picture it could look
 at — and it removes an eight-second silence from the middle of a conversation.
 
-Two things to know about it. **Images stay in context**, so each look is
-re-sent with every later turn; that is what makes follow-ups like "what about
-the other hand" work without looking again, and it is also what makes the cost
-grow. And it is a real reversal on price: Ollama's free tier cost nothing,
-Realtime image tokens do. You are buying latency with money.
+It is a real reversal on price: Ollama's free tier cost nothing, Realtime image
+tokens do. You are buying latency with money.
+
+### Only ever one picture
+
+Images stay in context once sent, so each one is re-sent with every later turn.
+Left alone, five glances in a conversation means five images being paid for on
+every reply after that.
+
+So each look deletes the previous image before sending the new one, using a
+client-supplied item id and `conversation.item.delete`. At most one picture is
+ever in context.
+
+That keeps follow-ups working — "what about the other hand?" refers to the
+image still there — while the cost stays flat no matter how long the
+conversation runs. Nothing is lost by deleting the older ones, because what the
+model *said* about them is still in the transcript, in its own words. Its reply
+is the summary.
+
+### Telling its own eyes from a photograph
+
+A picture arrives in a conversation item, which is the same channel a person
+would use to hand it one. Without saying otherwise, the model talks about "the
+image you sent me".
+
+The frame therefore travels with a caption in the same item, naming it as the
+robot's own camera at the moment of the question. That is labelling the data at
+the point it enters, not scripting a reply — the distinction being that it says
+what the thing *is*, never what to say about it.
+
+The tool result itself is deliberately bare, `{"looked": true}`. Anything
+readable in a tool result gets read out; that is the bug that had Humalien
+announcing "there's someone new in view" after a `who_is_here` call.
 
 `ollama` remains for offline operation, and note that despite the name
 `gemma4:cloud` is **not** local — frames leave the building. A genuinely local

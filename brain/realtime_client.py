@@ -166,14 +166,19 @@ class RealtimeClient:
             }
         )
 
-    async def send_image(self, jpeg: bytes) -> None:
+    async def send_image(self, jpeg: bytes, *, item_id: str, caption: str) -> str:
         """Put a picture in front of the model.
 
         gpt-realtime takes image input directly, so it can look at a frame
         itself rather than reading somebody else's description of it.
 
-        Note this is fire-and-forget: a rejection or rate limit comes back
-        later as an `error` event, not as a failure here.
+        The caption travels in the same item as the picture. Without it the
+        model has no way to tell its own eyes from something a person handed
+        it, and will talk about "the image you sent me".
+
+        The id is ours so the picture can be taken away again later. Note
+        this is fire-and-forget: a rejection or rate limit comes back as an
+        `error` event, not as a failure here.
         """
 
         encoded = base64.b64encode(jpeg).decode("ascii")
@@ -182,16 +187,31 @@ class RealtimeClient:
             {
                 "type": "conversation.item.create",
                 "item": {
+                    "id": item_id,
                     "type": "message",
                     "role": "user",
                     "content": [
+                        {"type": "input_text", "text": caption},
                         {
                             "type": "input_image",
                             "image_url": f"data:image/jpeg;base64,{encoded}",
-                        }
+                        },
                     ],
                 },
             }
+        )
+
+        return item_id
+
+    async def delete_item(self, item_id: str) -> None:
+        """Take something back out of the conversation.
+
+        Used to drop the previous picture when a new one arrives, so at most
+        one image is ever being re-sent with each turn.
+        """
+
+        await self.send_event(
+            {"type": "conversation.item.delete", "item_id": item_id}
         )
 
     async def send_context(self, text: str) -> None:
