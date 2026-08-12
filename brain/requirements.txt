@@ -2,3 +2,4 @@ websockets>=16,<17
 numpy>=2,<3
 soxr>=1,<2
 python-dotenv>=1,<2
+sounddevice>=0.5,<1
