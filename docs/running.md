@@ -1,5 +1,46 @@
 # Running Humalien
 
+## What goes on which machine
+
+`git pull` brings the whole repo to both machines. That is fine — but only
+install what each one actually runs. It is easy to `cd brain` on the Pi out of
+habit and drag OpenCV onto a machine that never opens a camera.
+
+**On the Pi, install this and nothing else:**
+
+```bash
+cd node
+python -m pip install -r requirements.txt    # websockets, and that is all
+sudo apt install alsa-utils                  # arecord and aplay
+```
+
+**Never install `brain/requirements.txt` on the Pi.**
+
+| Package | Brain | Pi | Why |
+| --- | --- | --- | --- |
+| `websockets` | yes | **yes** | The link between them |
+| `opencv-python` | yes | no | ~40 MB, and the Pi has no camera duties |
+| `numpy` | yes | no | Only for resampling and matching |
+| `soxr` | yes | no | The brain does all format conversion |
+| `sounddevice` | yes | no | Desktop simulator only; the Pi uses ALSA directly |
+| `python-dotenv` | yes | no | The Pi has no configuration to read |
+
+The node also needs **none** of these:
+
+- **The ONNX face models.** 38 MB of detector and recogniser that only the
+  brain loads. Do not run `fetch_models.py` on the Pi.
+- **`.env`, and therefore no OpenAI API key.** Worth being deliberate about:
+  the Pi is the machine physically inside a robot that could be knocked over,
+  handed to someone, or lost. It should hold no credentials at all.
+- **`humalien.db`.** Who Humalien knows lives with the brain, which is also
+  where it moves when the Asus becomes a Jetson.
+- **Ollama.** The vision model is called from the brain.
+
+This is not just tidiness. The node is a dumb pipe by design — `arecord` in,
+`aplay` out — and keeping its dependency list to one package is what makes
+that claim true rather than aspirational. It is also why swapping the brain
+for a Jetson changes nothing on the Pi.
+
 ## The master file
 
 `brain/humalien.py` is what the robot boots into. It checks the things

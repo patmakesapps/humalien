@@ -40,8 +40,12 @@ swapping the Asus for a Jetson Orin Nano a non-event.
 
 ```bash
 cd node
+python -m pip install -r requirements.txt    # websockets only
 python -m humalien_node.server
 ```
+
+The Pi needs nothing from `brain/requirements.txt` — see
+[running.md](running.md) for what deliberately does *not* belong on it.
 
 **On the brain:**
 

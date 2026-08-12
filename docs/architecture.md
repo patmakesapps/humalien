@@ -44,6 +44,11 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 `aplay` against the Waveshare hat and shuttles raw PCM in both directions.
 That's the whole thing, and it should stay that way.
 
+Its entire dependency list is `websockets`, and it imports nothing from
+`brain/`. That is the measure of whether the node is still dumb — if that list
+grows, something has leaked downward. See [running.md](running.md) for what
+must never be installed on the Pi.
+
 ## Audio formats
 
 The Pi runs at its hat's native rate; the model has its own. The brain converts.
