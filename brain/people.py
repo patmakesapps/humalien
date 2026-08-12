@@ -92,7 +92,10 @@ class PeopleStore:
     def __init__(self, path: str | Path):
         self.path = str(path)
 
-        self.connection = sqlite3.connect(self.path)
+        # Recognition runs on a worker thread so it does not stall the
+        # conversation. Only ever one caller at a time, so sharing the
+        # connection across threads is safe.
+        self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self.connection.row_factory = sqlite3.Row
 
         # A robot head gets unplugged mid-write. WAL keeps that from

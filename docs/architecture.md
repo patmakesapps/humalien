@@ -25,6 +25,8 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 | `people.py` | SQLite store of who Humalien has met and what it knows. |
 | `perception.py` | Who is in the room right now. Detect, embed, match. |
 | `describe.py` | Answers a question about the current frame, on request. |
+| `eyes.py` | Runs the camera alongside the conversation, on a worker thread. |
+| `robot_tools.py` | What Humalien can do besides talk: look, who_is_here, remember_name. |
 
 `tools/` holds things you run by hand, not part of the robot:
 

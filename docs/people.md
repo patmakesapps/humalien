@@ -199,18 +199,42 @@ python tools/people_preview.py
 The database defaults to `brain/humalien.db` and is gitignored, as are the
 downloaded models. Delete the `.db` to start over.
 
+## One robot
+
+`voice_core.py` now runs the camera alongside the conversation. Three tools are
+declared on the session:
+
+| Tool | Cost | When |
+| --- | --- | --- |
+| `who_is_here` | Free | Whenever the model needs to know who it is talking to |
+| `remember_name` | A write | Once somebody introduces themselves |
+| `look` | ~8 s, a call | Only when the answer requires seeing something |
+
+`eyes.py` owns capture and recognition on a worker thread, so neither ever
+stalls audio. Tool calls are dispatched as **separate tasks** rather than
+awaited inline, for the same reason: `look` would otherwise block the event
+loop that is feeding the speaker.
+
+### Arrivals are pushed, depth is pulled
+
+The model has no reason to suspect the room changed, so it will never call a
+tool to find out. `watch_the_room` pushes a system message when somebody walks
+into view, along with anything remembered about them, and asks for a response
+so Humalien greets them unprompted.
+
+Everything else stays pull-only. Pushing is reserved for what the model cannot
+discover by asking.
+
+Both pushes are suppressed while the model is answering or the head is still
+speaking, so an arrival never talks over a conversation in progress. Somebody
+out of view for `FORGET_PRESENCE_AFTER` counts as a fresh arrival when they
+return, which stops a flicker in tracking from re-triggering a greeting.
+
 ## Not built yet
 
-Perception, the store, and the describer all work and are testable. What is not
-wired:
-
-- **Realtime tool wiring** — `session.tools` with `look`, `who_is_here` and
-  `remember_name`, plus a `function_call_output` handler in `voice_core.py`.
-  Until this lands, voice and vision are separate programs.
-- **Identity push** — when a known person appears, the model should be told
-  unprompted so it can greet them. Depth about a person stays pull-only.
 - **Transcripts and fact extraction** — persist both sides, then run Gemma over
-  a finished conversation.
+  a finished conversation. Until this lands, `facts` is only written by hand,
+  so Humalien remembers *who* you are but not what you talked about.
 - **Who is *talking*** — face-in-room is not the same question as
   who-is-speaking. With two people in frame nothing decides which is the
   speaker. The answer is the same architecture again: voice embeddings in a

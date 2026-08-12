@@ -1,29 +1,43 @@
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 
 from audio_adapter import ModelToPiAudio, PiToModelAudio
+from describe import OllamaDescriber
+from eyes import Eyes
 from mic_gate import HALF_DUPLEX, build_mic_gate
+from people import PeopleStore
+from perception import Perception
 from playback import PacedPlayback
 from realtime_client import RealtimeClient
+from robot_tools import TOOL_DEFINITIONS, RobotTools
 
 
 ENV_FILE = Path(__file__).resolve().parent / ".env"
+DEFAULT_DB = Path(__file__).resolve().parent / "humalien.db"
+
+# How long somebody must be out of view before walking back in counts as an
+# arrival worth greeting again.
+FORGET_PRESENCE_AFTER = 60.0
 
 
 def log(message: str) -> None:
     print(f"[VOICE CORE] {message}", flush=True)
 
 
-async def pi_to_realtime(
-    pi_websocket,
-    realtime: RealtimeClient,
-    gate,
-) -> None:
+class ConversationState:
+    """Whether the model is mid-answer, so nothing interrupts it."""
+
+    def __init__(self):
+        self.response_active = False
+
+
+async def pi_to_realtime(pi_websocket, realtime: RealtimeClient, gate) -> None:
     adapter = PiToModelAudio()
     listening = True
 
@@ -32,7 +46,7 @@ async def pi_to_realtime(
             if not gate.is_open:
                 if listening:
                     listening = False
-                    log("Microphone closed — Humalien is speaking")
+                    log("Microphone closed - Humalien is speaking")
 
                 # Keep feeding the resampler so its state stays continuous
                 # and reopening does not produce a click.
@@ -66,13 +80,32 @@ async def pi_to_realtime(
             log(f"Pi event: {event_type}")
 
 
+async def run_tool_call(
+    realtime: RealtimeClient,
+    tools: RobotTools,
+    call_id: str,
+    name: str,
+    raw_arguments: str,
+) -> None:
+    try:
+        arguments = json.loads(raw_arguments or "{}")
+    except json.JSONDecodeError:
+        arguments = {}
+
+    result = await tools.call(name, arguments)
+
+    await realtime.send_function_output(call_id, result)
+    await realtime.create_response()
+
+
 async def realtime_to_pi(
     realtime: RealtimeClient,
     playback: PacedPlayback,
+    tools: RobotTools,
+    state: ConversationState,
 ) -> None:
     adapter = ModelToPiAudio()
     answering = False
-    response_active = False
 
     async for event in realtime.receive_events():
         event_type = event.get("type", "unknown")
@@ -84,13 +117,13 @@ async def realtime_to_pi(
             log("User speech started")
 
             if playback.is_speaking:
-                log("Interrupted — dropping queued speech")
+                log("Interrupted - dropping queued speech")
 
                 playback.clear()
                 adapter = ModelToPiAudio()
                 answering = False
 
-                if response_active:
+                if state.response_active:
                     await realtime.cancel_response()
 
         elif event_type == "input_audio_buffer.speech_stopped":
@@ -103,11 +136,23 @@ async def realtime_to_pi(
                 log(f'User said: "{transcript.strip()}"')
 
         elif event_type == "response.created":
-            response_active = True
-            log("Humalien is thinking")
+            state.response_active = True
 
         elif event_type == "response.done":
-            response_active = False
+            state.response_active = False
+
+        elif event_type == "response.function_call_arguments.done":
+            # Deliberately not awaited. Looking takes several seconds, and
+            # blocking here would stall the audio flowing to the Pi.
+            asyncio.create_task(
+                run_tool_call(
+                    realtime,
+                    tools,
+                    event.get("call_id"),
+                    event.get("name"),
+                    event.get("arguments"),
+                )
+            )
 
         elif event_type == "response.output_audio.delta":
             if not answering:
@@ -144,6 +189,83 @@ async def realtime_to_pi(
             log(f"Realtime API error:\n{json.dumps(event, indent=2)}")
 
 
+async def watch_the_room(
+    eyes: Eyes,
+    realtime: RealtimeClient,
+    playback: PacedPlayback,
+    store: PeopleStore,
+    state: ConversationState,
+) -> None:
+    """Tell the model when somebody arrives.
+
+    The model has no reason to suspect the room changed, so it will never
+    call a tool to find out. Arrivals have to be pushed. Everything else
+    stays pull-only.
+    """
+
+    last_seen: dict[int, float] = {}
+    greeted: set[int] = set()
+    offered_to_meet = False
+
+    while True:
+        await asyncio.sleep(0.5)
+
+        now = time.monotonic()
+        idle = not state.response_active and not playback.is_speaking
+
+        present = {person.id: person for person in eyes.known}
+
+        for person_id in present:
+            last_seen[person_id] = now
+
+        # Somebody long gone counts as a new arrival when they return.
+        for person_id, seen_at in list(last_seen.items()):
+            if now - seen_at > FORGET_PRESENCE_AFTER:
+                last_seen.pop(person_id)
+                greeted.discard(person_id)
+
+        arrivals = [
+            person for person_id, person in present.items() if person_id not in greeted
+        ]
+
+        if arrivals and idle:
+            for person in arrivals:
+                greeted.add(person.id)
+
+            names = ", ".join(person.name for person in arrivals)
+            remembered = [
+                fact for person in arrivals for fact in store.facts(person.id)
+            ]
+
+            log(f"{names} came into view")
+
+            context = f"{names} has just come into view. Greet them naturally."
+
+            if remembered:
+                context += " You remember: " + "; ".join(remembered)
+
+            await realtime.send_context(context)
+            await realtime.create_response()
+            continue
+
+        stranger = eyes.largest_stranger()
+
+        if stranger is None:
+            offered_to_meet = False
+
+        elif not offered_to_meet and idle and not present:
+            offered_to_meet = True
+
+            log("A stranger is here")
+
+            await realtime.send_context(
+                "Someone you do not recognise has been in front of you for a "
+                "few seconds. Introduce yourself and ask their name once. If "
+                "they give it, call remember_name."
+            )
+            await realtime.create_response()
+
+
 async def run_voice_core() -> None:
     load_dotenv(ENV_FILE)
 
@@ -158,61 +280,75 @@ async def run_voice_core() -> None:
         "HUMALIEN_TRANSCRIPTION_MODEL",
         "gpt-4o-mini-transcribe",
     )
+    camera = os.getenv("HUMALIEN_CAMERA", "0")
+    database = os.getenv("HUMALIEN_DB", str(DEFAULT_DB))
+    vision_model = os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud")
 
     if not api_key:
-        raise RuntimeError(
-            f"OPENAI_API_KEY was not found in {ENV_FILE}"
-        )
+        raise RuntimeError(f"OPENAI_API_KEY was not found in {ENV_FILE}")
 
+    store = PeopleStore(database)
+    eyes = Eyes(
+        Perception(store),
+        camera=int(camera) if camera.isdigit() else camera,
+    )
+    describer = OllamaDescriber(model=vision_model)
+
+    log(f"Knows {len(store.people())} people")
     log(f"Connecting to Pi at {pi_url}")
 
-    async with websocket_connect(
-        pi_url,
-        max_size=None,
-    ) as pi_websocket:
-        log("Connected to Pi")
+    try:
+        async with websocket_connect(pi_url, max_size=None) as pi_websocket:
+            log("Connected to Pi")
 
-        playback = PacedPlayback(pi_websocket)
-        gate = build_mic_gate(gate_name, playback)
+            playback = PacedPlayback(pi_websocket)
+            gate = build_mic_gate(gate_name, playback)
+            tools = RobotTools(eyes, store, describer)
+            state = ConversationState()
 
-        log(f"Microphone gate: {gate.name}")
-        log(f"Connecting to OpenAI Realtime using {model}")
+            log(f"Microphone gate: {gate.name}")
+            log(f"Connecting to OpenAI Realtime using {model}")
 
-        async with RealtimeClient(
-            api_key=api_key,
-            model=model,
-            voice=voice,
-            eagerness=eagerness,
-            noise_reduction=noise_reduction,
-            transcription_model=transcription_model,
-        ) as realtime:
-            log("Connected to OpenAI Realtime")
+            async with RealtimeClient(
+                api_key=api_key,
+                model=model,
+                voice=voice,
+                eagerness=eagerness,
+                noise_reduction=noise_reduction,
+                transcription_model=transcription_model,
+                tools=TOOL_DEFINITIONS,
+            ) as realtime:
+                log("Connected to OpenAI Realtime")
 
-            tasks = {
-                asyncio.create_task(
-                    pi_to_realtime(pi_websocket, realtime, gate)
-                ),
-                asyncio.create_task(
-                    realtime_to_pi(realtime, playback)
-                ),
-                asyncio.create_task(playback.run()),
-            }
+                tasks = {
+                    asyncio.create_task(
+                        pi_to_realtime(pi_websocket, realtime, gate)
+                    ),
+                    asyncio.create_task(
+                        realtime_to_pi(realtime, playback, tools, state)
+                    ),
+                    asyncio.create_task(playback.run()),
+                    asyncio.create_task(eyes.run()),
+                    asyncio.create_task(
+                        watch_the_room(eyes, realtime, playback, store, state)
+                    ),
+                }
 
-            done, pending = await asyncio.wait(
-                tasks,
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+                done, pending = await asyncio.wait(
+                    tasks,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
 
-            for task in pending:
-                task.cancel()
+                for task in pending:
+                    task.cancel()
 
-            await asyncio.gather(
-                *pending,
-                return_exceptions=True,
-            )
+                await asyncio.gather(*pending, return_exceptions=True)
 
-            for task in done:
-                task.result()
+                for task in done:
+                    task.result()
+
+    finally:
+        store.close()
 
 
 def main() -> None:

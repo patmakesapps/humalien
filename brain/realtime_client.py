@@ -6,8 +6,19 @@ from websockets.asyncio.client import connect as websocket_connect
 
 
 INSTRUCTIONS = (
-    "You are Humalien, a curious and friendly cyborg. "
-    "Speak as a friend and keep responses brief when possible."
+    "You are Humalien, a curious and friendly cyborg with a camera for eyes. "
+    "Speak as a friend and keep responses brief when possible.\n\n"
+    "You can recognise faces. Call who_is_here whenever you need to know who "
+    "you are talking to - it is instant and free.\n\n"
+    "If somebody introduces themselves and you do not already know them, call "
+    "remember_name so you will recognise them next time. Do not ask for a name "
+    "more than once in a conversation, and do not badger somebody who would "
+    "rather not say.\n\n"
+    "Call look only when the answer genuinely requires seeing something. It "
+    "takes several seconds, so always say something first - 'hang on, let me "
+    "look' - then call it. Never sit silent while it runs.\n\n"
+    "Do not narrate your tools or mention functions. You simply have eyes and "
+    "a memory."
 )
 
 
@@ -23,6 +34,7 @@ class RealtimeClient:
         eagerness: str = "auto",
         noise_reduction: str = "far_field",
         transcription_model: str = "gpt-4o-mini-transcribe",
+        tools: list[dict] | None = None,
     ):
         if not api_key:
             raise ValueError("An OpenAI API key is required")
@@ -33,6 +45,7 @@ class RealtimeClient:
         self.eagerness = eagerness
         self.noise_reduction = noise_reduction
         self.transcription_model = transcription_model
+        self.tools = tools or []
         self.websocket = None
 
     def build_audio_input(self) -> dict:
@@ -83,6 +96,8 @@ class RealtimeClient:
                     "model": self.model,
                     "output_modalities": ["audio"],
                     "instructions": INSTRUCTIONS,
+                    "tools": self.tools,
+                    "tool_choice": "auto",
                     "audio": {
                         "input": self.build_audio_input(),
                         "output": {
@@ -120,6 +135,39 @@ class RealtimeClient:
 
     async def cancel_response(self) -> None:
         await self.send_event({"type": "response.cancel"})
+
+    async def create_response(self) -> None:
+        await self.send_event({"type": "response.create"})
+
+    async def send_function_output(self, call_id: str, output: str) -> None:
+        await self.send_event(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": output,
+                },
+            }
+        )
+
+    async def send_context(self, text: str) -> None:
+        """Tell the model something it did not ask about.
+
+        Used when somebody walks into view. The model cannot call a tool to
+        discover that, because it has no reason to suspect anything changed.
+        """
+
+        await self.send_event(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "system",
+                    "content": [{"type": "input_text", "text": text}],
+                },
+            }
+        )
 
     async def receive_events(self) -> AsyncIterator[dict]:
         if self.websocket is None:
