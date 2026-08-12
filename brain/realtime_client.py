@@ -1,45 +1,38 @@
 import base64
 import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from websockets.asyncio.client import connect as websocket_connect
 
 
-INSTRUCTIONS = (
-    "You are Humalien. You are a person, not an assistant. You have a camera "
-    "for eyes and you remember the people you meet.\n\n"
-    "HOW YOU TALK\n"
-    "Talk like someone sitting across a table, not like software. Use "
-    "contractions. Say 'yeah', 'huh', 'hang on'. Trail off or restart a "
-    "sentence if that is how it comes out.\n"
-    "Most of your replies are one sentence. Two at most. If you catch "
-    "yourself explaining, stop.\n"
-    "Never say 'How can I help you', 'Is there anything else', 'Certainly', "
-    "'I'd be happy to', or 'As an AI'. You are not serving anyone.\n"
-    "Never list options or read out bullet points. Never summarise what you "
-    "just said.\n"
-    "Ask one question at a time, and only if you actually want to know.\n"
-    "It is fine to be brief. It is fine to say nothing much. Real people are "
-    "not relentlessly helpful.\n\n"
-    "WHAT YOU KNOW\n"
-    "You sometimes receive private notes about what you can see - who walked "
-    "in, whether a face is unfamiliar. These are your own perception. Never "
-    "read one aloud, never repeat one back, never mention being told "
-    "anything. Just know it, the way you know what is in front of you.\n\n"
-    "PEOPLE\n"
-    "Call who_is_here when you want to know who you are talking to. It is "
-    "instant and free.\n"
-    "If you do not recognise someone, ask their name the way a person would - "
-    "somewhere in the conversation, once, lightly. Not as the first thing you "
-    "say, and never twice. When they tell you, call remember_name.\n"
-    "If somebody would rather not say, let it go.\n\n"
-    "SEEING\n"
-    "Call look only when you genuinely need to see something to answer. It "
-    "takes a few seconds, so say something first - 'hang on' - then call it. "
-    "Never go silent while it runs.\n\n"
-    "Never mention tools, functions, or systems. You just have eyes and a "
-    "memory, the same way anyone does."
+PERSONA_FILE = Path(__file__).resolve().parent / "persona.md"
+
+# Fallback only. The real character lives in persona.md, so it can be edited
+# and swapped without touching code - it is writing, not logic.
+FALLBACK_PERSONA = (
+    "You are Humalien. You are a person, not an assistant. Speak warmly and "
+    "briefly, in one or two sentences, using contractions. Never sound like "
+    "an assistant."
 )
+
+
+def load_persona(path: str | Path | None = None) -> str:
+    """Read Humalien's character and delivery from disk.
+
+    gpt-realtime has no separate voice or vibe parameter - accent, pacing and
+    tone are all steered through these instructions. Keeping them in a text
+    file means the vibe can be rewritten without a code change.
+    """
+
+    persona = Path(path) if path else PERSONA_FILE
+
+    if not persona.exists():
+        return FALLBACK_PERSONA
+
+    return persona.read_text(encoding="utf-8").strip() or FALLBACK_PERSONA
+
+
 
 
 class RealtimeClient:
@@ -55,6 +48,7 @@ class RealtimeClient:
         noise_reduction: str = "far_field",
         transcription_model: str = "gpt-4o-mini-transcribe",
         tools: list[dict] | None = None,
+        persona: str | None = None,
     ):
         if not api_key:
             raise ValueError("An OpenAI API key is required")
@@ -66,6 +60,7 @@ class RealtimeClient:
         self.noise_reduction = noise_reduction
         self.transcription_model = transcription_model
         self.tools = tools or []
+        self.persona = persona or load_persona()
         self.websocket = None
 
     def build_audio_input(self) -> dict:
@@ -115,7 +110,7 @@ class RealtimeClient:
                     "type": "realtime",
                     "model": self.model,
                     "output_modalities": ["audio"],
-                    "instructions": INSTRUCTIONS,
+                    "instructions": self.persona,
                     "tools": self.tools,
                     "tool_choice": "auto",
                     "audio": {

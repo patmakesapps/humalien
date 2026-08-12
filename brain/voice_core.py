@@ -14,7 +14,7 @@ from mic_gate import HALF_DUPLEX, build_mic_gate
 from people import PeopleStore
 from perception import Perception
 from playback import PacedPlayback
-from realtime_client import RealtimeClient
+from realtime_client import RealtimeClient, load_persona
 from robot_tools import TOOL_DEFINITIONS, RobotTools
 
 
@@ -308,6 +308,7 @@ async def run_voice_core() -> None:
     vision_model = os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud")
     show_video = os.getenv("HUMALIEN_SHOW_VIDEO", "0") == "1"
     greet_on_sight = os.getenv("HUMALIEN_GREET_ON_SIGHT", "1") == "1"
+    persona_file = os.getenv("HUMALIEN_PERSONA")
 
     if not api_key:
         raise RuntimeError(f"OPENAI_API_KEY was not found in {ENV_FILE}")
@@ -343,6 +344,7 @@ async def run_voice_core() -> None:
                 noise_reduction=noise_reduction,
                 transcription_model=transcription_model,
                 tools=TOOL_DEFINITIONS,
+                persona=load_persona(persona_file),
             ) as realtime:
                 log("Connected to OpenAI Realtime")
 
