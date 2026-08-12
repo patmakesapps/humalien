@@ -8,6 +8,25 @@ PI_CHANNELS = 2
 MODEL_SAMPLE_RATE = 24_000
 MODEL_CHANNELS = 1
 
+SAMPLE_WIDTH = 2
+
+
+def _split_whole_frames(
+    buffered: bytes,
+    channels: int,
+) -> tuple[bytes, bytes]:
+    """Split a byte string on the last complete frame boundary.
+
+    A pipe read can end part way through a sample, so the leftover bytes
+    have to be carried into the next chunk. Dropping them instead would
+    swap the left and right channels for the rest of the session.
+    """
+
+    frame_size = channels * SAMPLE_WIDTH
+    usable = len(buffered) - (len(buffered) % frame_size)
+
+    return buffered[:usable], buffered[usable:]
+
 
 class PiToModelAudio:
     """Convert Pi PCM16 audio from 48 kHz stereo to 24 kHz mono."""
@@ -20,13 +39,15 @@ class PiToModelAudio:
             dtype="int16",
             quality="HQ",
         )
+        self.residual = b""
 
     def convert(self, audio: bytes, *, final: bool = False) -> bytes:
-        samples = np.frombuffer(audio, dtype="<i2")
+        whole, self.residual = _split_whole_frames(
+            self.residual + audio,
+            PI_CHANNELS,
+        )
 
-        if len(samples) % PI_CHANNELS != 0:
-            raise ValueError("Pi audio does not contain complete stereo frames")
-
+        samples = np.frombuffer(whole, dtype="<i2")
         stereo = samples.reshape(-1, PI_CHANNELS)
 
         # Average left and right without overflowing a 16-bit integer.
@@ -52,9 +73,15 @@ class ModelToPiAudio:
             dtype="int16",
             quality="HQ",
         )
+        self.residual = b""
 
     def convert(self, audio: bytes, *, final: bool = False) -> bytes:
-        mono = np.frombuffer(audio, dtype="<i2")
+        whole, self.residual = _split_whole_frames(
+            self.residual + audio,
+            MODEL_CHANNELS,
+        )
+
+        mono = np.frombuffer(whole, dtype="<i2")
 
         converted = self.resampler.resample_chunk(mono, last=final)
 

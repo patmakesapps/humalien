@@ -16,6 +16,11 @@ CHANNELS = 2
 FORMAT = "S16_LE"
 CHUNK_SIZE = 3840
 
+# Keep aplay's own buffer short. The brain paces audio to us in real time,
+# so a deep buffer here would only delay interruptions. Microseconds.
+BUFFER_TIME = 80_000
+PERIOD_TIME = 20_000
+
 
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -51,6 +56,8 @@ def start_speaker():
             "-f", FORMAT,
             "-r", str(SAMPLE_RATE),
             "-c", str(CHANNELS),
+            "--buffer-time", str(BUFFER_TIME),
+            "--period-time", str(PERIOD_TIME),
         ],
         stdin=subprocess.PIPE,
         stderr=subprocess.DEVNULL,

@@ -5,6 +5,12 @@ from collections.abc import AsyncIterator
 from websockets.asyncio.client import connect as websocket_connect
 
 
+INSTRUCTIONS = (
+    "You are Humalien, a curious and friendly cyborg. "
+    "Speak as a friend and keep responses brief when possible."
+)
+
+
 class RealtimeClient:
     """Low-level connection to an OpenAI Realtime speech session."""
 
@@ -13,6 +19,10 @@ class RealtimeClient:
         api_key: str,
         model: str,
         voice: str,
+        *,
+        eagerness: str = "auto",
+        noise_reduction: str = "far_field",
+        transcription_model: str = "gpt-4o-mini-transcribe",
     ):
         if not api_key:
             raise ValueError("An OpenAI API key is required")
@@ -20,7 +30,39 @@ class RealtimeClient:
         self.api_key = api_key
         self.model = model
         self.voice = voice
+        self.eagerness = eagerness
+        self.noise_reduction = noise_reduction
+        self.transcription_model = transcription_model
         self.websocket = None
+
+    def build_audio_input(self) -> dict:
+        audio_input = {
+            "format": {
+                "type": "audio/pcm",
+                "rate": 24_000,
+            },
+            "turn_detection": {
+                "type": "semantic_vad",
+                "eagerness": self.eagerness,
+                # Let the server end our turn and cut its own reply short
+                # the moment it hears the user start talking.
+                "create_response": True,
+                "interrupt_response": True,
+            },
+        }
+
+        # Both are optional. Blank them in .env if the API rejects them.
+        if self.noise_reduction:
+            audio_input["noise_reduction"] = {
+                "type": self.noise_reduction,
+            }
+
+        if self.transcription_model:
+            audio_input["transcription"] = {
+                "model": self.transcription_model,
+            }
+
+        return audio_input
 
     async def connect(self) -> None:
         url = f"wss://api.openai.com/v1/realtime?model={self.model}"
@@ -40,20 +82,9 @@ class RealtimeClient:
                     "type": "realtime",
                     "model": self.model,
                     "output_modalities": ["audio"],
-                    "instructions": (
-                        "You are Humalien, a curious and friendly cyborg. "
-                        "Speak as a friend and keep responses brief when possible."
-                    ),
+                    "instructions": INSTRUCTIONS,
                     "audio": {
-                        "input": {
-                            "format": {
-                                "type": "audio/pcm",
-                                "rate": 24_000,
-                            },
-                            "turn_detection": {
-                                "type": "semantic_vad",
-                            },
-                        },
+                        "input": self.build_audio_input(),
                         "output": {
                             "format": {
                                 "type": "audio/pcm",
@@ -86,6 +117,9 @@ class RealtimeClient:
                 "audio": encoded_audio,
             }
         )
+
+    async def cancel_response(self) -> None:
+        await self.send_event({"type": "response.cancel"})
 
     async def receive_events(self) -> AsyncIterator[dict]:
         if self.websocket is None:

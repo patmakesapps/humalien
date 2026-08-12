@@ -40,11 +40,38 @@ class AudioAdapterTests(unittest.TestCase):
             1,
         )
 
-    def test_rejects_incomplete_stereo_frame(self):
+    def test_buffers_incomplete_stereo_frame(self):
+        # A pipe read can end part way through a frame. The leftover bytes
+        # must be carried forward, not dropped, or the left and right
+        # channels swap for the rest of the session.
         adapter = PiToModelAudio()
 
-        with self.assertRaises(ValueError):
-            adapter.convert(b"\x00\x00")
+        adapter.convert(b"\x00\x00")
+        self.assertEqual(adapter.residual, b"\x00\x00")
+
+        adapter.convert(b"\x00\x00")
+        self.assertEqual(adapter.residual, b"")
+
+    def test_odd_split_keeps_sample_alignment(self):
+        # A steady tone. If a chunk boundary ever misaligns the 16-bit
+        # samples, the high and low bytes swap and the output turns to
+        # noise instead of staying at the input level.
+        level = 1_000
+        pi_audio = np.full(48_000 * 2, level, dtype="<i2").tobytes()
+
+        adapter = PiToModelAudio()
+
+        # Split on a deliberately odd byte boundary.
+        model_audio = adapter.convert(pi_audio[:1_001])
+        model_audio += adapter.convert(pi_audio[1_001:], final=True)
+
+        self.assertEqual(adapter.residual, b"")
+
+        # Ignore the resampler's edge transients at each end.
+        samples = np.frombuffer(model_audio, dtype="<i2")[100:-100]
+
+        self.assertGreater(len(samples), 0)
+        np.testing.assert_allclose(samples, level, atol=2)
 
 
 if __name__ == "__main__":
