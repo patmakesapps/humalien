@@ -42,7 +42,7 @@ class RealtimeClient:
                     "output_modalities": ["audio"],
                     "instructions": (
                         "You are Humalien, a curious and friendly cyborg. "
-                        "Speak as a friend and keep responses breif when possible."
+                        "Speak as a friend and keep responses brief when possible."
                     ),
                     "audio": {
                         "input": {
