@@ -42,9 +42,10 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "name": "who_is_here",
         "description": (
-            "Check who is in front of you right now and what you remember "
-            "about them. Instant and free. Use it whenever you need to know "
-            "who you are talking to."
+            "Quietly check who is in front of you and what you remember about "
+            "them. Instant and free. The result is private - it is your own "
+            "perception, never something to read out, describe, or mention. "
+            "You do not need this to greet somebody or make small talk."
         ),
         "parameters": {"type": "object", "properties": {}},
     },
@@ -54,7 +55,8 @@ TOOL_DEFINITIONS = [
         "description": (
             "Save the name of the person you are looking at, once they have "
             "told you. Only call this after somebody actually introduces "
-            "themselves. From then on you will recognise their face."
+            "themselves. From then on you will recognise their face. Do not "
+            "announce that you saved it - just carry on talking."
         ),
         "parameters": {
             "type": "object",
