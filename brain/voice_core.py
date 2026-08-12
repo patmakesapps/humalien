@@ -148,7 +148,7 @@ async def run_voice_core() -> None:
 
     api_key = os.getenv("OPENAI_API_KEY")
     pi_url = os.getenv("HUMALIEN_PI_URL", "ws://10.0.0.83:8765")
-    model = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1")
+    model = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime-2.1-mini")
     voice = os.getenv("OPENAI_REALTIME_VOICE", "marin")
     gate_name = os.getenv("HUMALIEN_MIC_GATE", HALF_DUPLEX)
     eagerness = os.getenv("HUMALIEN_VAD_EAGERNESS", "auto")
