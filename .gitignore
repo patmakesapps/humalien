@@ -11,6 +11,14 @@
 # Audio test artifacts
 *.wav
 
+# ONNX models — run brain/tools/fetch_models.py instead
+brain/models/
+
+# Who Humalien has met. Local to each machine, never committed.
+*.db
+*.db-wal
+*.db-shm
+
 # Editors / OS
 .vscode/
 .DS_Store

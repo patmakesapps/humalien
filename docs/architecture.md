@@ -19,8 +19,12 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 | `playback.py` | Releases the model's audio at the speed it is spoken. |
 | `mic_gate.py` | Decides whether the microphone is listening right now. |
 | `audio_adapter.py` | 48 kHz stereo ↔ 24 kHz mono resampling. |
-| `vision.py` | OpenCV face detection for the USB camera prototype. |
+| `vision.py` | YuNet face detection for the USB camera. |
 | `gaze.py` | Servo-independent target coordinates and smoothing. |
+| `recognizer.py` | SFace embeddings — turns a face into a unit vector. |
+| `people.py` | SQLite store of who Humalien has met and what it knows. |
+| `perception.py` | Who is in the room right now. Detect, embed, match. |
+| `describe.py` | Answers a question about the current frame, on request. |
 
 `tools/` holds things you run by hand, not part of the robot:
 
@@ -29,6 +33,8 @@ speaking, or that OpenAI exists. That matters because the brain is going to move
 - `realtime_smoke_test.py` — confirm the API key and model work
 - `audio_roundtrip.py` — record 3 s through the Pi and play it back
 - `vision_preview.py` — preview face tracking and normalized gaze targets
+- `people_preview.py` — live recognition, naming, and looking
+- `fetch_models.py` — download the YuNet and SFace ONNX models
 
 ### Node — `node/`
 
@@ -68,14 +74,19 @@ reason: without them the robot hears itself and answers itself. See
 Vision is a second, entirely independent path. It never touches the node:
 
 ```
-webcam → OpenCVFaceDetector → select_primary_face → GazeController → GazeTarget
-                                                                      (x, y, state)
+                        ┌→ select_primary_face → GazeController → GazeTarget
+webcam → YuNet detect ──┤                                          (x, y, state)
+                        └→ SFace embed → PeopleStore.match → Sighting
+                                                              (who, confidence)
 ```
 
-Note that it doesn't touch the Realtime session either. The model has no idea
-anyone is being looked at. Wiring gaze into the conversation — Humalien
-noticing you walked up and greeting you — is a real feature, but it's a
-deliberate later step, not an accident of the current layering.
+One detection pass feeds both. Gaze wants *where* a face is; recognition wants
+*whose* it is. Neither involves a language model, which is why both can run
+continuously — see [people.md](people.md).
+
+Looking is the exception, and it's deliberately pull-only: `describe.py` runs a
+vision model over a single frame when the conversation asks, never on a timer.
+That one decision is what keeps the cost bounded.
 
 ## Why the node stays dumb
 

@@ -61,43 +61,47 @@ Detector misses should not make the eyes twitch. The controller:
 2. Holds the last target for 350 ms after a miss.
 3. Eases back to camera center if the face stays lost.
 
-## Detection, and its limits
+## Detection
 
-Detection runs OpenCV's bundled Haar cascades, which need no model download —
-a good hardware bring-up baseline.
+Detection is **YuNet**, a small CNN (227 KB), via `cv2.FaceDetectorYN`. It
+replaced the Haar cascade chain that came before it.
 
-The frontal cascade is tried first, because a face looking at the robot is both
-the common case and the most reliable detection. If it finds nothing, the
-profile cascade runs. That cascade is trained on **one** direction only, so if
-it also finds nothing the frame is flipped horizontally and it runs again, with
-the resulting coordinates mirrored back by `FaceBox.mirrored()`.
+That earlier version tried the frontal cascade, then the profile cascade, then
+the profile cascade again on a flipped frame. It worked, but it had a
+three-quarter dead zone — somewhere between straight-on and full profile,
+neither cascade fired, because Haar cascades are trained on discrete poses and
+don't interpolate between them. It also cost up to three passes per frame, with
+the worst case being an empty room.
 
-Cost: a face looking at you is one cascade pass. A head turned side on is two.
-An empty room is three, every frame. That's the expensive case, and it's the one
-that runs whenever nobody is there.
+YuNet covers the rotation smoothly in one pass. Two independent reasons forced
+the swap:
 
-**This improves profile tracking. It does not make it good.** Known limits:
+1. **Pose.** It handles head turn as a continuum, so the dead zone goes away.
+2. **Landmarks.** It emits five facial landmarks, which SFace needs to align a
+   crop before embedding it. Haar gives you a bounding box and nothing else, so
+   recognition was not possible on top of it.
 
-- **The three-quarter dead zone.** Somewhere between straight-on and full
-  profile, neither cascade fires reliably. Haar cascades are trained on discrete
-  poses and don't interpolate between them. Expect a wobble as you rotate
-  through roughly 45°, which `HOLDING` will paper over only if you pass through
-  it quickly.
-- **Profile detection is noisier.** More false positives than frontal.
-  `select_primary_face` picks the largest box, which absorbs some of that, but
-  not all.
+Measured at about **14 ms per 640×480 frame** on a laptop CPU — roughly 70 fps
+of headroom, and recognition doesn't need to run at frame rate anyway.
+
+The cost is a model file. Run `python tools/fetch_models.py` once per machine;
+`brain/models/` is gitignored. A missing model raises with that instruction
+rather than failing obscurely.
+
+`FaceBox.mirrored()` survives from the cascade era. Detection no longer needs
+it, but it's tested and it's the right primitive if you ever flip a frame.
+
+### Still true
+
 - **Back of the head is not a face.** Turn fully away and tracking is gone. The
-  hold-then-recenter behavior is what covers this, and it's the correct
-  response — there is genuinely nothing to look at.
+  hold-then-recenter behavior covers this, and it's the correct response —
+  there is genuinely nothing to look at.
+- **The gaze contract is independent of the detector.** `Detection.box` is a
+  `FaceBox` exactly as before, so `gaze.py` did not change when the detector was
+  replaced, and won't if it's replaced again.
 
-### Upgrading the detector
+## Recognition and memory
 
-When the dead zone becomes the limiting factor, the fix is a better detector,
-not more cascades. OpenCV ships `cv2.FaceDetectorYN` (YuNet): a small CNN,
-roughly 340 KB, that handles pose, scale, and lighting far better than Haar and
-still runs comfortably on CPU.
-
-The tradeoff is a model file to vendor or fetch, which is why it isn't the
-starting point. Nothing else has to change — `detect()` returns `FaceBox`
-objects, and the gaze contract above is deliberately independent of how they
-were found.
+Detection answers *where is a face*. Knowing *whose* face, remembering them
+tomorrow, and answering questions about what the camera sees are covered in
+[people.md](people.md).

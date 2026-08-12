@@ -5,7 +5,7 @@ import time
 import cv2
 
 from gaze import GazeController, select_primary_face
-from vision import OpenCVFaceDetector
+from vision import YuNetFaceDetector
 
 
 WINDOW_NAME = "Humalien vision preview"
@@ -112,7 +112,7 @@ def main() -> None:
             f"Could not open camera {args.camera!r}. Try another --camera index."
         )
 
-    detector = OpenCVFaceDetector()
+    detector = YuNetFaceDetector()
     controller = GazeController()
 
     previous_frame_at = time.monotonic()
@@ -132,8 +132,8 @@ def main() -> None:
 
             now = time.monotonic()
             frame_height, frame_width = frame.shape[:2]
-            faces = detector.detect(frame)
-            face = select_primary_face(faces)
+            primary = select_primary_face(detector.detect(frame))
+            face = None if primary is None else primary.box
             target = controller.update(
                 face,
                 frame_width=frame_width,

@@ -9,6 +9,7 @@ a natural voice conversation you can interrupt and talk over.
 | [voice-pipeline.md](voice-pipeline.md) | Why the robot was answering itself, and how it's fixed |
 | [hardware.md](hardware.md) | Pi 5, Waveshare hat, audio devices, echo cancellation |
 | [vision.md](vision.md) | USB webcam face tracking and the gaze-target contract |
+| [people.md](people.md) | Recognising people, remembering them, and looking on request |
 
 ## The two machines
 
@@ -68,9 +69,11 @@ cd brain
 $env:PYTHONPATH = "."          # PowerShell; use export on Linux
 python tests/test_audio_adapter.py     # 4 tests
 python tests/test_playback.py          # 3 tests
-python tests/test_gaze.py              # 8 tests
+python tests/test_gaze.py              # 11 tests
+python tests/test_people.py            # 12 tests
 ```
 
-None of them need a camera, a microphone, or an API key. `test_gaze.py` doesn't
-even need OpenCV — the gaze maths is deliberately kept out of `vision.py` so it
-stays testable without hardware.
+None of them need a camera, a microphone, an API key, or the ONNX models.
+`test_gaze.py` doesn't even need OpenCV, and `test_people.py` runs against an
+in-memory database with synthetic embeddings — the matching maths is kept out of
+`recognizer.py` precisely so it stays testable without hardware.
