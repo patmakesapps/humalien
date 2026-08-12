@@ -85,6 +85,15 @@ Put the indices in `.env` as `HUMALIEN_DESKTOP_INPUT_DEVICE` and
 `HUMALIEN_DESKTOP_OUTPUT_DEVICE`, and point `HUMALIEN_PI_URL` at
 `ws://127.0.0.1:8765`.
 
+> **Change that line, don't add a second one.** `.env` is last-value-wins, so
+> a duplicate `HUMALIEN_PI_URL` means the bottom one silently decides and
+> editing the top one does nothing. See [running.md](running.md).
+
+Also check the device you picked is the right *direction*. An output device set
+as the input fails with PortAudio's `Invalid number of channels [-9998]`, which
+sounds like a format problem and isn't. `list_audio_devices.py` prints input and
+output channel counts so you can tell them apart.
+
 > **Pick a real microphone.** Stereo Mix, "What U Hear", and virtual cables are
 > loopback devices — they wire the speaker directly into the model, and it will
 > answer itself with no acoustics involved.

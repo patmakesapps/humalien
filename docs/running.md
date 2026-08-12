@@ -41,6 +41,30 @@ This is not just tidiness. The node is a dumb pipe by design — `arecord` in,
 that claim true rather than aspirational. It is also why swapping the brain
 for a Jetson changes nothing on the Pi.
 
+## Switching between the laptop and the Pi
+
+One line decides which one the brain talks to:
+
+```bash
+HUMALIEN_PI_URL=ws://127.0.0.1:8765    # desktop simulator
+HUMALIEN_PI_URL=ws://10.0.0.83:8765    # the real Pi
+```
+
+**Set it once.** `.env` is read last-value-wins, so if the key appears twice —
+easy to end up with, since the desktop simulator needs a different value from
+the default — only the bottom one takes effect. Editing the top one changes
+nothing, and it looks exactly like a network fault: the brain sits there
+failing to connect while the file plainly says the right address.
+
+If a connection failure makes no sense, check for a second definition first:
+
+```bash
+grep -c HUMALIEN_PI_URL brain/.env    # should be 1
+```
+
+The same applies to every key in the file, but this is the one that bites,
+because it is the only one that legitimately changes between sessions.
+
 ## The master file
 
 `brain/humalien.py` is what the robot boots into. It checks the things
