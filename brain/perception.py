@@ -7,7 +7,7 @@ language model, which is what makes it affordable to leave running.
 import time
 from dataclasses import dataclass
 
-from people import Match, PeopleStore
+from people import CREATE_BELOW, Match, PeopleStore
 from recognizer import FaceRecognizer
 from vision import Detection, YuNetFaceDetector
 
@@ -87,16 +87,21 @@ class Perception:
             # Only commit to the database once it looks like a real, moving
             # person rather than a glitch or a picture on the wall.
             if sighting.looks_alive:
-                if match is None:
-                    person = self.store.create_person(embedding, now=now)
-                    sighting.match = Match(person, 1.0)
-                else:
+                if match is not None:
                     self.store.record_sighting(
                         match.person.id,
                         embedding,
                         similarity=match.similarity,
                         now=now,
                     )
+
+                # A near miss is far more likely to be someone we know at an
+                # awkward angle than a stranger. Enrolling on those is what
+                # litters the database with one-sighting ghosts, so wait for
+                # a cleaner look instead.
+                elif self.store.best_similarity(embedding) < CREATE_BELOW:
+                    person = self.store.create_person(embedding, now=now)
+                    sighting.match = Match(person, 1.0)
 
             sightings.append(sighting)
 

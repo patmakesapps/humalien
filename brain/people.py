@@ -21,6 +21,13 @@ MATCH_THRESHOLD = 0.40
 # Confident enough to say the name out loud, unprompted.
 GREET_THRESHOLD = 0.50
 
+# Below this, a face is unlike anyone we know and deserves its own record.
+# Between here and MATCH_THRESHOLD is the ambiguous band: too different to
+# call a match, too similar to be confident it is somebody new. Measured
+# separation on real faces was ~0.28 between two different people and ~0.38
+# for one person at an awkward angle, so the uncertainty sits in between.
+CREATE_BELOW = 0.30
+
 # A new view of a known face is only worth storing if it differs from what we
 # already have. Near-duplicates add storage without adding robustness.
 NOVEL_BELOW = 0.75
@@ -161,6 +168,55 @@ class PeopleStore:
         ).fetchall()
 
         return [row["text"] for row in rows]
+
+    def rank(self, embedding) -> list[tuple[Person, float]]:
+        """Every known person, scored against this face, best first.
+
+        `match` only reports the winner, which hides the number that
+        actually matters: the gap between first and second place. A
+        confident 0.7 with runner-up 0.6 is far shakier than 0.5 with
+        runner-up 0.1.
+        """
+
+        matrix, owners = self._embeddings()
+
+        if len(owners) == 0:
+            return []
+
+        similarities = matrix @ normalize(embedding)
+
+        best: dict[int, float] = {}
+
+        for person_id, similarity in zip(owners, similarities):
+            score = float(similarity)
+
+            if score > best.get(person_id, -1.0):
+                best[person_id] = score
+
+        ranked = [
+            (self.person(person_id), score)
+            for person_id, score in best.items()
+        ]
+
+        ranked = [(person, score) for person, score in ranked if person]
+        ranked.sort(key=lambda pair: pair[1], reverse=True)
+
+        return ranked
+
+    def best_similarity(self, embedding) -> float:
+        """How much this face resembles the closest thing we have seen.
+
+        Reported even when it is too low to count as a match, because
+        "resembles nobody at all" and "nearly matched someone" need very
+        different handling.
+        """
+
+        matrix, owners = self._embeddings()
+
+        if len(owners) == 0:
+            return 0.0
+
+        return float(np.max(matrix @ normalize(embedding)))
 
     def match(self, embedding) -> Match | None:
         """Find who this face belongs to, named or not.

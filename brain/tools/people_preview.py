@@ -2,20 +2,25 @@
 
 Keys:
   n  name the largest face on screen
+  d  score the largest face against everyone known
   l  ask a question about what the camera sees
   p  list everyone Humalien has met
   q  quit
 """
 
 import argparse
+import sys
 import time
 from pathlib import Path
+
+# Work whether launched as `python -m tools.x` or `python tools/x.py`.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import cv2
 
 from describe import OllamaDescriber
 from gaze import select_primary_face
-from people import PeopleStore
+from people import GREET_THRESHOLD, MATCH_THRESHOLD, PeopleStore
 from perception import Perception
 
 
@@ -84,7 +89,7 @@ def draw(frame, sightings, answer: str) -> None:
             cv2.LINE_AA,
         )
 
-    for index, line in enumerate(["n name   l look   p people   q quit", answer]):
+    for index, line in enumerate(["n name  d score  l look  p people  q quit", answer]):
         if not line:
             continue
 
@@ -120,6 +125,42 @@ def name_primary(store: PeopleStore, sightings) -> str:
 
     store.name_person(person.id, name)
     return f"Saved: #{person.id} is {name}"
+
+
+def diagnose(store: PeopleStore, perception: Perception, frame, sightings) -> str:
+    """Score the current face against everyone, so margins are visible."""
+
+    primary = select_primary_face([s.detection for s in sightings])
+
+    if primary is None:
+        return "No face on screen to score."
+
+    ranked = store.rank(perception.recognizer.embed(frame, primary))
+
+    if not ranked:
+        return "Nobody known yet."
+
+    print("\nSimilarity against everyone known:")
+
+    for person, score in ranked:
+        label = person.name or f"(unnamed #{person.id})"
+
+        if score >= GREET_THRESHOLD:
+            verdict = "GREET"
+        elif score >= MATCH_THRESHOLD:
+            verdict = "match"
+        else:
+            verdict = "-"
+
+        print(f"  {score: .3f}  {verdict:<6} {label}")
+
+    if len(ranked) > 1:
+        margin = ranked[0][1] - ranked[1][1]
+        print(f"  margin over runner-up: {margin:.3f}")
+
+        return f"top {ranked[0][1]:.2f}, margin {margin:.2f} — see terminal"
+
+    return f"top {ranked[0][1]:.2f}, nobody to compare against"
 
 
 def list_people(store: PeopleStore) -> str:
@@ -183,6 +224,9 @@ def main() -> None:
             if key == ord("n"):
                 answer = name_primary(store, sightings)
 
+            elif key == ord("d"):
+                answer = diagnose(store, perception, frame, sightings)
+
             elif key == ord("p"):
                 answer = list_people(store)
 
@@ -193,6 +237,9 @@ def main() -> None:
                     started = time.monotonic()
                     answer = describer.describe(frame, question)
                     print(f"[{time.monotonic() - started:.1f}s] {answer}")
+
+    except KeyboardInterrupt:
+        print("\nStopped")
 
     finally:
         capture.release()

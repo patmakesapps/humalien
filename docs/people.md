@@ -94,11 +94,43 @@ schema.
 
 | Constant | Value | Meaning |
 | --- | --- | --- |
+| `CREATE_BELOW` | 0.30 | Unlike anyone known. Safe to enroll as new. |
 | `MATCH_THRESHOLD` | 0.40 | Same person. Attach the sighting. |
 | `GREET_THRESHOLD` | 0.50 | Confident enough to say the name out loud. |
 
-SFace's documented operating point is 0.363; both are stricter. The failure
-costs aren't symmetric:
+SFace's documented operating point is 0.363; these are stricter.
+
+### Measured on real faces
+
+From a live session with two people, using the `d` key in `people_preview.py`:
+
+| Comparison | Score |
+| --- | --- |
+| Same person, good look | 0.79 – 0.88 |
+| Same person, awkward angle | ~0.38 |
+| Two different people | ~0.28 |
+| Unrelated faces | 0.02 – 0.25 |
+
+That first session produced five orphan records — one-sighting ghosts of a
+known person caught mid-turn, scoring 0.383 and landing just under
+`MATCH_THRESHOLD`. Recognition itself was fine (279 sightings in a single
+record), but every near miss was spawning a stranger.
+
+Hence the **ambiguous band** between `CREATE_BELOW` and `MATCH_THRESHOLD`. A
+face in that range is neither matched nor enrolled — perception simply waits
+for a cleaner look. Real strangers at 0.28 still enroll; the same person at
+0.38 no longer litters the database.
+
+Note this is fitted to one session with two faces. If a genuinely new person
+struggles to get recorded, `CREATE_BELOW` is the knob, and the `d` key is how
+to see whether it's actually the problem.
+
+Existing clutter clears with `prune_unnamed()`, which only ever touches
+unnamed records.
+
+### Why the cutoffs are strict
+
+The failure costs aren't symmetric:
 
 - **Two people merged into one record** — bad. Mixed embeddings poison the
   record and you will eventually name it wrong.

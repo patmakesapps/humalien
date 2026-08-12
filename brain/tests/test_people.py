@@ -135,6 +135,28 @@ class PeopleStoreTests(unittest.TestCase):
 
         self.assertEqual(stored, 2)
 
+    def test_rank_orders_everyone_and_shows_the_margin(self):
+        me = self.store.create_person(embedding(20))
+        someone_else = self.store.create_person(embedding(21))
+
+        ranked = self.store.rank(embedding(20, noise=0.05))
+
+        self.assertEqual([person.id for person, _ in ranked], [me.id, someone_else.id])
+
+        # The gap is the number that says whether a match is trustworthy.
+        self.assertGreater(ranked[0][1] - ranked[1][1], 0.3)
+
+    def test_rank_reports_one_score_per_person(self):
+        person = self.store.create_person(embedding(22))
+        self.store.record_sighting(person.id, embedding(22, noise=0.5), similarity=0.5)
+
+        ranked = self.store.rank(embedding(22))
+
+        self.assertEqual(len(ranked), 1)
+
+    def test_rank_is_empty_before_anyone_is_known(self):
+        self.assertEqual(self.store.rank(embedding(23)), [])
+
     def test_normalize_rejects_a_zero_vector(self):
         with self.assertRaises(ValueError):
             normalize(np.zeros(128, dtype=np.float32))
