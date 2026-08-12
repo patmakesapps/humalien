@@ -375,6 +375,76 @@ class PeopleStore:
         self.connection.commit()
         self._cache = None
 
+    def consolidate(self, *, threshold: float = MATCH_THRESHOLD) -> int:
+        """Fold unnamed records into named people they now match.
+
+        A creation-time threshold cannot prevent duplicates on its own,
+        because a person's stored views accumulate. A face that genuinely
+        resembled nobody when it was first seen can match confidently once
+        the same person has been seen from that angle a few more times.
+
+        Left alone those orphans actively steal sightings, since matching
+        takes the best face across everyone. Re-checking them is what keeps
+        one person from slowly fragmenting into several.
+
+        Only unnamed records are folded, and only into named ones. Merging
+        two named people is destructive and stays a human decision.
+        """
+
+        faces: dict[int, list[np.ndarray]] = {}
+
+        for row in self.connection.execute(
+            "SELECT person_id, embedding FROM faces"
+        ):
+            faces.setdefault(row["person_id"], []).append(
+                np.frombuffer(row["embedding"], dtype=np.float32)
+            )
+
+        people = self.people()
+        named = [person for person in people if person.name]
+        unnamed = [person for person in people if not person.name]
+
+        merged = 0
+
+        for orphan in unnamed:
+            mine = faces.get(orphan.id)
+
+            if not mine:
+                continue
+
+            mine = np.stack(mine)
+            best_person, best_score = None, threshold
+
+            for person in named:
+                theirs = faces.get(person.id)
+
+                if not theirs:
+                    continue
+
+                score = float(np.max(mine @ np.stack(theirs).T))
+
+                if score >= best_score:
+                    best_person, best_score = person, score
+
+            if best_person is not None:
+                self.merge(best_person.id, orphan.id)
+                merged += 1
+
+        return merged
+
+    def forget_unnamed(self) -> int:
+        """Delete every unidentified record, whatever its history.
+
+        Faces and facts cascade with them. Named people are untouched.
+        Anyone deleted who turns up again simply gets enrolled afresh.
+        """
+
+        cursor = self.connection.execute("DELETE FROM people WHERE name IS NULL")
+        self.connection.commit()
+        self._cache = None
+
+        return cursor.rowcount
+
     def prune_unnamed(
         self,
         *,

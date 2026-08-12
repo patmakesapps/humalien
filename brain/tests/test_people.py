@@ -157,6 +157,58 @@ class PeopleStoreTests(unittest.TestCase):
     def test_rank_is_empty_before_anyone_is_known(self):
         self.assertEqual(self.store.rank(embedding(23)), [])
 
+    def test_consolidate_folds_an_orphan_into_the_person_it_now_matches(self):
+        # The orphan was created when it matched nobody. More views of the
+        # same person have since closed the gap.
+        me = self.store.create_person(embedding(30))
+        self.store.name_person(me.id, "Pat")
+        orphan = self.store.create_person(embedding(30, noise=0.05))
+
+        merged = self.store.consolidate()
+
+        self.assertEqual(merged, 1)
+        self.assertIsNone(self.store.person(orphan.id))
+        self.assertIsNotNone(self.store.person(me.id))
+
+    def test_consolidate_leaves_real_strangers_alone(self):
+        me = self.store.create_person(embedding(31))
+        self.store.name_person(me.id, "Pat")
+        stranger = self.store.create_person(embedding(32))
+
+        self.assertEqual(self.store.consolidate(), 0)
+        self.assertIsNotNone(self.store.person(stranger.id))
+
+    def test_consolidate_never_merges_two_named_people(self):
+        first = self.store.create_person(embedding(33))
+        second = self.store.create_person(embedding(33, noise=0.05))
+        self.store.name_person(first.id, "Pat")
+        self.store.name_person(second.id, "Patrick")
+
+        self.assertEqual(self.store.consolidate(), 0)
+        self.assertIsNotNone(self.store.person(first.id))
+        self.assertIsNotNone(self.store.person(second.id))
+
+    def test_forget_unnamed_clears_them_all_and_spares_the_named(self):
+        friend = self.store.create_person(embedding(40))
+        self.store.name_person(friend.id, "Pat")
+        self.store.add_fact(friend.id, "builds robots")
+
+        seen_often = self.store.create_person(embedding(41))
+
+        for _ in range(9):
+            self.store.record_sighting(seen_often.id)
+
+        self.store.create_person(embedding(42))
+
+        removed = self.store.forget_unnamed()
+
+        self.assertEqual(removed, 2)
+        self.assertEqual([p.name for p in self.store.people()], ["Pat"])
+        self.assertEqual(self.store.facts(friend.id), ["builds robots"])
+
+        # Faces went with them, so a forgotten stranger no longer matches.
+        self.assertIsNone(self.store.match(embedding(42)))
+
     def test_normalize_rejects_a_zero_vector(self):
         with self.assertRaises(ValueError):
             normalize(np.zeros(128, dtype=np.float32))

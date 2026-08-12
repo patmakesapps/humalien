@@ -114,7 +114,7 @@ def name_primary(store: PeopleStore, sightings) -> str:
     sighting = next(s for s in sightings if s.detection is primary)
 
     if sighting.match is None:
-        return "That face is not settled yet — hold still a moment."
+        return "That face is not settled yet - hold still a moment."
 
     person = sighting.match.person
     print(f"\nNaming person #{person.id} (currently {person.name!r})")
@@ -158,7 +158,7 @@ def diagnose(store: PeopleStore, perception: Perception, frame, sightings) -> st
         margin = ranked[0][1] - ranked[1][1]
         print(f"  margin over runner-up: {margin:.3f}")
 
-        return f"top {ranked[0][1]:.2f}, margin {margin:.2f} — see terminal"
+        return f"top {ranked[0][1]:.2f}, margin {margin:.2f} - see terminal"
 
     return f"top {ranked[0][1]:.2f}, nobody to compare against"
 
@@ -176,7 +176,7 @@ def list_people(store: PeopleStore) -> str:
         for fact in facts:
             print(f"         - {fact}")
 
-    return f"{len(people)} people — see terminal"
+    return f"{len(people)} people - see terminal"
 
 
 def main() -> None:
@@ -193,6 +193,13 @@ def main() -> None:
 
     print(f"Database: {args.db}")
     print(f"Describer: {args.model}")
+
+    # Orphans left over from earlier sessions steal sightings from the person
+    # they actually belong to, so fold them in before recognising anything.
+    folded = store.consolidate()
+
+    if folded:
+        print(f"Consolidated {folded} stray record(s) into known people")
 
     sightings = []
     answer = ""

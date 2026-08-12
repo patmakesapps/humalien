@@ -125,8 +125,36 @@ Note this is fitted to one session with two faces. If a genuinely new person
 struggles to get recorded, `CREATE_BELOW` is the knob, and the `d` key is how
 to see whether it's actually the problem.
 
-Existing clutter clears with `prune_unnamed()`, which only ever touches
-unnamed records.
+### A threshold alone cannot fix this
+
+The first fix was incomplete, and the audit tool showed why. An orphan created
+early scored **0.605** against the person it belonged to once that person had
+accumulated more views — far above `MATCH_THRESHOLD`, yet still a separate
+record. Another was created *with* `CREATE_BELOW` active and still ended up at
+0.437.
+
+A person's stored representation grows over time. A face that genuinely
+resembled nobody when first seen can match confidently later, so no
+creation-time threshold can prevent duplicates on its own. Left alone those
+orphans actively **steal sightings**, because matching takes the best face
+across everyone.
+
+`consolidate()` re-checks unnamed records against named people and folds in
+anything that now matches. It runs on `people_preview` startup. Only
+unnamed → named; merging two named people is destructive and stays a human
+decision.
+
+Folding ghosts back in is not just cleanup — those records are usually the
+awkward angles the person's own record was missing, so consolidation *improves*
+coverage rather than merely tidying.
+
+`tools/people_audit.py` inspects before acting, and clears clutter:
+
+```bash
+python tools/people_audit.py                      # report only
+python tools/people_audit.py --merge-above 0.40   # fold in the ghosts
+python tools/people_audit.py --forget-unnamed     # drop every unnamed record
+```
 
 ### Why the cutoffs are strict
 
