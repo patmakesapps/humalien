@@ -10,6 +10,7 @@ Keys:
 """
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
@@ -18,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import cv2
+from dotenv import load_dotenv
 
 from describe import OllamaDescriber
 from people import GREET_THRESHOLD, MATCH_THRESHOLD, PeopleStore
@@ -33,10 +35,16 @@ STRANGER_COLOR = (0, 180, 255)
 
 
 def parse_args() -> argparse.Namespace:
+    # Same settings the robot itself uses, so the preview matches it.
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--camera", default="0")
-    parser.add_argument("--db", default=str(DEFAULT_DB))
-    parser.add_argument("--model", default="gemma4:cloud")
+    parser.add_argument("--camera", default=os.getenv("HUMALIEN_CAMERA", "0"))
+    parser.add_argument("--db", default=os.getenv("HUMALIEN_DB", str(DEFAULT_DB)))
+    parser.add_argument(
+        "--model",
+        default=os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud"),
+    )
     parser.add_argument(
         "--interval",
         type=float,
