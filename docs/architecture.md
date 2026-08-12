@@ -65,6 +65,18 @@ The two interesting boxes are `mic gate` and `PacedPlayback`. Both exist for one
 reason: without them the robot hears itself and answers itself. See
 [voice-pipeline.md](voice-pipeline.md).
 
+Vision is a second, entirely independent path. It never touches the node:
+
+```
+webcam → OpenCVFaceDetector → select_primary_face → GazeController → GazeTarget
+                                                                      (x, y, state)
+```
+
+Note that it doesn't touch the Realtime session either. The model has no idea
+anyone is being looked at. Wiring gaze into the conversation — Humalien
+noticing you walked up and greeting you — is a real feature, but it's a
+deliberate later step, not an accident of the current layering.
+
 ## Why the node stays dumb
 
 It's tempting to push work down to the Pi — flush commands, buffer management, a
@@ -87,11 +99,25 @@ See [vision.md](vision.md) for the target contract and preview command.
 
 ## What's not built yet
 
-The obvious next layer is servos — jaw, neck, eyes. The hook is already in
-`voice_core.py`: the two `# Future: send mouth.speaking` comments mark where
-the brain learns the robot started and stopped talking.
+Servos — jaw, neck, eyes. Two signals are already waiting for them, produced
+independently and for different reasons:
 
-When that lands, it should be a JSON control message on the *existing* socket,
-handled by a new module on the node alongside audio. `PacedPlayback.is_speaking`
-is the correct signal to drive a jaw from — it tracks real playback, not
-generation.
+| Signal | Source | Drives |
+| --- | --- | --- |
+| `mouth.speaking` | `PacedPlayback.is_speaking` | Jaw |
+| `gaze_target` | `GazeController.update()` | Eyes, later neck |
+
+The hook for the first is marked in `voice_core.py` by the two
+`# Future: send mouth.speaking` comments. The second already emits its wire
+shape today — `tools/vision_preview.py --emit-json` prints exactly the message
+the control layer will consume.
+
+Both should land as JSON control messages on the **existing** socket, handled by
+one new module on the node alongside audio. One control channel, two producers —
+not two channels.
+
+`PacedPlayback.is_speaking` is the correct signal to drive a jaw from precisely
+because it tracks real playback rather than generation. A jaw driven off
+`response.output_audio.delta` would finish moving several seconds before the
+speaker went quiet, which is the same underlying bug that made the robot answer
+itself.

@@ -6,9 +6,11 @@
 | --- | --- | --- |
 | Raspberry Pi 5 | Voice node, sensors | In use |
 | Waveshare audio hat | Mics + speaker out | In use |
+| USB webcam | Face tracking for the eyes | Prototype, on the brain |
 | Asus laptop | Brain | In use |
 | Jetson Orin Nano | Brain | Planned replacement |
 | 3D printed head | Chassis, skin-like texture | In progress |
+| Eye / jaw / neck servos | Motion | Not started |
 
 ## Audio device
 
@@ -28,6 +30,46 @@ Sanity check the hardware on its own before involving the brain:
 cd node
 python -m humalien_node.audio     # records 3 s, plays it back
 ```
+
+## Camera
+
+Face tracking currently runs on the **brain**, with a USB webcam plugged into
+the laptop. That's the right place for the prototype — OpenCV wants the CPU the
+brain has, and it keeps the node dumb.
+
+`opencv-python` is in `brain/requirements.txt`, but it is a large wheel and is
+easy to miss if your virtualenv predates it:
+
+```bash
+cd brain
+python -m pip install -r requirements.txt
+python -c "import cv2; print(cv2.__version__)"
+```
+
+Pick a camera index by trial — OpenCV numbers them by enumeration order, not by
+anything stable:
+
+```bash
+python -m tools.vision_preview --camera 0     # then 1, 2, ...
+```
+
+See [vision.md](vision.md) for what the preview shows and how loss behaves.
+
+### Where the camera ends up
+
+Open question, worth deciding before the head is closed up. The eyes are in the
+head; the brain is not.
+
+- **Camera on the brain** (today) — a USB run from the head to the laptop or
+  Jetson. Simplest software, no new protocol, but a cable that has to survive
+  the neck.
+- **Camera on the Pi** — the node grows a second job and has to stream frames or
+  run detection itself. That contradicts "the node is a dumb pipe", and a Pi 5
+  doing Haar cascades at 30 fps alongside audio is not free.
+
+Neither is obviously right. What settles it is whether the neck cable can carry
+USB, which is a mechanical question, not a software one. The gaze contract in
+[vision.md](vision.md) is deliberately independent of the answer.
 
 ## Desktop testing
 

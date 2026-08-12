@@ -13,6 +13,9 @@ a natural voice conversation you can interrupt and talk over.
 ## The two machines
 
 ```
+   USB webcam
+        │
+        ▼
 ┌──────────────────────────┐          ┌──────────────────────────┐
 │  BRAIN                   │          │  NODE                    │
 │  brain/                  │          │  node/                   │
@@ -42,6 +45,7 @@ python -m humalien_node.server
 
 ```bash
 cd brain
+python -m pip install -r requirements.txt
 cp .env.example .env        # then fill in OPENAI_API_KEY
 python voice_core.py
 ```
@@ -62,6 +66,11 @@ To preview face tracking with a USB webcam, see [vision.md](vision.md).
 ```bash
 cd brain
 $env:PYTHONPATH = "."          # PowerShell; use export on Linux
-python tests/test_audio_adapter.py
-python tests/test_playback.py
+python tests/test_audio_adapter.py     # 4 tests
+python tests/test_playback.py          # 3 tests
+python tests/test_gaze.py              # 8 tests
 ```
+
+None of them need a camera, a microphone, or an API key. `test_gaze.py` doesn't
+even need OpenCV — the gaze maths is deliberately kept out of `vision.py` so it
+stays testable without hardware.
