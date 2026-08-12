@@ -1,0 +1,18 @@
+@"
+# Python
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# Environment / secrets
+.env
+.env.*
+
+# Audio test artifacts
+*.wav
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
+"@ | Set-Content .gitignore
