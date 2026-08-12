@@ -279,11 +279,14 @@ async def watch_the_room(
 
                 log("A stranger is here")
 
+                # Deliberately no create_response. Forcing a reply here gave
+                # the model nothing to respond to except this note, so it
+                # read the note out. Now it simply knows, and uses it when
+                # the person actually speaks.
                 await realtime.send_context(
                     "A face you do not recognise has been in view for a few "
                     "seconds."
                 )
-                await realtime.create_response()
 
 
 async def run_voice_core() -> None:
