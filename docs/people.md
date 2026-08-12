@@ -159,25 +159,62 @@ today.
 
 ## Looking
 
-`describe.py` is the expensive path, so it is **pull-only**: it runs when the
-conversation model calls a tool, never on a timer and never per frame. That
-single decision is worth more than any local-vs-cloud choice.
+Looking is **pull-only**: it runs when the conversation model calls a tool,
+never on a timer and never per frame. That single decision is what keeps the
+cost bounded.
 
-Frames are downscaled to 512 px on the longest edge. Bigger images cost more
-and answer no better for "what is this" questions. The describer takes the
-**user's actual question**, so the answer is short and targeted rather than a
-paragraph of caption to read aloud.
+### Which frame
 
-### Model
+Not the current one. By the time a tool call arrives, the speaker has finished
+talking, the model has generated a sentence, and **two to four seconds have
+passed** — the hand being asked about has moved. Asking "how many fingers am I
+holding up" and getting "the hand is blurred" is that gap, not a bad model.
 
-`gemma4:cloud` via Ollama — multimodal, on the free cloud tier. Note that
-despite running through Ollama it is **not local**: frames leave the building
-on every call. That is a privacy consideration for a robot in a house, and a
-better argument for a local model on the Jetson than cost is.
+`eyes.py` keeps the last few seconds of frames, already downscaled, with a
+sharpness score for each. `look` asks for the clearest frame from the window
+the person was actually speaking in — `speech_started_at` to
+`speech_stopped_at`, which the session reports and which used to be logged and
+thrown away.
 
-**Measured latency: about 8 seconds cold.** That is a long silence. Humalien
-needs to say "let me look" *before* the call fires, or the pause reads as a
-crash. Treat that as a requirement, not a nicety.
+Sharpest rather than nearest: a hand held up mid-sentence is usually moving,
+and a blurred frame from exactly the right moment answers nothing.
+
+Capture runs faster than recognition for the same reason. Recognition is happy
+at 4 Hz; picking a sharp frame out of a moving hand needs candidates.
+
+### Who does the looking
+
+| `HUMALIEN_VISION` | What happens | Cost |
+| --- | --- | --- |
+| `realtime` | The frame is handed to the Realtime session, which looks itself | Image tokens on the expensive model |
+| `ollama` | `gemma4:cloud` describes it, and the model reads the description | Free tier, **~8 s** |
+
+`realtime` is the default. `gpt-realtime` accepts image input, so there is no
+reason to make it read somebody else's description of a picture it could look
+at — and it removes an eight-second silence from the middle of a conversation.
+
+Two things to know about it. **Images stay in context**, so each look is
+re-sent with every later turn; that is what makes follow-ups like "what about
+the other hand" work without looking again, and it is also what makes the cost
+grow. And it is a real reversal on price: Ollama's free tier cost nothing,
+Realtime image tokens do. You are buying latency with money.
+
+`ollama` remains for offline operation, and note that despite the name
+`gemma4:cloud` is **not** local — frames leave the building. A genuinely local
+model on the Jetson is the answer for privacy, more than for cost.
+
+### When Realtime refuses
+
+Sending an image is fire-and-forget over the websocket, so a rejection or rate
+limit comes back as an asynchronous `error` event long after the tool returned.
+That turn is already lost.
+
+`voice_core.py` watches for it and permanently drops the session to Ollama, so
+one failure costs one answer rather than every answer after it. A send that
+fails outright is caught inline and falls back immediately.
+
+Gemma has not left the project: text extraction from transcripts is still
+exactly the job a cheap model should be doing.
 
 ## Try it
 

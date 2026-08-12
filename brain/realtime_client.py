@@ -166,6 +166,34 @@ class RealtimeClient:
             }
         )
 
+    async def send_image(self, jpeg: bytes) -> None:
+        """Put a picture in front of the model.
+
+        gpt-realtime takes image input directly, so it can look at a frame
+        itself rather than reading somebody else's description of it.
+
+        Note this is fire-and-forget: a rejection or rate limit comes back
+        later as an `error` event, not as a failure here.
+        """
+
+        encoded = base64.b64encode(jpeg).decode("ascii")
+
+        await self.send_event(
+            {
+                "type": "conversation.item.create",
+                "item": {
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_image",
+                            "image_url": f"data:image/jpeg;base64,{encoded}",
+                        }
+                    ],
+                },
+            }
+        )
+
     async def send_context(self, text: str) -> None:
         """Tell the model something it did not ask about.
 

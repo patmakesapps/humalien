@@ -4,8 +4,9 @@ import unittest
 
 import numpy as np
 
+from conversation import ConversationState
 from people import PeopleStore, normalize
-from robot_tools import Robot, tools
+from robot_tools import OLLAMA, REALTIME, Robot, tools
 
 
 def embedding(seed: int) -> np.ndarray:
@@ -33,6 +34,7 @@ class FakeEyes:
         self.sightings = sightings or []
         self.perception = FakePerception(store)
         self._stranger = stranger
+        self.asked_for = None
 
     @property
     def known(self):
@@ -40,6 +42,22 @@ class FakeEyes:
 
     def largest_stranger(self, **kwargs):
         return self._stranger
+
+    def clearest_frame(self, *, since=None, until=None):
+        self.asked_for = (since, until)
+        return self.frame
+
+
+class FakeRealtime:
+    def __init__(self, *, fails=False):
+        self.fails = fails
+        self.images = []
+
+    async def send_image(self, jpeg):
+        if self.fails:
+            raise ConnectionError("session gone")
+
+        self.images.append(jpeg)
 
 
 class FakeDescriber:
@@ -60,9 +78,17 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.store.close()
 
-    def build(self, **kwargs):
+    def build(self, *, realtime=None, vision=OLLAMA, state=None, **kwargs):
         self.eyes = FakeEyes(self.store, **kwargs)
-        return Robot(eyes=self.eyes, store=self.store, describer=self.describer)
+
+        return Robot(
+            eyes=self.eyes,
+            store=self.store,
+            describer=self.describer,
+            state=state or ConversationState(),
+            realtime=realtime,
+            vision=vision,
+        )
 
     async def run_tool(self, robot, name, arguments=None):
         return json.loads(await tools.execute(robot, name, arguments))
@@ -88,6 +114,67 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["success"])
         self.assertEqual(self.describer.asked, "what colour?")
         self.assertEqual(result["data"]["you_can_see"], "a red mug")
+
+    async def test_look_uses_the_frame_from_when_the_question_was_asked(self):
+        # The whole point: by the time a tool call lands, the hand being
+        # asked about has moved.
+        state = ConversationState()
+        state.speech_started_at = 100.0
+        state.speech_stopped_at = 102.0
+
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            state=state,
+        )
+
+        await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertEqual(self.eyes.asked_for, (100.0, 102.0))
+
+    async def test_realtime_vision_hands_the_frame_to_the_model(self):
+        realtime = FakeRealtime()
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        result = await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertTrue(result["success"])
+        self.assertEqual(len(realtime.images), 1)
+        # Ollama was never asked, because the model looked itself.
+        self.assertIsNone(self.describer.asked)
+
+    async def test_realtime_failure_falls_back_to_ollama(self):
+        realtime = FakeRealtime(fails=True)
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=realtime,
+            vision=REALTIME,
+        )
+
+        result = await self.run_tool(robot, "look", '{"question": "what colour?"}')
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["data"]["you_can_see"], "a red mug")
+        self.assertEqual(robot.vision, OLLAMA)
+
+    async def test_falling_back_sticks_for_the_rest_of_the_session(self):
+        robot = self.build(
+            frame=np.zeros((10, 10, 3), dtype=np.uint8),
+            realtime=FakeRealtime(fails=True),
+            vision=REALTIME,
+        )
+
+        await self.run_tool(robot, "look", '{"question": "first"}')
+        realtime = robot.realtime = FakeRealtime()
+
+        await self.run_tool(robot, "look", '{"question": "second"}')
+
+        # Still on Ollama, rather than retrying a session that just refused.
+        self.assertEqual(realtime.images, [])
+        self.assertEqual(self.describer.asked, "second")
 
     async def test_look_without_a_camera_says_so(self):
         robot = self.build(frame=None)

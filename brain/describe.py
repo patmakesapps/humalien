@@ -25,30 +25,39 @@ SYSTEM = (
 )
 
 
-def encode_frame(frame, *, max_edge: int = MAX_EDGE) -> str:
-    """Shrink and JPEG-encode a frame for a vision model."""
+def downscale(frame, *, max_edge: int = MAX_EDGE):
+    """Shrink a frame to what a vision model actually needs."""
 
     height, width = frame.shape[:2]
     longest = max(height, width)
 
-    if longest > max_edge:
-        scale = max_edge / longest
-        frame = cv2.resize(
-            frame,
-            (round(width * scale), round(height * scale)),
-            interpolation=cv2.INTER_AREA,
-        )
+    if longest <= max_edge:
+        return frame
 
-    ok, buffer = cv2.imencode(
-        ".jpg",
+    scale = max_edge / longest
+
+    return cv2.resize(
         frame,
-        [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY],
+        (round(width * scale), round(height * scale)),
+        interpolation=cv2.INTER_AREA,
     )
+
+
+def to_jpeg(frame, *, quality: int = JPEG_QUALITY) -> bytes:
+    ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
 
     if not ok:
         raise RuntimeError("Could not JPEG-encode the frame")
 
-    return base64.b64encode(buffer.tobytes()).decode("ascii")
+    return buffer.tobytes()
+
+
+def encode_frame(frame, *, max_edge: int = MAX_EDGE) -> str:
+    """Shrink and JPEG-encode a frame for a vision model."""
+
+    return base64.b64encode(to_jpeg(downscale(frame, max_edge=max_edge))).decode(
+        "ascii"
+    )
 
 
 class OllamaDescriber:

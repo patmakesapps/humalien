@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 
 from audio_adapter import ModelToPiAudio, PiToModelAudio
+from conversation import ConversationState
 from describe import OllamaDescriber
 from eyes import Eyes
 from mic_gate import HALF_DUPLEX, build_mic_gate
@@ -35,11 +36,22 @@ def log(message: str) -> None:
     print(f"[VOICE CORE] {message}", flush=True)
 
 
-class ConversationState:
-    """Whether the model is mid-answer, so nothing interrupts it."""
+def looks_like_image_trouble(event: dict) -> bool:
+    """Whether an error event is the session refusing a picture.
 
-    def __init__(self):
-        self.response_active = False
+    Images are sent fire-and-forget, so a rejection or a rate limit only
+    surfaces here, well after the tool returned. Matching on the message is
+    crude, but the alternative is losing every look for the rest of the
+    session to a failure nothing is watching for.
+    """
+
+    error = event.get("error") or {}
+    text = f"{error.get('code', '')} {error.get('message', '')}".lower()
+
+    return any(
+        word in text
+        for word in ("image", "rate limit", "rate_limit", "too large", "modality")
+    )
 
 
 async def pi_to_realtime(pi_websocket, realtime: RealtimeClient, gate) -> None:
@@ -116,6 +128,11 @@ async def realtime_to_pi(
         elif event_type == "input_audio_buffer.speech_started":
             log("User speech started")
 
+            # Remember when, so looking can use the frame from this moment
+            # rather than whatever the camera sees once the tool call lands.
+            state.speech_started_at = time.monotonic()
+            state.speech_stopped_at = None
+
             if playback.is_speaking:
                 log("Interrupted - dropping queued speech")
 
@@ -128,6 +145,8 @@ async def realtime_to_pi(
 
         elif event_type == "input_audio_buffer.speech_stopped":
             log("User speech stopped")
+
+            state.speech_stopped_at = time.monotonic()
 
         elif event_type == "conversation.item.input_audio_transcription.completed":
             transcript = event.get("transcript")
@@ -187,6 +206,12 @@ async def realtime_to_pi(
             # Logged rather than raised: a stray cancellation or an
             # unsupported field should not take the whole robot down.
             log(f"Realtime API error:\n{json.dumps(event, indent=2)}")
+
+            # A picture the session would not take surfaces here, long after
+            # the tool returned. That turn is already lost; everything after
+            # it goes to Ollama instead.
+            if looks_like_image_trouble(event):
+                robot.fall_back_to_ollama("the session rejected an image")
 
 
 async def watch_the_room(
@@ -301,6 +326,7 @@ async def run_voice_core() -> None:
     camera = os.getenv("HUMALIEN_CAMERA", "0")
     database = os.getenv("HUMALIEN_DB", str(DEFAULT_DB))
     vision_model = os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud")
+    vision = os.getenv("HUMALIEN_VISION", "realtime")
     show_video = os.getenv("HUMALIEN_SHOW_VIDEO", "0") == "1"
     greet_on_sight = os.getenv("HUMALIEN_GREET_ON_SIGHT", "1") == "1"
     persona_file = os.getenv("HUMALIEN_PERSONA")
@@ -325,8 +351,14 @@ async def run_voice_core() -> None:
 
             playback = PacedPlayback(pi_websocket)
             gate = build_mic_gate(gate_name, playback)
-            robot = Robot(eyes=eyes, store=store, describer=describer)
             state = ConversationState()
+            robot = Robot(
+                eyes=eyes,
+                store=store,
+                describer=describer,
+                state=state,
+                vision=vision,
+            )
 
             log(f"Microphone gate: {gate.name}")
             log(f"Connecting to OpenAI Realtime using {model}")
@@ -342,6 +374,13 @@ async def run_voice_core() -> None:
                 persona=load_persona(persona_file),
             ) as realtime:
                 log("Connected to OpenAI Realtime")
+
+                # The look tool hands frames straight to the session, so it
+                # needs the connection. Set here rather than at construction
+                # because the session opens after the robot exists.
+                robot.realtime = realtime
+
+                log(f"Vision: {robot.vision}")
 
                 tasks = {
                     asyncio.create_task(

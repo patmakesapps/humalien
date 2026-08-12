@@ -9,13 +9,17 @@ Each tool declares its schema next to its handler. See tool_registry.py.
 """
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from describe import OllamaDescriber
+from conversation import ConversationState
+from describe import OllamaDescriber, to_jpeg
 from eyes import Eyes
 from people import PeopleStore
 from tool_registry import ToolError, ToolRegistry
 
+
+REALTIME = "realtime"
+OLLAMA = "ollama"
 
 tools = ToolRegistry()
 
@@ -31,6 +35,26 @@ class Robot:
     eyes: Eyes
     store: PeopleStore
     describer: OllamaDescriber
+    state: ConversationState = field(default_factory=ConversationState)
+    realtime: object | None = None
+    vision: str = REALTIME
+
+    def looks_with_realtime(self) -> bool:
+        return self.vision == REALTIME and self.realtime is not None
+
+    def fall_back_to_ollama(self, why: str) -> None:
+        """Stop using Realtime vision for the rest of this session.
+
+        A rejected image comes back as an asynchronous error event, long
+        after the tool returned, so the turn that triggered it is already
+        lost. Everything after it goes to Ollama instead.
+        """
+
+        if self.vision == OLLAMA:
+            return
+
+        self.vision = OLLAMA
+        log(f"Realtime vision unavailable ({why}) - falling back to Ollama")
 
 
 @tools.tool(
@@ -51,12 +75,34 @@ class Robot:
     required=["question"],
 )
 async def look(robot: Robot, question: str) -> dict:
-    frame = robot.eyes.frame
+    # The moment worth looking at is when the question was asked, not now.
+    # By the time a tool call arrives the speaker has finished talking, the
+    # model has generated a sentence, and the hand being asked about has
+    # moved.
+    since, until = robot.state.speech_window()
+
+    frame = robot.eyes.clearest_frame(since=since, until=until)
 
     if frame is None:
         raise ToolError("There is no camera, so you cannot see anything.")
 
     log(f'look: "{question}"')
+
+    if robot.looks_with_realtime():
+        try:
+            await robot.realtime.send_image(to_jpeg(frame))
+
+            log("look -> handed the frame to the model")
+
+            return {
+                "note": (
+                    "You are now looking at what was in front of you when "
+                    "they asked. Answer from the image."
+                )
+            }
+
+        except Exception as error:
+            robot.fall_back_to_ollama(f"{type(error).__name__}: {error}")
 
     # Several seconds of network call. Never on the event loop.
     answer = await asyncio.to_thread(robot.describer.describe, frame, question)
