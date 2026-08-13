@@ -146,6 +146,34 @@ BOARDS = dict(
         # gentle wire bend, and it is a keep-out the face shell must respect.
         conn_keepout = 9.0,
     ),
+    pi5 = dict(
+        label   = "Raspberry Pi 5",
+        conf    = "exact",          # Raspberry Pi's own mechanical drawing
+        w       = 85.0,
+        d       = 56.0,
+        t       = 1.6,
+        hole_d  = 2.7,              # board hole; takes M2.5
+        hx      = 58.0,
+        hy      = 49.0,
+        hole_inset = 3.5,           # from the two datum edges
+        # The pattern is NOT centred on the board. Holes sit 3.5 mm in from one
+        # long and one short edge, so their centre is 10.0 mm off the board
+        # centre along the length. Getting this wrong puts every hole out by
+        # 10 mm and it is invisible until the board will not drop on.
+        under   = 3.0,              # clearance under the board for solder tails
+    ),
+    speaker = dict(
+        label   = "8 ohm 5 W module",
+        # UNMEASURED. Enclosed plastic modules, already in hand, with a
+        # mounting flange and a screw hole at each end - visible in the photo -
+        # so they bolt down rather than needing a clamp or a printed baffle.
+        # Numbers below are placeholders and nothing is built to them yet.
+        conf    = "listing",
+        w       = 70.0,
+        d       = 30.0,
+        t       = 16.0,
+        flange_holes = 2,
+    ),
     neopixel12 = dict(
         label   = "NeoPixel Ring 12",
         conf    = "exact",          # Adafruit's own Eagle .brd, as with the PCA9685
@@ -170,6 +198,7 @@ QUANTITIES = {
     "coupon_mg90s": 1,
     "coupon_neopixel12": 1,
     "forehead_casing": 1,
+    "pi5_tray": 1,
     "pca9685_mount": 1,
     "cable_anchor": 6,
 }
@@ -633,6 +662,58 @@ def forehead_casing(loc=(0, 0, 0)):
     return ob
 
 
+def pi5_tray(loc=(0, 0, 0)):
+    """Tray the Raspberry Pi 5 bolts to.
+
+    Holes are ROUND here, not slotted. The slotting policy exists for
+    dimensions that have not been verified; this pattern came out of Raspberry
+    Pi's own mechanical drawing and the board in hand is a genuine Pi, so there
+    is nothing to take up. Slotting it would only let the board rack. The
+    skull-side fixings are slotted, because where this lands in the head is
+    still guesswork.
+
+    Watch the datum: the Pi's hole pattern is *not* centred on its board. It
+    sits 3.5 mm in from one long and one short edge, which puts the pattern
+    centre 10.0 mm off the board centre along the length.
+
+    `standoff` is a parameter for a reason. The X1200 UPS pogo-pins onto the
+    underside of the Pi and wants roughly 15 mm of room below it, so if that
+    option is ever taken this is the number that changes - not the layout."""
+    b = BOARDS["pi5"]
+    t = P["plate_t"]
+    boss_d = 7.0
+    standoff = 5.0                    # raise to ~15.0 to sit an X1200 underneath
+    margin = 4.0
+    W = b["w"] + 2 * margin
+    D = b["d"] + 2 * margin
+    # hole pattern centre relative to board centre
+    dx0 = (b["hole_inset"] + b["hx"] / 2.0) - b["w"] / 2.0
+    dy0 = (b["hole_inset"] + b["hy"] / 2.0) - b["d"] / 2.0
+    ob = plate("pi5_tray", W, D, t, 3.0, (0, 0, t / 2))
+    holes = [(dx0 + sx * b["hx"] / 2.0, dy0 + sy * b["hy"] / 2.0)
+             for sx in (-1, 1) for sy in (-1, 1)]
+    ob = fuse(ob, [cyl("_b", boss_d, standoff, (hx, hy, t + standoff / 2))
+                   for (hx, hy) in holes])
+    top = t + standoff
+    cuts = [cyl("_h", 2.9, top * 3, (hx, hy, top / 2)) for (hx, hy) in holes]
+    # ventilation under the SoC - a Pi 5 runs hot and this tray is a lid to it
+    for vx in (-20.0, -8.0, 4.0):
+        cuts.append(prism("_v", rrect_pts(6.0, 24.0, 2.5), t * 3, (vx, 0, t / 2)))
+    # skull fixings on the mid-edges, clear of the standoffs
+    for (mx, my) in ((-(W / 2 - 5.0), 0.0), (W / 2 - 5.0, 0.0),
+                     (0.0, -(D / 2 - 5.0)), (0.0, D / 2 - 5.0)):
+        cuts.append(slot("_m", P["m3_free"], P["slot_travel"], t * 3,
+                         (mx, my, t / 2), 90.0 if abs(mx) > abs(my) else 0.0))
+    # zip-tie pairs for the loom leaving the GPIO header
+    for sy in (-1, 1):
+        for dx in (-2.5, 2.5):
+            cuts.append(prism("_z", rrect_pts(2.5, 5.0, 1.0), t * 3,
+                              (28.0 + dx, sy * (D / 2 - 4.0), t / 2)))
+    ob = cut(ob, cuts)
+    ob = engrave(ob, "PI5", 3.4, t, (-34.0, 0.0), 90.0)
+    return ob
+
+
 def pca9685_mount(loc=(0, 0, 0)):
     """Plate for the HiLetgo PCA9685. Standoffs lift the board clear of its own
     pin tails; slotted holes because the clone is only dimensionally
@@ -703,6 +784,7 @@ BUILDERS = [
     ("coupon_mg90s", coupon_mg90s),
     ("coupon_neopixel12", coupon_neopixel12),
     ("forehead_casing", forehead_casing),
+    ("pi5_tray", pi5_tray),
     ("pca9685_mount", pca9685_mount),
     ("cable_anchor", cable_anchor),
 ]

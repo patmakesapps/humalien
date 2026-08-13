@@ -599,7 +599,8 @@ board has been offered up to the real board.
 | `coupon_b0385` | 1 | 52 × 52 × 2.4 | 4.4 cm³ | both hole patterns, 34 × 34 and 28 × 28, plus the lens aperture |
 | `coupon_vl53l1x` | 1 | 101 × 16 × 15 | 8.9 cm³ | three retention slots — the proven 2.100 plus 1.95 and 2.25 |
 | `coupon_mg90s` | 1 | 132 × 32 × 6 | 17.7 cm³ | four trial pockets A–D at +0.20/+0.45/+0.70/+0.95 per side; C also carries tab holes at the assumed 28.0 pitch |
-| `forehead_casing` | 1 | 92 × 58 × 5 | 19.6 cm³ | camera and distance sensor side by side, apertures on one centreline |
+| `forehead_casing` | 1 | 96 × 58 × 5 | 18.6 cm³ | camera and distance sensor side by side, apertures on one centreline |
+| `pi5_tray` | 1 | 93 × 64 × 8 | 16.9 cm³ | the Pi 5 bolts to it — round board holes, slotted skull fixings |
 | `pca9685_mount` | 1 | 78 × 41 × 6.5 | 9.6 cm³ | driver board plate with standoffs |
 | `cable_anchor` | 6 | 20 × 12 × 3 | 0.6 cm³ each | zip-tie anchor for the looms |
 
@@ -732,6 +733,63 @@ leaves 25 mm between them.
 That is the check worth repeating whenever the head is restyled: not "does this
 look right", but "is there still 100 mm across and 185 mm front to back". If a
 styling change ever costs that, the styling loses.
+
+### The rest of what lives in the head
+
+**Raspberry Pi 5 — built.** `pi5_tray`. Straight off
+[Raspberry Pi's own mechanical drawing](https://datasheets.raspberrypi.com/rpi5/raspberry-pi-5-mechanical-drawing.pdf):
+85 × 56 mm board, four Ø2.7 holes on a 58 × 49 pattern, 3.5 mm in from one long
+and one short edge.
+
+**That pattern is not centred on the board.** Its centre sits 10.0 mm off the
+board centre along the length. Assume it is centred and every hole is out by
+10 mm, which is invisible until the board will not drop on. Verified after
+building: holes at (−39, ±24.5) and (19, ±24.5).
+
+Board holes here are **round, not slotted**. The slotting policy is for
+dimensions that have not been verified — this one comes from the manufacturer's
+own drawing and the board in hand is a genuine Pi, so there is nothing to take
+up and slotting would only let it rack. The skull-side fixings *are* slotted,
+because where the tray lands in the head is still guesswork. Slot what is
+unknown, not everything.
+
+**X1200 UPS — parked, not designed for.** The plan is USB-C charger power for
+now, with the X1200 as a later option if it moves to battery. It pogo-pins onto
+the Pi's underside rather than taking the 40-pin header, and wants roughly 15 mm
+of room below the board. That is why `standoff` in `pi5_tray` is a parameter and
+not a literal: taking the option later changes one number, not the layout.
+
+**Jetson Orin Nano — out of scope.** The Asus laptop is the brain over WebSocket
+and nothing is designed around a Jetson. If one ever arrives it goes in the head
+if it fits or below it if it does not, and that is a decision for then.
+
+### Speakers — placement still open
+
+Two enclosed 8 Ω 5 W modules, in hand. **They have a mounting flange with a
+screw hole at each end**, so they bolt straight down — no clamp, and no printed
+baffle needed, because the module is its own sealed enclosure. That is worth
+knowing before designing anything: the printed part is a *cradle with vibration
+isolation*, not an acoustic box.
+
+Dimensions are unmeasured and nothing is built to them yet.
+
+Two placements under consideration: **behind the mouth**, or **one behind each
+ear**. There is a real acoustic argument between them, and one constraint that
+decides more than either:
+
+> **The microphones are on the WM8960 hat**, which is bolted to the Pi. So mic
+> position is not a free choice — it is wherever the Pi goes.
+> [hardware.md](hardware.md) advises putting distance between speaker and mics
+> and keeping "the mics higher up", but that is not an independent decision. It
+> is a constraint on **where the Pi lives**, and it argues for the Pi high and
+> rearward in the cranium — which is also exactly where the open-cranium
+> references put visible mechanism.
+
+Behind the ears puts the drivers out to the sides, furthest from a
+centre-mounted mic pair and closest to where a head actually radiates sound.
+Behind the mouth is acoustically worse for echo but far better for the illusion,
+because the voice appears to come from the mouth. That trade gets decided
+against a real measurement of speaker-to-mic distance, not from a diagram.
 
 ### Deliberately not built
 
