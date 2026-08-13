@@ -640,6 +640,14 @@ def eye_bezels(probe, coll, eye_axis):
         trim = bmesh.new()
         _box(trim, (120.0, 9.0, 64.0), (0.0, 164.5, 254.0))
         _apply(coll, ob, trim, "_CUT_bez_trim_%s" % side, 'DIFFERENCE')
+
+        # And trim to the shell. The socket bore is raked and the ring is
+        # not: a flat ring in a raked bore catches the wall at one spot on
+        # its rim - nine faces, x -29.6..-27.0 z 223.7..226.8 on the left -
+        # which is small enough to miss by eye and still wrong. The bore is
+        # empty, so subtracting the shell only removes what is inside the
+        # wall and leaves the ring alone everywhere else.
+        boolean(ob, bpy.data.objects[HEAD])
         out.append(ob)
         if sx == 1:
             print("  eye_bezel_R/L: Ø%.1f in the Ø%.0f socket; rim spread "

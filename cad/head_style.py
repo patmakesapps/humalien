@@ -127,11 +127,25 @@ S = dict(
     # crop a 77° lens down to 44°. The bore is a cone opening outward: Ø16 at
     # the inner wall, Ø34 at the skin. It also reads as a deliberate lens
     # recess rather than a drilled hole.
-    cam_bore    = dict(x=22.0, z=257.5, dia=16.0, flare=30.0),
-    # Narrowed from 24x28. The board is 23 wide but the sensor's own optical
-    # window is a few mm; the skin window only has to clear that and the
-    # connector.
-    tof_window  = dict(x=-32.0, z=257.0, w=18.0, h=26.0, r=3.0),
+    # A MATCHED PAIR of brow ports, replacing the separate Ø16 camera bore
+    # and the small ToF window.
+    #
+    # The plate is 96 wide and the brow is not. Measured: the plate front at
+    # y=167 breaks the shell's inner wall from |x|>=48 at z=254, tightening
+    # to |x|>=34 at z=284 - so BOTH top corners of the casing are buried,
+    # symmetrically. Three ways out were on the table: move the whole casing
+    # back 7 mm and spend camera FOV on it, narrow the plate and re-space
+    # both apertures, or open the head where the plate needs to pass. This
+    # is the third, and once it has to be done on both sides it may as well
+    # be one deliberate pair rather than two different holes.
+    #
+    # Each port swallows its instrument AND its corner: x 20..50 covers the
+    # camera at +22 and the ToF at -32, and reaches out past x=34 at the top
+    # where the burial is worst. The 40 mm of shell between them carries the
+    # brow across the centreline. There is no separate camera bore any more
+    # - the lens looks out through its port, which also ends the flare/FOV
+    # argument, since the aperture is now far wider than the lens needs.
+    brow_port   = dict(x0=20.0, x1=53.0, z0=242.0, z1=288.0, r=4.0),
 
     # The brow band is a SEAM, not a removable panel. A real panel was built
     # here and taken out again, and the reason is worth keeping: the forehead
@@ -647,14 +661,14 @@ def build():
         c = Vector((sx * ey["pitch"] / 2, ey["y"], ey["z"]))
         eyes.append(cyl("CUT_eye_%s" % side, cuts, mat_dark, ey["dia"], 80.0,
                         c + eye_axis(sx) * 20.0, 'Y', direction=eye_axis(sx)))
-    cb = S["cam_bore"]
-    # cone: small at the back, flared at the skin, so the lens keeps its FOV
-    cam = cyl("CUT_cam_bore", cuts, mat_dark,
-              cb["dia"], 60.0, (cb["x"], 175.0, cb["z"]), 'Y', dia2=cb["flare"])
-    tw = S["tof_window"]
-    tof = rrect_box("CUT_tof_window", cuts, mat_dark,
-                    tw["w"], tw["h"], tw["r"], 60.0, (tw["x"], 175.0, tw["z"]),
-                    'XZ')
+    bp = S["brow_port"]
+    ports_brow = []
+    for sx, side in ((1, "R"), (-1, "L")):
+        ports_brow.append(rrect_box(
+            "CUT_brow_port_%s" % side, cuts, mat_dark,
+            bp["x1"] - bp["x0"], bp["z1"] - bp["z0"], bp["r"], 60.0,
+            (sx * (bp["x0"] + bp["x1"]) / 2, 175.0, (bp["z0"] + bp["z1"]) / 2),
+            'XZ'))
 
     # ---- modifier stack: shell first, then the cuts ----
     sol = head.modifiers.new("Shell", 'SOLIDIFY')
@@ -681,7 +695,8 @@ def build():
     for name, cutter in [("EarPortR", ports[0]), ("EarPortL", ports[1]),
                          ("RearOpening", rear),
                          ("EyeR", eyes[0]), ("EyeL", eyes[1]),
-                         ("CamBore", cam), ("ToFWindow", tof)]:
+                         ("BrowPortR", ports_brow[0]),
+                         ("BrowPortL", ports_brow[1])]:
         mod = head.modifiers.new(name, 'BOOLEAN')
         mod.operation = 'DIFFERENCE'
         mod.solver = 'MANIFOLD'
@@ -706,10 +721,10 @@ def build():
 
     print("STYLE_Head built: shell %.1f, neck cut z%.0f, ear ports Ø%.0f at "
           "(y%.0f z%.0f), cranial opening y %.0f..%.0f z %.0f.., eyes Ø%.0f at "
-          "pitch %.0f, cam bore Ø%.0f->Ø%.0f, ToF window %sx%s"
+          "pitch %.0f, brow ports |x| %.0f..%.0f z %.0f..%.0f"
           % (S["wall"], S["neck_cut"], ep["dia"], ep["y"], ep["z"],
              ro["y0"], ro["y1"], ro["z0"], ey["dia"], ey["pitch"],
-             cb["dia"], cb["flare"], tw["w"], tw["h"]))
+             bp["x0"], bp["x1"], bp["z0"], bp["z1"]))
     return head
 
 
