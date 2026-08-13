@@ -297,6 +297,34 @@ def _ensure_evaluable(ob):
     return ob
 
 
+# Bumped whenever a part-editing function below changes what it cuts. Parts
+# carry it as a custom property so a re-run knows it has already been done.
+PART_REV = 1
+
+
+def _already_done(ob, tag):
+    """True if this edit has already been applied to this object.
+
+    tray_side_slots and casing_chamfer cut the PERSISTENT part object rather
+    than rebuilding it, so they are not idempotent on their own: run the
+    pipeline twice and the same slots get cut into an already-slotted mesh.
+    Coincident boolean cuts do not no-op, they shed degenerate geometry, and
+    ten re-runs took pi5_tray from 2345 vertices to 2.2 MILLION with 55
+    non-manifold edges - still the right 93 x 64 x 8 shape, and completely
+    unprintable. Nothing warned; the part just quietly rotted.
+    """
+    key = "humalien_%s" % tag
+    if ob.get(key) == PART_REV:
+        print("  %s: %s already applied (rev %d), skipping"
+              % (ob.name, tag, PART_REV))
+        return True
+    return False
+
+
+def _mark_done(ob, tag):
+    ob["humalien_%s" % tag] = PART_REV
+
+
 def _bake(ob):
     # Not optional. A cutter created earlier in the same script run is not in
     # the depsgraph until the view layer is updated, and a boolean modifier
@@ -584,6 +612,8 @@ def tray_side_slots():
     if ob is None:
         print("  pi5_tray not in scene - skipping side slots")
         return None
+    if _already_done(ob, "tray_slots"):
+        return ob
     _ensure_evaluable(ob)
     t = M["tray"]
     cut = bmesh.new()
@@ -602,6 +632,7 @@ def tray_side_slots():
     bpy.context.scene.collection.objects.link(ob_cut)
     boolean(ob, ob_cut)
     bpy.data.objects.remove(ob_cut, do_unlink=True)
+    _mark_done(ob, "tray_slots")
     print("  pi5_tray: 4 side fixings added at local (±30, ±27) -> world "
           "(±%.0f, %s)" % (t["slot_x"], t["slot_y"]))
     return ob
@@ -672,6 +703,8 @@ def casing_chamfer():
     if ob is None:
         print("  forehead_casing not in scene - skipping chamfer")
         return None
+    if _already_done(ob, "casing_chamfer"):
+        return ob
     _ensure_evaluable(ob)
     # half-space 6*|x| + 3.5*y > 332, one per top corner
     n = Vector((6.0, 3.5, 0.0)).normalized()
@@ -692,6 +725,7 @@ def casing_chamfer():
     bpy.context.scene.collection.objects.link(ob_cut)
     boolean(ob, ob_cut)
     bpy.data.objects.remove(ob_cut, do_unlink=True)
+    _mark_done(ob, "casing_chamfer")
     print("  forehead_casing: top corners chamfered")
     return ob
 
