@@ -879,49 +879,259 @@ them.
 `cad/head_style.py`. Builds `STYLE_Head`: `HEAD_CYBORG` is a cleaned copy of
 `HEAD_REF` (the original stays, hidden) carrying the reads all three
 reference photos share: a 4 mm shell, Ø66 circular ports swallowing the
-sculpted ears (centred on the measured ear centroid, y=95 z=204) with the
-ear-hub module recessed inside — a dark disc seating the glowing NeoPixel
-ring, the TBD printed part — the open rear cranium (y 12..55, z 162..256,
-rounded), smooth Ø41 eye sockets at the *design* pitch 62, and the camera
-bore + ToF window on the casing row.
+sculpted ears with the ear-hub module recessed inside, an open cranium, Ø41
+eye sockets at the *design* pitch 62, and the camera bore and ToF window on
+the forehead casing's row.
 
-**No added volumes.** A visor/helmet band was built here and withdrawn the
-same day, on re-reading the references: every one of them keeps a smooth
-human silhouette and gets its cyborg from seams, hubs and openings — never
-from volume bolted onto the skull. The consequence is honest: the casing's
-top corners vs the brow flanks are an **open debt**. Both candidate fixes
-are parameterized and off — the part-corner chamfer (written and reverted
-twice; the part stays stock) and a subtle normal-direction flank swell
-(`S["swell"]`, parked at amp=0 because nobody asked for added volume).
+It also emits **`HEAD_SKIN`**, the cleaned single surface, hidden. Every
+containment question in this project has to be asked of that and not of
+`HEAD_CYBORG`: ask a solidified shell whether a point is inside and the ray
+crosses the inner wall, then the outer wall, comes back even, and the parity
+test reports that the Pi is outside the head.
 
-The copy step cleans the sculpt before any cut: the two eyeball islands go,
-the mouth-bag interior goes (685 hidden faces, found by testing whether a
-point just off each face's outward normal is still inside the closed skin),
-and every lid/lash face within r=19 of an eye axis goes — lash cards are
-zero-thickness strips that enclose no volume, so no boolean solver can
-remove them and they end up floating across the socket. Pre-deleting them
-lets the Ø41 cut land on simple surface and come out a clean circle.
+**No added volumes, with one exception the references justify.** A visor band
+was built here and withdrawn: every reference keeps a smooth human silhouette
+and gets its cyborg from seams, hubs and openings. The exception is the brow,
+below.
 
-Three build lessons are encoded in the script. The eye cuts run Blender's
-FLOAT boolean solver, because EXACT resolves the solidified lid creases'
-self-intersections so badly it discards the whole shell. The modifier stack
-is **baked to a plain mesh in the same run**: a live stack of seven booleans
-over this sculpt re-evaluated on every depsgraph touch and crashed Blender
-repeatedly. And **do not rebuild the HUMALIEN parts over the MCP bridge in a
-session that has the styled head in it** — `eye_mech.py`'s rebuild took
-Blender down twice this session; run part rebuilds in a fresh file or from
-Blender's own console. The script is the non-destructive layer — move a
-number in `S`, re-run, and the head regenerates from `HEAD_REF`. The
-cutters stay in `STYLE_cutters` as the visible record of every opening.
+Four seam reads, and they are all cheap:
 
-The licence note in `head_ref.py` covers the copy too: the mesh never leaves
-the machine and never goes near the MCP generative tools.
+| Read | How |
+| --- | --- |
+| Cranial cap | groove, a tilted plane near the crown |
+| Ear port rings | groove, concentric at r=39 around each Ø66 port |
+| Brow band | groove, an ellipse round the camera bore and the ToF window |
+| Face / cranium | a real parting line at y=135 — see the split, below |
 
-Still open, deliberately: the brow-flank debt above, panel seams and the
-face/cranium split line, the ear hub as a real printed part (ring seat plus
-speaker grille — needs the ring and speaker measured together), and
-everything neck. Those are design sessions with the fit collection as the
-ruler, not parameters to guess today.
+**Seams are displacement, not booleans.** A boolean groove on a doubly-curved
+100k sculpt is a slow crash. Instead each seam is an implicit surface and
+every vertex within half a width of it is pushed in along its own normal.
+Two failed attempts are recorded in the code because both looked right in
+principle: subdividing only the edges that cross the seam leaves triangle
+fans of slivers, and a groove cut into slivers shades as a row of beads
+however smooth its profile is; and pushing along a radial from the middle of
+the skull is smooth but runs tangential low on the ear ring and shears the
+mesh sideways there. Grid-subdivide whole faces, push along a
+neighbour-averaged normal, and the groove comes out clean.
+
+**The eye sockets are raked, and that is the fix for a socket that read as a
+gouge.** A bore driven straight back along +Y through a face this curved
+comes out 31 mm deeper at the temple edge of its rim than at the nose edge —
+measured, y=160.1 against y=190.9 around one rim — so the opening looks torn
+and no flat bezel can ever sit in it. A real orbit faces outward and slightly
+down. Fitting a plane to the eight measured rim points gives a surface normal
+27° outboard and 12° down; the bore follows it at 25° and 10°. Rim spread
+drops from 31 mm to 5.6 mm. The eyeball still looks straight ahead — only the
+opening is raked — and a Ø41 bore raked 25° still presents a 41 × 37 aperture
+to a Ø32 ball.
+
+**The brow debt is closed.** The fit study measured the forehead casing
+breaking out through the brow flanks by up to 10.3 mm and named two honest
+fixes: restyle the brow band fuller and flatter, which the plated-face
+reference has, or chamfer the plate's spare top corners. Both were
+parameterized and off. Both are now on. `S["swell"]` — a normal-direction
+swell, wide and shallow, r=52 amp=6.0 — took it to 4.6 mm; r=34 amp=7.5 was
+tried first and read as a knuckle over each eyebrow. `casing_chamfer()` took
+the rest, on the line 6|x| + 3.5y = 332, sized against the list of vertices
+that were actually still outside rather than against a guess: a first attempt
+at 368.5 sounded close enough and shaved a 1.6 mm sliver off a corner that
+was already radiused. `fit_layout.verify()` now reports **clean**, and the
+three brow entries have come off `EXPECTED_OUT` so a regression fails.
+
+### Making it printable — 13 Aug 2026
+
+Three things the sculpt was carrying that a printer would have had to pay
+for, all in `head_style.py`.
+
+**The mouth was full of geometry.** A tongue, gums and a throat bag — about
+8800 faces sitting in the middle of the skull, exactly where the electronics
+go. The previous pass looked for it with a ray-parity test inside a
+hand-drawn box and found almost none of it, and the reason is worth keeping:
+**parity is the wrong question.** The lips are slightly parted, so the cavity
+is formally *outside* the skin and parity votes to keep every face of it. The
+right question is whether a face can see the sky. `_strip_buried` fires 42
+rays over the sphere from every face above the neck and deletes anything that
+escapes in fewer than 5% of directions. That catches the mouth bag, the
+nostril cavities, the ear canals and the eyelid interiors under one rule with
+no boxes to draw — 10859 faces — and everything it deletes was invisible from
+outside.
+
+**Deleting a cavity leaves its mouth open**, and Solidify turns an open
+boundary into a rim: a 4 mm wall standing on edge. Around the ear those came
+out as thin fins poking through the skin behind the port, which is what
+prints as a curl of stringy plastic and snaps off in the bag.
+`_fill_small_holes` caps every opening the strip left; the neck ring, at
+93 mm across, is the one it is told to leave alone. The mouth, the nostrils
+and the ear canals become closed skin rather than holes into a head full of
+electronics.
+
+**The shoulders were still attached.** The source is a bust, 394 mm across.
+Cutting at the neck — z=100, the narrowest horizontal band, just under the
+jaw — takes 40% of the mesh off the print and leaves a clean planar ring for
+a neck to bolt to later.
+
+### Mounting — 13 Aug 2026
+
+`cad/head_mounts.py`. Before this, every part in the fit study was floating.
+The layout was honest about it — the skull-side fixings are slotted precisely
+because the numbers were guesswork until a head shell existed — and now one
+does.
+
+**The rule: a screw is only worth drawing if a hand can reach it.** That
+single test decides most of the design, and it is what made the split
+mandatory. Two patterns, chosen by which side of the skin the hand is on:
+
+- **boss** — a post standing on the shell's inner surface, reaching out to
+  meet the part's own mounting face, screw in from the part's side.
+- **through** — a clearance hole in the skin with the part behind it carrying
+  the thread, so the screw head sits on the outside of the head. Visible
+  fasteners are not a compromise; every reference photo is covered in them.
+
+No boss length is guessed. Each is raycast from the part's fixing point to
+the shell's inner surface, so a re-run after a styling change re-measures
+rather than re-guesses. The same trick shapes parts: build a lug deliberately
+too long, subtract the head, and it comes back trimmed to the skin's
+curvature — with one caveat that cost a rebuild, that this only tidies the
+part of a lug *inside* the wall. Anything reaching past the outer surface is
+in free air, nothing subtracts it, and it comes back as a spike.
+
+| Part | How it is held | Gap the fixing crosses |
+| --- | --- | --- |
+| `forehead_casing` | 3 bosses off the brow, screws from behind | 14.8 / 23.3 / 14.7 mm |
+| `pca9685_mount` | 4 bosses off the rear wall | 2.2–2.9 mm — the wall bows |
+| `cable_anchor` ×4 | 1 boss each, rear and side walls | 3.4–5.2 mm |
+| `pi5_tray` | 4 screws down into two `tray_rail` ledges | — |
+| `tray_rail` ×2 | 2 × M3 each through the skin | — |
+| `ear_hub` ×2 | 3 × M3 each through the skin, into arms measured to the wall | — |
+| `eye_bezel` ×2 | slip fit in the socket | — |
+
+Three new printed parts, all shaped by the shell itself:
+
+**`ear_hub`** is the part the fit study left as `PROXY_ear_hub_TBD`: a Ø65
+plug carrying the NeoPixel ring in a recess, the grille through its middle,
+the speaker on two posts behind it, and three arms reaching out to the shell.
+It fits **from inside**, and it has to — the head's surface around the ear
+varies by 20 mm in depth across the Ø66 port, so no flat collar could ever
+sit on that skin, and any arm long enough to reach the shell is wider than
+the bore it would have to pass through. Once the head splits, fitting from
+inside costs nothing. The speaker stops being a zone marker floating near a
+wall and becomes a part bolted to a part.
+
+**`eye_bezel`** closes the 4.5 mm annulus between the Ø41 socket and the Ø32
+eyeball, so the eye reads as an eye in a socket rather than a ball dropped
+down a hole. Its face is set from the shallowest point on the socket rim,
+measured along the raked bore axis. Its bore is Ø35.6, which leaves **2.18 mm
+to the eyeball** — checked with a BVH overlap test rather than by looking at
+it, because at the first size, Ø33.6, it looked like a collision in the
+viewport and measured 1.29 mm and zero intersecting faces. It was not
+touching, but 1.29 mm is not a number to trust once there is a gimbal in
+there instead of a perfect sphere.
+
+**`tray_rail`** is a ledge each side for the Pi 5 tray. Four bosses sound
+obvious and are impossible: at tray height the skull is 120 mm across and the
+nearest floor is 100 mm below, so a post under a corner would be a 100 mm
+spike. Ledges off the side walls are what the geometry allows, and
+`eye_mech.pi5_tray` gained four side fixings to land on them — two of its
+original four were unusable in this skull, one with the cranial opening
+behind it and one with 62 mm of air in front, which had left the tray on a
+two-point mount free to pivot about its own long axis.
+
+The cranial opening moved for the same reason. Where it was — y 12..55,
+z 162..256 — it deleted exactly the piece of rear wall the PCA9685 bolts to
+and left that part hanging in a hole. It is now on the upper occiput, where
+it shows the Pi and its hat, which is the "mechanism high and rearward" the
+open-cranium reference has and where [hardware.md](hardware.md) wanted the
+mics anyway.
+
+### Splitting the head — 13 Aug 2026
+
+`cad/head_split.py`. A coronal plane at **y=135**, 7 mm in front of the ear
+ports. This softens a conclusion above: the head does fit an A1 whole, so
+splitting was called "a choice about surface finish, support and where a skin
+seam can hide". Three things turned the choice into a decision.
+
+**Assembly.** Half the fixings only pass the can-a-hand-reach-it test with
+the face off. The casing's three screws go in from behind. The tray's four go
+down into the rails from above. The ear hubs are wider than the port they sit
+behind and cannot be fitted any other way. A one-piece head would need every
+one of those done blind through a Ø66 ear port.
+
+**Support.** Printed whole and upright, the chin, the underside of the nose
+and the brow are all overhangs, and the face — the one surface where finish
+matters — is printed on its most curved axis. Split, both halves print
+cut-face-down:
+
+| | Bed | Height | Note |
+| --- | --- | --- | --- |
+| `HEAD_FACE` | 122 × 208 | 74 mm | nose pointing up, nothing on the face over ~45° |
+| `HEAD_CRANIUM` | 134 × 215 | 111 mm | only its own dome to worry about |
+
+**The seam is free styling.** At y=135 the parting line runs over the crown,
+down in front of each ear port and across the cheek to the jaw, close to
+where the plated-face reference puts its own face-plate seam.
+
+The joint is four Ø5.2 dowel bores in pads that straddle the plane, each
+placed by raycasting the inner surface so it sits on wall rather than in mid
+air. The pads are Ø16 against a 4 mm wall, which is what makes a 5 mm hole
+possible at all. **There are no screws across this joint yet**, and that is
+deliberate rather than forgotten: the obvious thing to clamp both halves to
+is the neck plate, and there is no neck. Pins and four M3s through a neck
+plate is the intended end state; pins and a bead of glue is what this prints
+as today.
+
+### Blender's boolean solver — 13 Aug 2026
+
+Worth writing down, because two rules in this repo looked like laws and were
+only workarounds for one solver.
+
+`EXACT` discarded the whole shell whenever it met the solidified lid creases
+— 98k vertices in, 1.6k out — which is why the eye cuts ran on `FLOAT`. Then
+the brow-band seam subdivided the forehead and `EXACT` started throwing the
+shell away on the camera bore too, 138k in and 850 out, with nothing wrong
+with either input. In `head_mounts` it deleted a 3688-vertex panel to nothing
+against a cutter whose countersink shared a cylindrical surface with its own
+clearance hole, reduced the ear hub to 110 vertices, and turned a 135k head
+into 2016 on a union with twelve disjoint posts.
+
+**Blender 5's `MANIFOLD` solver takes all of it.** It wants closed manifold
+inputs, which everything here is: Solidify with a rim closes every boundary
+the cleaning leaves, and the shell tests at zero boundary and zero
+non-manifold edges. All seven styling cuts now run on one solver, and faster.
+
+Three more traps, all silent, all now guarded in code:
+
+- A boolean whose cutter object the depsgraph has not seen yet evaluates
+  against nothing. `INTERSECT` returns empty and `DIFFERENCE` returns the
+  target untouched. Call `bpy.context.view_layer.update()` before every bake.
+- A boolean on an object inside a hidden or excluded collection bakes the
+  mesh it already had and reports success. The forehead casing and the Pi
+  tray live in `HUMALIEN`, which gets hidden any time somebody wants a clean
+  look at the shell, and both edits to them did nothing until that was
+  noticed.
+- A boolean against an *empty* cutter does not no-op. It returns rubble.
+
+### Running the head pipeline
+
+Four scripts, in order, in one Blender session:
+
+```python
+ns = {}
+for f in ("head_style", "head_mounts"):
+    exec(compile(open(r"C:\humalien\humalien\cad\%s.py" % f).read(), f, "exec"), ns)
+    ns["build"]() if f == "head_style" else ns["build"](ns["S"], ns["eye_axis"])
+
+fl = {}
+exec(compile(open(r"C:\humalien\humalien\cad\fit_layout.py").read(), "fl", "exec"), fl)
+fl["build"](); fl["verify"]()
+
+exec(compile(open(r"C:\humalien\humalien\cad\head_split.py").read(), "hs", "exec"), ns)
+ns["build"]()
+```
+
+About 20 seconds end to end. `head_style` regenerates from `HEAD_REF` every
+run, so it is still the non-destructive layer: move a number in `S`, re-run
+the four, and everything downstream re-measures itself against the new shell.
+
 
 ### Deliberately not built
 

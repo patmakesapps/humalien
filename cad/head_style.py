@@ -110,32 +110,46 @@ S = dict(
     # four lid shells and left torn walls inside the opening. The 4.5 mm
     # annulus that leaves around a Ø32 eyeball is filled by the printed
     # eye_bezel, so the socket reads as a rim and not as a hole.
-    eye         = dict(pitch=62.0, z=209.0, dia=41.0),
+    # RAKED, and this is the fix for the socket that looked like a hole
+    # rather than an eye. A bore driven straight back along +Y through a
+    # face this curved comes out 31 mm deeper at the temple edge than at the
+    # nose edge - measured, y=160.1 against y=190.9 around one rim - so the
+    # opening reads as a gouge and no flat bezel can ever sit in it. A real
+    # orbit faces outward and slightly down. Fitting a plane to the eight
+    # measured rim points gives a surface normal 27° outboard and 12° down;
+    # the bore now follows it. The eyeball still looks straight ahead - only
+    # the opening is raked - and a Ø41 bore raked 25° still presents a
+    # 41 x 37 aperture to a Ø32 eyeball.
+    eye         = dict(pitch=62.0, y=160.0, z=209.0, dia=41.0,
+                       rake_out=25.0, rake_down=10.0),
 
     # The lens sits ~10 mm behind the skin, so a straight Ø16 tunnel would
     # crop a 77° lens down to 44°. The bore is a cone opening outward: Ø16 at
     # the inner wall, Ø34 at the skin. It also reads as a deliberate lens
     # recess rather than a drilled hole.
-    cam_bore    = dict(x=22.0, z=257.5, dia=16.0, flare=34.0),
+    cam_bore    = dict(x=22.0, z=257.5, dia=16.0, flare=30.0),
     # Narrowed from 24x28. The board is 23 wide but the sensor's own optical
     # window is a few mm; the skin window only has to clear that and the
-    # connector, and it has to stay 3 mm inboard of the brow panel's edge.
+    # connector.
     tof_window  = dict(x=-32.0, z=257.0, w=18.0, h=26.0, r=3.0),
 
-    # Removable forehead panel - the plated-face reference's brow band. Cut
-    # out of the shell itself, so it is a piece of the head's own surface and
-    # matches its curvature exactly; head_parts rebuilds it 0.35 smaller all
-    # round for the shadow gap. Carries the camera bore and the ToF window,
-    # and takes four visible M3 screws - the references are covered in
-    # visible fasteners. Removing it services the camera without splitting
-    # the head.
+    # The brow band is a SEAM, not a removable panel. A real panel was built
+    # here and taken out again, and the reason is worth keeping: the forehead
+    # drops 20 mm from the centreline to the temple across the width this
+    # band wants, and on a surface that steep nothing works. Landing pads for
+    # its screws sit behind the skin at the middle of the panel and break out
+    # through it 10 mm further out. Screw it to the casing behind instead and
+    # the fixings collide with the camera pocket and the ToF channel, which
+    # between them use most of that plate. And it bought nothing that was not
+    # already paid for: servicing the camera means taking the face off, and
+    # the face comes off with four screws either way.
     #
-    # Width is the constrained number, from both sides. It has to clear the
-    # ToF window's outboard edge at x=-41, and it must NOT reach the temple
-    # flanks: a full-width band would sever the upper forehead from the rest
-    # of the face piece and print as two objects. ±44 leaves 3 mm at the ToF
-    # and a solid column of shell at each temple.
-    brow_panel  = dict(w=88.0, z0=238.0, z1=286.0, r=12.0, gap=0.35),
+    # So the band is a groove, in SEAMS below. It is the read the plated-face
+    # reference actually has, it costs no fastener, and it leaves the
+    # forehead a continuous shell over the one region of the head that is
+    # carrying a 96 mm plate, two boards and a lens.
+    #
+    brow_band   = dict(a=48.0, b=26.0, z=261.0),
 
     # ON, at last. The fit study measured the casing's top corners breaking
     # out through the brow flanks by up to 10.3 mm and named two honest fixes:
@@ -176,6 +190,11 @@ SEAMS = [
     # reference's ringed port. r=39 keeps it 1 mm clear of the y=135 split.
     dict(kind="cylX", c=(95.0, 204.0), r=39.0, w=3.0, depth=0.8,
          label="ear port ring"),
+    # The brow band. An ellipse in x/z, front of the head only, drawn round
+    # the camera bore and the ToF window so the two apertures read as one
+    # instrument panel instead of two holes punched in a forehead.
+    dict(kind="ellY", c=(0.0, 261.0), a=48.0, b=26.0, w=3.0, depth=0.8,
+         label="brow band", mask=lambda p: p.y > 150.0),
 ]
 SEAM_CENTRE = (0.0, 112.0, 212.0)   # middle of the skull; see _cut_seams
 # Deliberately only two. A cheek/jaw line was drawn and cut: on this sculpt
@@ -228,13 +247,29 @@ def _obj(name, bm, coll, mat):
     return ob
 
 
-def cyl(name, coll, mat, dia, length, loc, axis, dia2=None):
-    """Closed cylinder (or cone, if dia2 is given) along +X or +Y through loc."""
+def eye_axis(sx):
+    """Unit direction the socket on side sx (+1 = Humalien's right) faces.
+    Outward and slightly down, from the measured rim - see S["eye"]."""
+    o = math.radians(S["eye"]["rake_out"])
+    d = math.radians(S["eye"]["rake_down"])
+    v = Vector((sx * math.sin(o), math.cos(o) * math.cos(d), -math.sin(d)))
+    return v.normalized()
+
+
+def cyl(name, coll, mat, dia, length, loc, axis, dia2=None, direction=None):
+    """Closed cylinder (or cone, if dia2 is given) through loc.
+
+    `axis` is 'X' or 'Y'; pass `direction` instead for an arbitrary one, as
+    the raked eye sockets need."""
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, radius1=dia / 2,
                           radius2=(dia if dia2 is None else dia2) / 2,
                           depth=length, segments=64)
-    rot = Matrix.Rotation(math.radians(90), 4, 'Y' if axis == 'X' else 'X')
+    if direction is not None:
+        rot = Vector((0, 0, 1)).rotation_difference(
+            Vector(direction).normalized()).to_matrix().to_4x4()
+    else:
+        rot = Matrix.Rotation(math.radians(90), 4, 'Y' if axis == 'X' else 'X')
     bmesh.ops.transform(bm, matrix=rot, verts=bm.verts[:])
     bmesh.ops.translate(bm, vec=loc, verts=bm.verts[:])
     return _obj(name, bm, coll, mat)
@@ -334,7 +369,57 @@ def _strip_buried(bm):
                  min(p.y for p in ps), max(p.y for p in ps),
                  min(p.z for p in ps), max(p.z for p in ps)))
         bmesh.ops.delete(bm, geom=doomed, context='FACES')
+    _fill_small_holes(bm)
     return len(doomed)
+
+
+def _fill_small_holes(bm, max_extent=80.0):
+    """Cap the openings the strip left behind.
+
+    Deleting a cavity leaves its mouth open, and Solidify turns an open
+    boundary into a rim - a 4 mm wall standing on edge. Around the ear that
+    came out as a set of thin fins poking through the skin just behind the
+    port, which is exactly the sort of thing that prints as a curl of
+    stringy plastic and snaps off in a bag.
+
+    Capping them is also the right answer on its own terms: the mouth, the
+    nostrils and the ear canals become closed skin instead of holes into a
+    head full of electronics. The neck ring is the one opening that must
+    stay open - it is 85 mm across and everything else here is under 40 -
+    so the size test is enough to tell them apart, and the count is printed
+    so a future opening that gets accidentally sealed is visible.
+    """
+    loops = []
+    seen = set()
+    for e in bm.edges:
+        if not e.is_boundary or e in seen:
+            continue
+        loop, stack = [], [e]
+        seen.add(e)
+        while stack:
+            cur = stack.pop()
+            loop.append(cur)
+            for v in cur.verts:
+                for oe in v.link_edges:
+                    if oe.is_boundary and oe not in seen:
+                        seen.add(oe)
+                        stack.append(oe)
+        loops.append(loop)
+    filled = 0
+    for loop in loops:
+        pts = [v.co for e in loop for v in e.verts]
+        ext = max(max(p[i] for p in pts) - min(p[i] for p in pts)
+                  for i in range(3))
+        if ext > max_extent:
+            print("  hole left open: %.0f mm across (the neck)" % ext)
+            continue
+        try:
+            bmesh.ops.holes_fill(bm, edges=loop, sides=0)
+            filled += 1
+        except Exception:
+            pass
+    print("  capped %d of %d openings the strip opened" % (filled, len(loops)))
+    return filled
 
 
 def _seam_dist(seam, p):
@@ -348,6 +433,12 @@ def _seam_dist(seam, p):
     if k == "cylY":
         cx, cz = seam["c"]
         return math.hypot(p.x - cx, p.z - cz) - seam["r"]
+    if k == "ellY":
+        # not a true distance - the implicit value scaled by the minor
+        # semi-axis, which is close enough over a 3 mm band
+        cx, cz = seam["c"]
+        f = math.hypot((p.x - cx) / seam["a"], (p.z - cz) / seam["b"])
+        return (f - 1.0) * seam["b"]
     raise ValueError(k)
 
 
@@ -440,15 +531,16 @@ def _clean_copy(coll, mat_shell, mat_dark):
     # untouched); the Ø41 socket cut then trims the surrounding skin to a
     # clean circle through simple surface.
     er = S["eye"]
+    axes = [(Vector((sx * er["pitch"] / 2.0, er["y"], er["z"])), eye_axis(sx))
+            for sx in (-1, 1)]
     doomed = []
     for f in bm.faces:
         c = f.calc_center_median()
         if c.y < 150.0:
             continue
-        for sx in (-1, 1):
-            dx = c.x - sx * er["pitch"] / 2.0
-            dz = c.z - er["z"]
-            if dx * dx + dz * dz < 19.0 * 19.0:
+        for org, d in axes:                # perpendicular distance to the
+            v = c - org                    # raked bore axis, not to a
+            if (v - d * v.dot(d)).length < 19.0:   # vertical line in x/z
                 doomed.append(f)
                 break
     if doomed:
@@ -517,8 +609,11 @@ def build():
     ey = S["eye"]
     eyes = []
     for sx, side in ((1, "R"), (-1, "L")):
-        eyes.append(cyl("CUT_eye_%s" % side, cuts, mat_dark,
-                        ey["dia"], 70.0, (sx * ey["pitch"] / 2, 165.0, ey["z"]), 'Y'))
+        # centred on the eyeball, so the ball sits in the middle of the
+        # opening whichever way the bore is raked
+        c = Vector((sx * ey["pitch"] / 2, ey["y"], ey["z"]))
+        eyes.append(cyl("CUT_eye_%s" % side, cuts, mat_dark, ey["dia"], 80.0,
+                        c + eye_axis(sx) * 20.0, 'Y', direction=eye_axis(sx)))
     cb = S["cam_bore"]
     # cone: small at the back, flared at the skin, so the lens keeps its FOV
     cam = cyl("CUT_cam_bore", cuts, mat_dark,
@@ -527,13 +622,6 @@ def build():
     tof = rrect_box("CUT_tof_window", cuts, mat_dark,
                     tw["w"], tw["h"], tw["r"], 60.0, (tw["x"], 175.0, tw["z"]),
                     'XZ')
-    # Built here so the opening is on record with every other cut, but NOT
-    # added to the stack below: head_parts.py needs an uncut shell to carve
-    # the panel out of, so it applies this cutter itself, after baking.
-    bp = S["brow_panel"]
-    rrect_box("CUT_brow_panel", cuts, mat_dark,
-              bp["w"], bp["z1"] - bp["z0"], bp["r"], 70.0,
-              (0.0, 175.0, (bp["z0"] + bp["z1"]) / 2), 'XZ')
 
     # ---- modifier stack: shell first, then the cuts ----
     sol = head.modifiers.new("Shell", 'SOLIDIFY')
@@ -542,18 +630,28 @@ def build():
     sol.use_rim = True
     sol.material_offset_rim = 1       # rims in MAT_interior
 
-    # The eye cuts run on the FLOAT solver: the sculpted lid creases
-    # self-intersect once solidified, and EXACT resolves the winding so badly
-    # it discards the whole shell (98k verts in, 1.6k out). FLOAT trims them
-    # cleanly; EXACT stays on for every other cut because it makes cleaner
-    # seams and those regions are well-behaved.
+    # MANIFOLD everywhere, which is Blender 5's new solver and the reason
+    # this stack is no longer a minefield. The history is worth keeping,
+    # because both of the old rules looked like laws and were only
+    # workarounds:
+    #
+    #   EXACT discarded the whole shell whenever it met the solidified lid
+    #   creases, 98k vertices in and 1.6k out, so the eyes ran on FLOAT.
+    #   Then the brow-band seam subdivided the forehead, and EXACT started
+    #   throwing the shell away on the camera bore too - 138k in, 850 out -
+    #   with nothing wrong with either input.
+    #
+    # MANIFOLD takes all seven cuts on the same mesh without complaint. It
+    # wants closed manifold inputs, which this shell is: Solidify with a rim
+    # closes every boundary the cleaning left, and the shell tests at zero
+    # boundary and zero non-manifold edges.
     for name, cutter in [("EarPortR", ports[0]), ("EarPortL", ports[1]),
                          ("RearOpening", rear),
                          ("EyeR", eyes[0]), ("EyeL", eyes[1]),
                          ("CamBore", cam), ("ToFWindow", tof)]:
         mod = head.modifiers.new(name, 'BOOLEAN')
         mod.operation = 'DIFFERENCE'
-        mod.solver = 'FLOAT' if name.startswith("Eye") else 'EXACT'
+        mod.solver = 'MANIFOLD'
         mod.object = cutter
 
     for c in cuts.objects:
@@ -575,12 +673,10 @@ def build():
 
     print("STYLE_Head built: shell %.1f, neck cut z%.0f, ear ports Ø%.0f at "
           "(y%.0f z%.0f), cranial opening y %.0f..%.0f z %.0f.., eyes Ø%.0f at "
-          "pitch %.0f, cam bore Ø%.0f->Ø%.0f, ToF window %sx%s, brow panel "
-          "%s wide z %.0f..%.0f"
+          "pitch %.0f, cam bore Ø%.0f->Ø%.0f, ToF window %sx%s"
           % (S["wall"], S["neck_cut"], ep["dia"], ep["y"], ep["z"],
              ro["y0"], ro["y1"], ro["z0"], ey["dia"], ey["pitch"],
-             cb["dia"], cb["flare"], tw["w"], tw["h"], bp["w"],
-             bp["z0"], bp["z1"]))
+             cb["dia"], cb["flare"], tw["w"], tw["h"]))
     return head
 
 

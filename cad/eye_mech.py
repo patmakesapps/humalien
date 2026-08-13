@@ -656,6 +656,20 @@ def forehead_casing(loc=(0, 0, 0)):
     for mx in (-35.0, 0.0, 35.0):
         cuts.append(slot("_m", P["m3_free"], P["slot_travel"], t * 3,
                          (mx, -D / 2 + 4.0, t / 2), 0.0))
+
+    # ---- top corners chamfered off ----
+    # The plate is 96 wide and the brow it sits behind is not. The fit study
+    # measured these corners breaking out through the skin by 10.3 mm and
+    # named two fixes: a fuller brow band, and taking the corners off. Both
+    # were done on 13 Aug - see S["swell"] in head_style.py for the other
+    # half - and this is the cut, on the line 6|x| + 3.5y = 332, sized from
+    # the list of vertices that were actually still outside. It costs
+    # nothing in use: the camera pocket ends at x=-42 and its screws at -36,
+    # and the ToF channel ends at x=+43.8 and loses only the top of its
+    # lead-in lip, well above the y=17.5 the board reaches.
+    for sx in (-1, 1):
+        cuts.append(prism("_ch", [(sx * 38.4, 29.0), (sx * 70.0, 29.0),
+                                  (sx * 70.0, -25.1)], t * 3, (0, 0, t / 2)))
     ob = cut(ob, cuts)
     ob = engrave(ob, "B0385", 3.0, top - cam_depth, (cam_x, row_y - cam_pd / 2 + 4.4))
     ob = engrave(ob, "VL53L1X", 2.6, top, (tof_x - 4.0, -D / 2 + 11.0))
@@ -704,6 +718,17 @@ def pi5_tray(loc=(0, 0, 0)):
                      (0.0, -(D / 2 - 5.0)), (0.0, D / 2 - 5.0)):
         cuts.append(slot("_m", P["m3_free"], P["slot_travel"], t * 3,
                          (mx, my, t / 2), 90.0 if abs(mx) > abs(my) else 0.0))
+    # Four more along the long edges, added 13 Aug once the head shell
+    # existed to offer this up to. Two of the four mid-edge fixings above
+    # turned out to be unusable in this skull - one has the cranial opening
+    # behind it and the other has 62 mm of air in front of it - which left
+    # the tray on a two-point mount, free to pivot about its own long axis.
+    # These four land on the tray_rail ledges head_mounts.py puts down each
+    # side wall. Clear of the standoffs at local y = +-24.5 and x = -39/19.
+    for lx in (-30.0, 30.0):
+        for ly in (-27.0, 27.0):
+            cuts.append(slot("_m", P["m3_free"], P["slot_travel"], t * 3,
+                             (lx, ly, t / 2), 0.0))
     # zip-tie pairs for the loom leaving the GPIO header
     for sy in (-1, 1):
         for dx in (-2.5, 2.5):

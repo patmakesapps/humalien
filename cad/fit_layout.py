@@ -73,11 +73,10 @@ L = dict(
                              # inside the port bore (ring r 18.4 vs port
                              # r 33, concentric), so on the styled head it
                              # lives in the opening - see EXPECTED_OUT
-    hub          = dict(d=64.0, t=8.0, x=59.0),
-                             # the future printed ear-hub part: a dark disc
-                             # filling the port bore, ring recessed in its
-                             # face, speaker grille behind. TBD until the
-                             # ring and speaker have been measured together
+    earhub_x     = 47.5,     # ear_hub outer face; the part is REAL now and
+                             # lives in MOUNT_Parts, built by head_mounts.py.
+                             # The PROXY_ear_hub_TBD disc that used to stand
+                             # in for it is gone.
     iris         = dict(d=12.0, t=1.6),
                              # translucent printed iris window the eye pixel
                              # glows through; sits on the eyeball front pole
@@ -93,12 +92,15 @@ L = dict(
                              # printed bosses under the slots like any fixing
     pca_z        = 230.0,    # spans z 209..251
 
-    spk_wall_x   = 54.5,     # module outer face at mid-height; dome peaks 75
-                             # at the ear but closes to ~52 by the module
-                             # ends, and the ear ring wants x 56..62.7 clear
-    spk_y        = 97.0,     # behind ear centroid y~95
-    spk_z        = 210.0,
-    spk_roll     = 12.0,     # deg, top leans outboard to follow the wall
+    # The speaker is no longer a zone marker floating near a wall - it bolts
+    # to the back of the ear_hub, on the two posts head_mounts puts there,
+    # so its position is now set by the hub and not guessed. Outer face at
+    # |x|=29.5, which is the post face; the module hangs inboard from there.
+    # Dimensions are still LISTING and the flange pitch is still assumed.
+    spk_wall_x   = 29.5,
+    spk_y        = 95.0,     # concentric with the ear port
+    spk_z        = 204.0,
+    spk_roll     = 0.0,      # it sits on the hub, so it follows the hub
 
     ear_port     = (95.0, 204.0, 66.0),  # (y, z, dia) for the styling pass
 )
@@ -285,15 +287,12 @@ def build():
         cyl(coll, "PROXY_iris_%s" % side, L["iris"]["d"], L["iris"]["t"],
             (x, ey + L["eyeball_dia"] / 2 + L["iris"]["t"] / 2 - 0.8, ez),
             'Y', COL_GLOW, mat_glow)
-        # the ear hub: dark disc filling the port bore - the future printed
-        # part that mounts ring and speaker grille as one module - with the
-        # ring (already shipping) recessed in its face, glowing
-        cyl(coll, "PROXY_ear_hub_%s_TBD" % side, L["hub"]["d"], L["hub"]["t"],
-            (sx * L["hub"]["x"], L["ear_port"][0], L["ear_port"][1]),
-            'X', COL_HUB, mat_hub)
+        # the NeoPixel ring, sitting in the recess in the real ear_hub's
+        # face. The hub itself is a printed part now, not a proxy disc.
         ring = annulus(coll, "PROXY_neopixel_ear_%s" % side, L["ring_od"],
                        L["ring_id"], L["ring_t"],
-                       (sx * L["earring_x"], L["ear_port"][0], L["ear_port"][1]))
+                       (sx * (L["earhub_x"] - L["ring_t"]),
+                        L["ear_port"][0], L["ear_port"][1]))
         ring.rotation_euler = (0, 0, math.radians(-sx * 90))
         ring.data.materials.append(mat_glow)
         ring.color = COL_GLOW
@@ -372,25 +371,39 @@ def report():
 # Anything else poking out is a layout bug in this file.
 # ---------------------------------------------------------------------------
 EXPECTED_OUT = {
-    "PROXY_eyeball_L": "styled Ø41 sockets at pitch 62 replace the sculpted 56s",
-    "PROXY_eyeball_R": "styled Ø41 sockets at pitch 62 replace the sculpted 56s",
-    "PROXY_iris_L": "on the eyeball front pole, inside the styled Ø41 socket",
-    "PROXY_iris_R": "on the eyeball front pole, inside the styled Ø41 socket",
-    "FIT_forehead_casing": "brow-flank breach - OPEN DEBT, chamfer/swell parameterized but off",
-    "PROXY_b0385_board": "camera board corner - same open brow-flank debt",
-    "PROXY_vl53l1x_board": "ToF board corner - same open brow-flank debt",
+    "PROXY_eyeball_L": "in the styled socket, which the raw skin does not have",
+    "PROXY_eyeball_R": "in the styled socket, which the raw skin does not have",
+    "PROXY_iris_L": "on the eyeball front pole, inside the styled socket",
+    "PROXY_iris_R": "on the eyeball front pole, inside the styled socket",
     "PROXY_neopixel_ear_L": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
     "PROXY_neopixel_ear_R": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
-    "PROXY_ear_hub_L_TBD": "concentric inside the Ø66 ear-port bore (r 32 vs 33)",
-    "PROXY_ear_hub_R_TBD": "concentric inside the Ø66 ear-port bore (r 32 vs 33)",
 }
+# The brow-flank breach is NOT on this list any more. It was three entries -
+# the casing and both boards - carried as an open debt against the day
+# somebody decided between a fuller brow and a chamfered plate. Both were
+# done on 13 Aug: S["swell"] in head_style.py took 10.3 mm down to 4.6, and
+# casing_chamfer() in head_mounts.py removed the corners the rest of it was
+# in. If any of the three comes back, it is a regression, so it gets to fail.
 
 
-def verify():
+def verify(head_name=None):
+    """Ask HEAD_SKIN if it exists, and HEAD_REF only if it does not.
+
+    HEAD_SKIN is head_style's cleaned single surface - same closed skin,
+    but carrying the neck cut and the brow swell, which is what the parts
+    actually have to live inside. Never ask HEAD_CYBORG: it is a solidified
+    shell, so a ray from the middle of the skull crosses the inner wall and
+    then the outer wall, comes back even, and the parity test reports that
+    the Pi is outside the head.
+    """
     from mathutils import Vector
     from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
     dg = bpy.context.evaluated_depsgraph_get()
-    head = bpy.data.objects["HEAD_REF"]
+    if head_name is None:
+        head_name = "HEAD_SKIN" if "HEAD_SKIN" in bpy.data.objects else "HEAD_REF"
+    print("fit check against %s" % head_name)
+    head = bpy.data.objects[head_name]
     bm = bmesh.new()
     bm.from_object(head, dg)
     bm.transform(head.matrix_world)
