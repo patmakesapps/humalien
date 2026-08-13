@@ -17,23 +17,43 @@ The right eyeball is a plain printed eye. The camera does not move with the eyes
 — it lives in the forehead, which keeps face position usable as an absolute
 signal instead of an error signal to null out.
 
-## Measure first, model second
+## Dimensions come from datasheets, then get proven by a test print
 
-**Every dimension below is provisional.** Boards from different vendors differ,
-and listing photos lie. Before modelling anything that touches a real part, put
-calipers on it and record the measurement in this file. If a caliper reading
-disagrees with a number here, the caliper wins — correct the doc.
+There are no calipers in this build. Every dimension has to come from the
+manufacturer, and every dimension has to be treated as unverified until a
+printed part has been offered up to the real board.
 
-| Part | Provisional | What actually matters |
+**Step one — find the mechanical drawing.** For each part below, search for the
+manufacturer's datasheet or product wiki and take dimensions from the mechanical
+drawing, not from a listing description or a photo. Record the number *and the
+URL you got it from* in the table. A dimension without a source is a guess.
+
+| Part | Where to look | What is needed |
 | --- | --- | --- |
-| MG90S servo | ~22.8 × 12.2 × 22.5 mm body, ~32.5 mm across mounting tabs | Tab hole spacing and diameter, output shaft height above the tabs, horn thickness |
-| CQRobot VL53L1X | small breakout, six-wire cable | Board outline, mounting hole positions, how far the sensor window sits proud of the board, cable exit direction |
-| Arducam B0385 | ~38 × 38 mm | Board outline, mounting hole pattern, lens barrel diameter and how far it protrudes, USB connector position and cable strain |
-| PCA9685 | ~62.5 × 25.4 mm | Outline and mounting holes, header height once soldered |
+| MG90S servo | TowerPro datasheet; the MG90S is a de-facto standard so drawings are widely mirrored | Body envelope, tab hole spacing and diameter, output shaft height above the tabs, spline size, horn thickness |
+| CQRobot VL53L1X | CQRobot product wiki; ST's VL53L1X datasheet for the sensor itself and its optical requirements | Board outline, mounting hole positions, sensor window height above the board, cable connector footprint and exit direction |
+| Arducam B0385 | docs.arducam.com — Arducam publish per-SKU mechanical drawings | Board outline, mounting hole pattern, M12 lens holder diameter and protrusion, USB connector position |
+| HiLetgo PCA9685 | It is a clone of Adafruit's 16-channel driver; Adafruit publish full dimensions and the boards are dimensionally interchangeable | Outline, mounting holes, header height once soldered |
+
+**Step two — design in slop.** Because nothing is verified, every interface to a
+real part gets deliberate tolerance:
+
+- Mounting holes **slotted, not round**, so ±0.5 mm of error is adjustable
+  rather than fatal
+- Board pockets **+0.5 mm on each side** of the drawing dimension
+- Any dimension that came from a forum post rather than a manufacturer gets
+  **+1 mm**, and gets flagged in the model as low-confidence
+
+**Step three — print a fit coupon before printing the part.** For each board,
+make a small flat test piece carrying only that board's outline and hole
+pattern. It prints in minutes and costs pennies. Offer the real board up to it,
+correct the model, and only then print the part that matters. This is the
+substitute for calipers, and for mounting patterns it is a better one — it tests
+the hole positions *and* the printer's dimensional accuracy in a single shot.
 
 The VL53L1X is the constraining part. Its board sets the minimum eyeball
-diameter, and the eyeball diameter sets everything else. Measure it first and
-design outward from it.
+diameter, and the eyeball diameter sets everything else. Get its drawing first
+and design outward from it.
 
 ## Hard constraints
 
@@ -83,9 +103,12 @@ and snap to wherever they think they are.
 
 ## Deliverables
 
+0. A filled-in dimensions table above, every row carrying the URL it came from.
+   This is the first deliverable because everything else is invalid without it.
 1. A parametric Blender model where eyeball diameter, servo dimensions and
    travel limits are variables, not baked-in numbers. The VL53L1X board is going
-   to change size when it gets replaced with a bare module.
+   to change size when it gets replaced with a bare module, and unverified
+   dimensions are going to be wrong at least once.
 2. STLs oriented for printing, one file per unique part, with quantities.
 3. Assembly notes: order of operations, and which fasteners go where.
 4. A fastener BOM. **None of these are currently owned** — M2 screws, possibly
