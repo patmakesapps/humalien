@@ -128,9 +128,15 @@ BOARDS = dict(
         # holder does not use them: it retains the board in a slot, no screws.
         # That is the better answer inside an eyeball anyway, where every gram
         # sits on a lever arm the servo has to accelerate.
+        # All five measured off the holder, and all five used directly. Do NOT
+        # re-derive any of them from board nominals: slot_t came out 2.100
+        # where 1.6 + 0.2 of "clearance" would have said 1.800, and that 0.3 is
+        # the difference between a board that slides in and one that does not.
         slot_w  = 23.600,           # measured, groove face to groove face
         slot_h  = 29.100,           # measured, groove z span
         slot_t  = 2.100,            # measured, PCB groove thickness
+        slot_open = 21.600,         # measured, opening between the case walls
+        slot_lip  = 1.000,          # measured, groove depth per side
         # The 6-way JST sits on the SAME face as the sensor and stands proud of
         # it, wires and all. That is the actual reason the proven holder leaves
         # its whole front open - not modesty about the field of view. Anything
@@ -556,9 +562,10 @@ def forehead_casing(loc=(0, 0, 0)):
     t = 5.0
     cam_pw, cam_pd = pocket_size(cam)
     cam_depth = cam["t"] + 0.2
-    cav_d = tof["t"] + 0.2
-    lip_t = 1.0
-    lip = 1.5
+    # Both taken straight off the proven holder rather than derived. See BOARDS.
+    cav_d = tof["slot_t"]             # 2.100, not 1.6 + a guess
+    lip = tof["slot_lip"]             # 1.000, so the opening lands on 21.600
+    lip_t = 1.0                       # material behind the board trapping it
 
     row_y = 3.5                       # the shared centreline both apertures sit on
     cam_x = -22.0

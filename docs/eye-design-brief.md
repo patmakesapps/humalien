@@ -79,13 +79,28 @@ supplied cable. And the M12 holder footprint is drawn but **not dimensioned**;
 18 × 18 mm was scaled off the drawing, so the aperture is cut at 19 × 19 and the
 coupon carries it.
 
-> **Check the SKU before trusting any of this.** The order screenshot reads
-> *"...M12 Lens **With** Microphones"*, and [parts.md](parts.md) specifies the
-> **without**-microphones B0385 — which is the variant the datasheet above
-> describes. If a with-microphones board actually arrived, it is a different
-> SKU and its outline, hole pattern and connector may all differ. Everything in
-> this table would then be describing the wrong board. `coupon_b0385` catches
-> it, but confirming the part number is faster than printing.
+**SKU confirmed.** ASIN `B0CLXZ29F9`, sold by UCTRONICS, *"...Low Distortion
+M12 Lens **Without** Microphones"* — matching [parts.md](parts.md), and matching
+the title of the datasheet the table above is built from. Arducam publish that
+datasheet through uctronics.com, which is their own store, so the drawing and
+the listing are the same part. Arrives 14 Aug 2026.
+
+### What counts as the source of truth
+
+Worth writing down, because it caused a wrong call here. The three are not
+interchangeable and each answers a different question:
+
+| Question | Authority |
+| --- | --- |
+| *Which part is it?* | the order — ASIN and listing title |
+| *What are its dimensions?* | the manufacturer's mechanical drawing for that SKU |
+| *Is the drawing right, and did the printer hit it?* | the fit coupon |
+
+The order settles identity and nothing else. A listing's dimension text is
+listing-grade and gets the `listing` treatment. The drawing settles nominal
+dimensions but not tolerance and not what a printer will actually produce, which
+is the coupon's job. Nothing skips a rung: a confirmed SKU does not make the
+drawing verified, and a drawing does not make the print correct.
 
 **MG90S — `drawing` for the body, `listing` for the tab pitch.** TowerPro's own
 [product page](https://towerpro.com.tw/product/mg90s-3/) says 22.8 × 12.2 ×
