@@ -544,9 +544,27 @@ def ear_hubs(probe, coll, head):
     for a in e["arm_a"]:
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
-        loc, d = probe.inner((0.0, ay, az), (1, 0, 0))
-        end = (loc.x if loc else fx) + 3.0        # 3 mm into the wall for
-        start = fx - e["plug_t"]                  # the screw to bite
+        # FLUSH with the inner surface. Not 3 mm into the wall "so the screw
+        # can bite": the wall is 4 mm and the arm end is flat, so on a slanted
+        # patch of skin one side of that end face clears the outer surface -
+        # measured, the arm at 210 degrees reached 5.7 mm into a 4.0 mm wall
+        # and stood 1.7 mm proud outside the head. Relying on the MOUNT_ZONE
+        # clip to catch it was not enough, and a joint that only works when a
+        # boolean behaves is not a joint. Flush needs no clip to be correct:
+        # the M3 passes through 4 mm of skin and threads into the arm's face,
+        # which is plenty.
+        # Cast from the arm's own root, not from x=0. From the centreline the
+        # ray has the whole skull to cross and at the 210 degree position it
+        # returned nothing at all, so the code fell back to the hub face and
+        # built an arm 5.7 mm into a 4 mm wall - proud of the head, on both
+        # sides, three rebuilds running. A ray that starts where the arm
+        # starts cannot miss the wall the arm has to reach.
+        start = fx - e["plug_t"]
+        loc, d = probe.inner((start, ay, az), (1, 0, 0))
+        if loc is None:
+            print("    arm at %.0f deg: NO WALL FOUND, skipped" % a)
+            continue
+        end = loc.x
         if end <= start:
             continue
         _cyl(arms, e["arm_d"], end - start, ((start + end) / 2, ay, az), 'X')
@@ -801,7 +819,38 @@ def bosses(probe, add, cut):
 
 
 def eye_plate(probe, coll, shell_cut):
-    """The bulkhead the eye mechanism bolts to.
+    """WITHDRAWN, 13 Aug 2026 - not called. Read this before rebuilding it.
+
+    It was built, it does not fit, and the reason is a real finding about
+    this head rather than a bug in the part.
+
+    **The eye mechanism and the ear hubs want the same space.** Each hub
+    occupies x 29.5..65.5 over y 59..131 and z 163..246, on BOTH sides. The
+    eye line is z=209 and the mechanism needs ~100 mm across. Behind the
+    y=135 split there is only 59 mm of clear width at that height -
+    everything outboard of |x|=29.5 is ear hub - so no full-width bulkhead
+    can exist there. The one built here ran through both hubs, and its own
+    side screws passed through them too: 79 of the right hub's vertices sat
+    inside the z=188 hole, and the left is a mirror of it.
+
+    Its topology was bad as well. Each slot was three overlapping solids in
+    one batched cutter - the nested-cutter trap already recorded twice in
+    this file - and it came back as skewed slivers.
+
+    Three ways forward, and it is a design decision, not a fix:
+
+      - put the mechanism FORWARD of the ear hubs, in the face half, where
+        the full width is there
+      - shrink the ear hub; the speaker is what makes it deep, and the
+        speaker's dimensions are still LISTING-grade guesses
+      - narrow the bulkhead to |x| <= 28 and carry it on something other
+        than the side walls
+
+    Kept, uncalled, because the measurements in it are worth having.
+
+    ---- original docstring ----
+
+    The bulkhead the eye mechanism bolts to.
 
     Every other part in this head had somewhere to go and the eyes did not:
     raked sockets, printed bezels, a clear bay behind them, and nothing at
@@ -960,7 +1009,8 @@ def build(S=None, eye_axis=None, save=True):
     if eye_axis is not None:
         eye_bezels(probe, coll, eye_axis)
     tray_rails(probe, coll, head, shell_cut)
-    eye_plate(probe, coll, shell_cut)
+    # eye_plate is WITHDRAWN - it collides with both ear hubs. The reasoning
+    # and the three ways forward are on the function itself.
     tray_side_slots()
     casing_chamfer()
     if save:
