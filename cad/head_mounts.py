@@ -106,6 +106,8 @@ COLL = "MOUNT_Parts"
 HEAD = "HEAD_CYBORG"
 SKIN = "HEAD_SKIN"
 SOLID = "HEAD_SOLID"    # closed volume of the head; nothing may leave it
+ZONE = "MOUNT_ZONE"     # where mount geometry is allowed to exist
+ZONE_INSET = 1.5        # mm below the outer skin the zone stops
 
 M = dict(
     m3_free   = 3.4,      # clearance for an M3
@@ -325,6 +327,76 @@ def _mark_done(ob, tag):
     ob["humalien_%s" % tag] = PART_REV
 
 
+def shade(ob, angle=40.0):
+    """Smooth shading with hard edges kept by angle."""
+    me = ob.data
+    me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
+    if hasattr(me, "set_sharp_from_angle"):
+        me.set_sharp_from_angle(angle=math.radians(angle))
+    me.update()
+    return ob
+
+
+def mount_zone(coll):
+    """Build MOUNT_ZONE: the only volume mount geometry may occupy.
+
+    HEAD_SOLID on its own is the wrong shape to clip against, in two ways
+    that both showed up on screen:
+
+    **It stops at the outer skin.** A boss clipped against it eats the whole
+    4 mm wall and its end face IS the outside of the head. Not protruding,
+    but welded into the skin, and it reads as a circular scar of dense
+    topology above each eye. Inset by 1.5 mm and the boss stops inside the
+    wall where it belongs, leaving the outer surface continuous.
+
+    **Its holes are filled.** It is built from the skin *before* the openings
+    are cut, so the ear ports, the eye sockets, the camera bore, the ToF
+    window and the cranial opening are all solid in it. Clipping against it
+    therefore does nothing to stop a boss walking straight into an opening,
+    which is why one was standing in the middle of the ear port. Subtracting
+    the cutters puts the openings back.
+    """
+    src = bpy.data.objects[SOLID]
+    old = bpy.data.objects.get(ZONE)
+    if old:
+        bpy.data.objects.remove(old, do_unlink=True)
+    ob = bpy.data.objects.new(ZONE, src.data.copy())
+    ob.data.name = ZONE
+    coll.objects.link(ob)
+    ob.display_type = 'WIRE'
+    ob.hide_render = True
+
+    # Inset: push every vertex in along a smoothed normal. Not Solidify -
+    # that builds a shell with two surfaces, and what is wanted here is the
+    # same closed solid, slightly smaller.
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bm.normal_update()
+    bm.verts.index_update()
+    nrm = {v.index: v.normal.copy() for v in bm.verts}
+    for _ in range(3):
+        upd = {}
+        for v in bm.verts:
+            acc = nrm[v.index].copy()
+            for e in v.link_edges:
+                acc += nrm[e.other_vert(v).index]
+            if acc.length > 1e-6:
+                upd[v.index] = acc.normalized()
+        nrm = upd
+    for v in bm.verts:
+        v.co -= nrm[v.index] * ZONE_INSET
+    bm.to_mesh(ob.data)
+    bm.free()
+
+    cutters = [o for o in bpy.data.objects if o.name.startswith("CUT_")]
+    for c in cutters:
+        boolean(ob, c, 'DIFFERENCE', solver='EXACT')
+    ob.hide_set(True)
+    print("  %s: inset %.1f mm, %d openings subtracted, %d verts"
+          % (ZONE, ZONE_INSET, len(cutters), len(ob.data.vertices)))
+    return ob
+
+
 def _bake(ob):
     # Not optional. A cutter created earlier in the same script run is not in
     # the depsgraph until the view layer is updated, and a boolean modifier
@@ -429,24 +501,11 @@ def ear_hubs(probe, coll, head):
     fx = e["face_x"]
     body = bmesh.new()
     _cyl(body, e["plug_d"], e["plug_t"], (fx - e["plug_t"] / 2, e["y"], e["z"]), 'X')
-    # Each arm is measured to its own bit of wall. Running them long and
-    # letting the shell trim them only works for the part of an arm that is
-    # INSIDE the wall - anything that reaches past the outer surface is in
-    # free air, nothing subtracts it, and it comes out as a 24 mm spike
-    # through the side of the head. So each arm stops 2 mm past the inner
-    # surface and the subtract tidies the last 2 mm.
-    for a in e["arm_a"]:
-        ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
-        az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
-        # half a millimetre SHORT of the inner surface. Overshooting and
-        # letting the subtract trim the arm looks tidier until you notice
-        # that the wall is slanted here, so the far side of a flat Ø13 end
-        # face pushes 4 mm past the outer skin and comes back as a loose
-        # island floating outside the head.
-        loc, d = probe.inner((0.0, ay, az), (1, 0, 0))
-        end = (loc.x if loc else fx) - 0.5
-        start = fx - e["plug_t"]
-        _cyl(body, e["arm_d"], end - start, ((start + end) / 2, ay, az), 'X')
+    # NO arms here. They are built and clipped separately below. Building
+    # them into the body as well left TWO sets - the raycast-measured
+    # originals and the clipped copies - and the originals had one arm
+    # standing proud of the skin below the port, which is the tab that kept
+    # showing up on the outside of the head.
     # spine across the back of the plug, carrying the two speaker posts
     sw, sh, st = e["spine"]
     _box(body, (st, sw, sh), (fx - e["plug_t"] - st / 2 + 0.01, e["y"], e["z"]))
@@ -457,21 +516,55 @@ def ear_hubs(probe, coll, head):
     hub = _link(coll, "ear_hub_R", _mesh("ear_hub_R", body), COL_HUB)
     boolean(hub, head)                    # trims arms and spine to the shell
 
-    hcut = bmesh.new()
-    # anything the arms left sticking forward inside the bore
-    _cyl(hcut, e["bore"], 80.0, (fx + 40.0, e["y"], e["z"]), 'X')
-    # ring recess, then the aperture through the middle
-    _cyl(hcut, e["ring_od"], e["ring_t"] * 2, (fx, e["y"], e["z"]), 'X')
-    _cyl(hcut, e["grille"], 80.0, (fx - 20.0, e["y"], e["z"]), 'X')
+    # The arms are clipped to MOUNT_ZONE separately, and they have to be
+    # separate: the zone has the ear port subtracted out of it, so
+    # intersecting the WHOLE hub with it would delete the plug - the plug
+    # lives in that bore on purpose. Only the arms, which sit at r=36 well
+    # outside the Ø66 bore, are the zone's business. Clipped, they stop
+    # 1.5 mm under the skin instead of reaching it.
+    arms = bmesh.new()
     for a in e["arm_a"]:
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
-        _cyl(hcut, M["m3_pilot"], 34.0, (fx - 2.0, ay, az), 'X', segs=24)
+        _cyl(arms, e["arm_d"], 60.0, (fx - 1.0, ay, az), 'X')
+    arm_ob = _link(coll, "_ARMS", _mesh("_ARMS", arms))
+    boolean(arm_ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
+    boolean(hub, arm_ob, 'UNION')
+    bpy.data.objects.remove(arm_ob, do_unlink=True)
+
+    # One boolean per overlapping feature. These cutters nest - the Ø22
+    # grille sits inside the Ø37.6 ring recess, and the Ø66 bore-clear
+    # cylinder covers both - and interpenetrating solids batched into a
+    # single cutter mesh do not cut what you drew. That is what left the hub
+    # face a blank disc with no grille and no ring seat: the cuts were all
+    # issued, and the solver quietly resolved the overlapping cutter into
+    # something else. Disjoint cutters batch fine; nested ones do not.
+    stages = []
+    bore = bmesh.new()          # anything sticking forward inside the port
+    _cyl(bore, e["bore"], 80.0, (fx + 40.0, e["y"], e["z"]), 'X')
+    stages.append(("bore", bore))
+
+    recess = bmesh.new()        # seat for the NeoPixel ring
+    _cyl(recess, e["ring_od"], e["ring_t"] * 2, (fx, e["y"], e["z"]), 'X')
+    stages.append(("ring_recess", recess))
+
+    grille = bmesh.new()        # sound and light, through the middle
+    _cyl(grille, e["grille"], 80.0, (fx - 20.0, e["y"], e["z"]), 'X')
+    stages.append(("grille", grille))
+
+    pilots = bmesh.new()        # these are disjoint, so one batch is fine
+    for a in e["arm_a"]:
+        ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
+        az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
+        _cyl(pilots, M["m3_pilot"], 34.0, (fx - 2.0, ay, az), 'X', segs=24)
     for sz in (-1, 1):
-        _cyl(hcut, M["m3_pilot"], 16.0,
+        _cyl(pilots, M["m3_pilot"], 16.0,
              (fx - e["plug_t"] - 4.0, e["y"],
               e["z"] + sz * e["spk_pitch"] / 2), 'X', segs=24)
-    _apply(coll, hub, hcut, "_CUT_hub", 'DIFFERENCE')
+    stages.append(("pilots", pilots))
+
+    for tag, cbm in stages:
+        _apply(coll, hub, cbm, "_CUT_hub_%s" % tag, 'DIFFERENCE')
 
     left = hub.copy()
     left.data = hub.data.copy()
@@ -575,7 +668,11 @@ def tray_rails(probe, coll, head, shell_cut):
         _box(bm, (w, t["rail_y1"] - t["rail_y0"], t["rail_t"]),
              (sx * (t["rail_x0"] + w / 2), (t["rail_y0"] + t["rail_y1"]) / 2, zc))
         ob = _link(coll, "tray_rail_%s" % side, _mesh("tray_rail_%s" % side, bm))
-        boolean(ob, head)                 # outboard end matched to the wall
+        # Clip to MOUNT_ZONE, not to the shell. Subtracting the shell only
+        # removes the part of the rail that is INSIDE the wall and leaves
+        # whatever reached past the outer surface floating in free air - the
+        # rail and its two screw holes were showing through both temples.
+        boolean(ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
         rcut = bmesh.new()
         for sy in t["slot_y"]:
             _cyl(rcut, M["m3_pilot"], t["rail_t"] + 6.0,
@@ -751,6 +848,7 @@ def build(S=None, eye_axis=None, save=True):
     bpy.context.scene.collection.children.link(coll)
 
     print("head_mounts:")
+    mount_zone(coll)
     probe = Probe()
 
     shell_cut = bmesh.new()
@@ -779,25 +877,29 @@ def build(S=None, eye_axis=None, save=True):
     # It did exactly that here: the boss came out of the clip still 25 mm
     # long and still sticking through the forehead, with no error. EXACT
     # does not care about the slivers and trims correctly.
-    boolean(add_ob, bpy.data.objects[SOLID], 'INTERSECT', solver='EXACT')
+    boolean(add_ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
     after = len(add_ob.data.vertices)
     if after == before:
         raise RuntimeError(
             "clip against %s did nothing (%d verts in and out) - the solver "
             "refused it. Do NOT union this; every boss would break out."
-            % (SOLID, before))
+            % (ZONE, before))
     print("  clipped mounts to the head volume: %d -> %d verts"
           % (before, after))
     boolean(head, add_ob, 'UNION')
     bpy.data.objects.remove(add_ob, do_unlink=True)
     _apply(coll, head, shell_cut, "_CUT_holes", 'DIFFERENCE')
 
-    me = head.data
-    me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
-    if hasattr(me, "set_sharp_from_angle"):
-        me.set_sharp_from_angle(angle=math.radians(40.0))
-    me.update()
-    print("  head now %d verts" % len(me.vertices))
+    shade(head)
+    # and every part this file built or touched - flat shading on a Ø65 plug
+    # or a Ø10 boss shows every facet and reads as faceting, not as a
+    # cylinder
+    for ob in list(coll.objects) + [bpy.data.objects.get(n) for n in
+                                    ("pi5_tray", "forehead_casing",
+                                     "pca9685_mount", "cable_anchor")]:
+        if ob and ob.type == 'MESH' and not ob.name.startswith(("_", "MOUNT_ZONE")):
+            shade(ob)
+    print("  head now %d verts" % len(head.data.vertices))
     if save:
         bpy.ops.wm.save_mainfile()
     return coll
