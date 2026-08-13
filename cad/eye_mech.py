@@ -155,8 +155,7 @@ QUANTITIES = {
     "coupon_vl53l1x": 1,
     "coupon_mg90s": 1,
     "coupon_neopixel12": 1,
-    "camera_boss": 1,
-    "tof_mount": 1,
+    "forehead_casing": 1,
     "pca9685_mount": 1,
     "cable_anchor": 6,
 }
@@ -529,89 +528,74 @@ def coupon_neopixel12(loc=(0, 0, 0)):
 # structural parts - independent of what the reference build will answer
 # ===========================================================================
 
-def camera_boss(loc=(0, 0, 0)):
-    """Forehead mount for the Arducam B0385. The camera does not move with the
-    eyes, so this is a rigid plate: the board pocket locates it and the slotted
-    holes forgive the hole pattern being wrong."""
-    b = BOARDS["b0385"]
+def forehead_casing(loc=(0, 0, 0)):
+    """Camera and distance sensor on one plate, side by side in a row.
+
+    Both apertures sit on a single horizontal centreline. That is free
+    alignment rather than careful assembly: the B0385's sensor is dead centre
+    on its board - 19.00 mm from two adjacent edges on Arducam's drawing - so
+    lining the pocket centres up lines the optical axes up.
+
+    Replaces the earlier separate camera_boss and tof_mount. One part, one
+    fastener set, and the two cannot drift out of line relative to each other
+    because there is no joint between them to drift.
+
+    The camera is trapped by screws through slotted holes; the VL53L1X slides
+    in from the outboard edge and is trapped by a lip, copying the CQRobot
+    holder that already works. Neither needs support to print."""
+    cam = BOARDS["b0385"]
+    tof = BOARDS["vl53l1x"]
     t = 5.0
-    pw, pd = pocket_size(b)
-    ear = 9.0
-    W = b["w"] + 2 * P["wall"] + 2 * P["board_clear"] + 2 * ear
-    D = b["d"] + 2 * P["wall"] + 2 * P["board_clear"]
-    ob = plate("camera_boss", W, D, t, 3.0, (0, 0, t / 2))
+    cam_pw, cam_pd = pocket_size(cam)
+    cam_depth = cam["t"] + 0.2
+    cav_d = tof["t"] + 0.2
+    lip_t = 1.0
+    lip = 1.5
+
+    row_y = 3.5                       # the shared centreline both apertures sit on
+    cam_x = -22.0
+    tof_x = 34.2
+    W = 92.0
+    D = 58.0
+    ob = plate("forehead_casing", W, D, t, 3.0, (0, 0, t / 2))
     top = t
-    pocket_depth = b["t"] + 0.2
     cuts = []
-    # board pocket, opening on the back (+Z here; the part prints face down)
-    cuts.append(prism("_p", rrect_pts(pw, pd, b["corner_r"] + P["board_clear"]),
-                      pocket_depth * 2.0, (0, 0, top)))
-    # lens aperture through the face
-    ap = b["lens_holder"] + 2 * P["board_clear"]
-    cuts.append(prism("_ap", rrect_pts(ap, ap, 2.0), t * 3, (0, 0, t / 2)))
-    # slotted mounting holes on the inner 28x28 pattern, slots radial so all
-    # four can take up positional error while the pocket keeps the board square
+
+    # ---- camera ----
+    cuts.append(prism("_cp", rrect_pts(cam_pw, cam_pd, cam["corner_r"] + P["board_clear"]),
+                      cam_depth * 2.0, (cam_x, row_y, top)))
+    ap = cam["lens_holder"] + 2 * P["board_clear"]
+    cuts.append(prism("_ap", rrect_pts(ap, ap, 2.0), t * 3, (cam_x, row_y, t / 2)))
     for sx in (-1, 1):
         for sy in (-1, 1):
-            x = sx * b["pitch_inner"] / 2
-            y = sy * b["pitch_inner"] / 2
+            dx = sx * cam["pitch_inner"] / 2
+            dy = sy * cam["pitch_inner"] / 2
             cuts.append(slot("_s", P["m2_free"], P["slot_travel"], t * 3,
-                             (x, y, t / 2), math.degrees(math.atan2(y, x))))
-    # cable exit for the S4B-ZR connector, notched through the pocket wall
-    cuts.append(prism("_cn", rrect_pts(b["conn_w"] + 3.0, P["wall"] * 3, 0.6),
-                      (pocket_depth + 1.0) * 2.0,
-                      (-b["w"] / 2 + b["conn_x"], -pd / 2, top)))
-    # skull mounting ears
-    for sx in (-1, 1):
-        cuts.append(slot("_e", P["m3_free"], P["slot_travel"], t * 3,
-                         (sx * (W / 2 - ear / 2 - 1.0), 0, t / 2), 0.0))
+                             (cam_x + dx, row_y + dy, t / 2),
+                             math.degrees(math.atan2(dy, dx))))
+    # S4B-ZR cable exit, out through the top wall of the camera pocket
+    cuts.append(prism("_cn", rrect_pts(cam["conn_w"] + 3.0, P["wall"] * 3, 0.6),
+                      (cam_depth + 1.0) * 2.0,
+                      (cam_x - cam["w"] / 2 + cam["conn_x"], row_y + cam_pd / 2, top)))
+
+    # ---- distance sensor: slides in from the +X edge ----
+    x_in = tof_x - tof["slot_w"] / 2.0        # inboard wall of the slot
+    xlen = (W / 2 - x_in) + 16.0              # run it off the outboard edge
+    xcen = x_in + xlen / 2.0
+    cuts.append(prism("_cav", rrect_pts(xlen, tof["slot_h"], 0.5), cav_d,
+                      (xcen, row_y, top - lip_t - cav_d / 2.0)))
+    cuts.append(prism("_lip", rrect_pts(xlen, tof["slot_h"] - 2 * lip, 0.5), 8.0,
+                      (xcen, row_y, top + 3.0)))
+    cuts.append(prism("_win", rrect_pts(20.0, tof["slot_h"] - 7.0, 2.0), t * 3,
+                      (tof_x, row_y, t / 2)))
+
+    # ---- skull fixings: a three point strip along the bottom ----
+    for mx in (-35.0, 0.0, 35.0):
+        cuts.append(slot("_m", P["m3_free"], P["slot_travel"], t * 3,
+                         (mx, -D / 2 + 4.0, t / 2), 0.0))
     ob = cut(ob, cuts)
-    # label goes on the pocket floor: the board covers it, and there is no
-    # material left on the rim once the pocket takes its 2 mm wall
-    ob = engrave(ob, "B0385", 3.4, top - pocket_depth, (0, -pd / 2 + 5.0))
-    return ob
-
-
-def tof_mount(loc=(0, 0, 0)):
-    """Forehead mount for the CQRobot VL53L1X, beside the camera.
-
-    Retention copies the holder that already works on two robots: the board
-    slides into a slot and is trapped by a lip, no screws. Kept as its own part
-    rather than merged into the camera plate, because where these two sit
-    relative to each other is a skull question and the skull does not exist yet.
-
-    The aperture is a wide open window, not a bore. Two reasons: ST's cover
-    glass and crosstalk rules could not be retrieved, and the proven holder
-    simply leaves its whole front face open. A generous opening cannot clip the
-    field of view and cannot bounce IR back into the sensor, and it means the
-    sensor's exact position on the board does not have to be known."""
-    b = BOARDS["vl53l1x"]
-    t = 5.0
-    cav_d = b["t"] + 0.2          # board cavity depth
-    lip_t = 1.0                   # material trapping the board
-    lip = 1.5                     # how far the lip overhangs inward per side
-    ear = 9.0
-    W = b["slot_w"] + 2 * 5.0 + 2 * ear
-    D = b["slot_h"] + 7.0
-    ob = plate("tof_mount", W, D, t, 3.0, (0, 0, t / 2))
-    top = t
-    # pocket runs off the +Y edge so the board slides in from that end
-    y_bot = D / 2 - b["slot_h"]
-    ylen = b["slot_h"] + 14.0
-    ycen = y_bot + ylen / 2.0
-    cuts = [
-        prism("_cav", rrect_pts(b["slot_w"], ylen, 0.5), cav_d,
-              (0, ycen, top - lip_t - cav_d / 2.0)),
-        prism("_lip", rrect_pts(b["slot_w"] - 2 * lip, ylen, 0.5), 8.0,
-              (0, ycen, top + 3.0)),
-        prism("_win", rrect_pts(b["slot_w"] - 2 * lip - 2.0, b["slot_h"] - 8.0, 2.0),
-              t * 3, (0, y_bot + b["slot_h"] / 2.0, t / 2)),
-    ]
-    for sx in (-1, 1):
-        cuts.append(slot("_e", P["m3_free"], P["slot_travel"], t * 3,
-                         (sx * (W / 2 - ear / 2 - 1.0), -D / 2 + 5.0, t / 2), 0.0))
-    ob = cut(ob, cuts)
-    ob = engrave(ob, "VL53L1X", 3.0, top, (0, -D / 2 + 2.6))
+    ob = engrave(ob, "B0385", 3.0, top - cam_depth, (cam_x, row_y - cam_pd / 2 + 4.4))
+    ob = engrave(ob, "VL53L1X", 2.6, top, (tof_x - 4.0, -D / 2 + 11.0))
     return ob
 
 
@@ -684,8 +668,7 @@ BUILDERS = [
     ("coupon_vl53l1x", coupon_vl53l1x),
     ("coupon_mg90s", coupon_mg90s),
     ("coupon_neopixel12", coupon_neopixel12),
-    ("camera_boss", camera_boss),
-    ("tof_mount", tof_mount),
+    ("forehead_casing", forehead_casing),
     ("pca9685_mount", pca9685_mount),
     ("cable_anchor", cable_anchor),
 ]

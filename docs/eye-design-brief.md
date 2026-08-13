@@ -151,7 +151,8 @@ So one of these has to give, and it is a decision rather than a calculation:
 | **Sensor out of the eye** — into the forehead beside the camera | Loses "distance to what it is looking at", which was the whole point of the left eye |
 
 **Decided: the ToF moves to the forehead**, beside the camera, using the
-CQRobot board as it stands. `tof_mount` is built and exported.
+CQRobot board as it stands, on one plate with the camera — see
+`forehead_casing` below.
 
 That gives up the one thing which made the left eye different from every
 reference mechanism online — distance to *whatever it is looking at*. Range and
@@ -169,6 +170,19 @@ crosstalk rules could not be retrieved, and the proven CQRobot holder simply
 leaves its whole front face open. A generous opening cannot clip the field of
 view, cannot bounce IR back into the sensor, and means the sensor's exact
 position on the board never has to be established.
+
+**Both sit in one row on one plate.** The camera and the sensor are side by
+side with their apertures on a single horizontal centreline, 56.2 mm apart. An
+earlier version had them as two separate brackets on the reasoning that their
+relative position was a skull question; that was wrong. Two brackets is two
+chances to be out of line, and alignment here should be a property of the
+geometry rather than something to get right at assembly.
+
+It costs nothing to guarantee, because the B0385's sensor is dead centre on its
+board — 19.00 mm from two adjacent edges on Arducam's drawing — so lining the
+pocket centres up lines the optical axes up. Camera by screws through slotted
+holes, sensor sliding in from the outboard edge under a 1.5 mm lip, three M3
+fixings along the bottom, no supports anywhere.
 
 ## The eyes light up instead
 
@@ -514,7 +528,7 @@ board has been offered up to the real board.
 | `coupon_b0385` | 1 | 52 × 52 × 2.4 | 4.4 cm³ | both hole patterns, 34 × 34 and 28 × 28, plus the lens aperture |
 | `coupon_vl53l1x` | 1 | 101 × 16 × 15 | 8.9 cm³ | three retention slots — the proven 2.100 plus 1.95 and 2.25 |
 | `coupon_mg90s` | 1 | 132 × 32 × 6 | 17.7 cm³ | four trial pockets A–D at +0.20/+0.45/+0.70/+0.95 per side; C also carries tab holes at the assumed 28.0 pitch |
-| `camera_boss` | 1 | 61 × 43 × 5 | 8.9 cm³ | forehead mount for the B0385 |
+| `forehead_casing` | 1 | 92 × 58 × 5 | 19.6 cm³ | camera and distance sensor side by side, apertures on one centreline |
 | `pca9685_mount` | 1 | 78 × 41 × 6.5 | 9.6 cm³ | driver board plate with standoffs |
 | `cable_anchor` | 6 | 20 × 12 × 3 | 0.6 cm³ each | zip-tie anchor for the looms |
 
@@ -667,6 +681,9 @@ The engraved coupons carry a handful of zero-area sliver edges — 4 on
 is cut into a face. This was chased properly and it is inherent to the solver:
 unchanged by font, by triangulating either input, by union versus difference,
 and by whether the cleanup pass runs at all. They enclose no volume, and slicers
-drop them. `camera_boss`, `pca9685_mount` and `cable_anchor` carry no engraving
-and are fully manifold. The labels are worth keeping — a coupon with four
-unmarked pockets is not a measuring tool.
+drop them. `forehead_casing`, `pca9685_mount`, `coupon_neopixel12` and
+`cable_anchor` come out fully manifold — `forehead_casing` and `pca9685_mount`
+carry labels too, so it is not simply "engraved parts are dirty"; it depends on
+how the glyph outlines happen to fall against the geometry underneath. The
+labels are worth keeping either way — a coupon with four unmarked pockets is not
+a measuring tool.
