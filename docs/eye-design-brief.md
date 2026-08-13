@@ -150,9 +150,120 @@ So one of these has to give, and it is a decision rather than a calculation:
 | **Ø41 eyeball** | Stops reading as an eye, and puts real mass on the servo |
 | **Sensor out of the eye** — into the forehead beside the camera | Loses "distance to what it is looking at", which was the whole point of the left eye |
 
-The bare carrier is the recommendation, and [hardware.md](hardware.md) already
-anticipated the swap. Note the CQRobot board is not wasted either way — it is
-the right size to sit in the forehead or the chest.
+**Decided: the ToF moves to the forehead**, beside the camera, using the
+CQRobot board as it stands. `tof_mount` is built and exported.
+
+That gives up the one thing which made the left eye different from every
+reference mechanism online — distance to *whatever it is looking at*. Range and
+gaze now decouple: the sensor measures straight ahead while the eyes track. Say
+so plainly rather than pretend otherwise. In exchange it costs nothing, buys no
+new parts, and [hardware.md](hardware.md) already argued the distance sensor
+"wants to look where the face looks", which a forehead mount satisfies exactly.
+
+If the coupling is ever wanted back, the bare-carrier option above reopens it
+without disturbing anything else — that is the merit of keeping the sensor's
+mount a separate part rather than merging it into the camera plate.
+
+The aperture is a wide open window rather than a bore. ST's cover glass and
+crosstalk rules could not be retrieved, and the proven CQRobot holder simply
+leaves its whole front face open. A generous opening cannot clip the field of
+view, cannot bounce IR back into the sensor, and means the sensor's exact
+position on the board never has to be established.
+
+## The eyes light up instead
+
+With the sensor out, the eyeball is free, and a
+[NeoPixel Ring 12](https://www.adafruit.com/product/1643) goes in each eye.
+Adafruit publish the board file, so these are `exact`, parsed the same way as
+the PCA9685:
+
+| Dimension | Value | Source |
+| --- | --- | --- |
+| Outer diameter | 36.830 mm | Eagle `.brd`, layer 20 arcs, r = 18.415 |
+| Inner diameter | 23.368 mm | Eagle `.brd`, layer 20 circle, r = 11.684 |
+| LED pitch circle | Ø29.464, 12 at 30°, first at 12 o'clock | element placements |
+| Mounting holes | **none** | there are none in the board file |
+| Thickness | 6.7 mm | product page envelope, not from the `.brd` |
+
+### It does not go inside the eyeball either — and that is the good news
+
+Ø36.83 against a Ø32 eyeball. Same collision as the ToF. But the ring should
+never have been inside a moving eyeball, and three things fall out once it is
+mounted **static in the socket** with the eyeball turning behind it:
+
+- **A sphere rotating about its own centre sweeps no extra volume.** The ring
+  cannot collide with the eyeball at any gaze angle, at ±30° pan or anywhere
+  else. That is a clearance guarantee for free, and it holds no matter what the
+  linkage turns out to be.
+- **No wires cross the moving joint. None.** The brief spends a whole section on
+  wire crossing a rotating joint being the design's worst wear problem. A static
+  ring simply does not have the problem.
+- **No mass on the lever arm.** The 3.3 g stays on the skull where the servo
+  never has to accelerate it.
+
+The eyeball's front pole looks out through the ring's Ø23.368 hole. Set the ring
+plane 12.5 mm forward of the eye centre and a Ø32 sphere measures Ø19.97 there —
+**3.4 mm of clearance all round**, with the ring sitting 3.5 mm behind the front
+pole. A glowing annulus around a moving eye, which is what
+`reference photos/` shows.
+
+Because there are no mounting holes, the ring has to be trapped by a lip.
+`coupon_neopixel12` tests exactly that, and the lip is the part worth testing —
+it overhangs the pocket, so it is a bridge, and a bridge that droops is a ring
+that will not seat flat.
+
+### Two things that will bite
+
+**The Pi 5 cannot drive WS2812 the old way.** `rpi_ws281x` worked by DMA-timing
+the BCM2835's PWM peripheral. The Pi 5 moved GPIO onto the RP1 and that path is
+gone — this is not a bug to work around, the hardware is different. Working
+options, decide before writing any node code:
+
+| Option | Notes |
+| --- | --- |
+| [PIOLib](https://www.raspberrypi.com/news/piolib-a-userspace-library-for-pio-control/) | Official. Uses the RP1's PIO, so timing is not the CPU's problem |
+| [Pi5Neo](https://github.com/vanshksingh/Pi5Neo) | SPI, `spidev` only dependency |
+| Adafruit CircuitPython NeoPixel_SPI | SPI, [Adafruit's own Pi 5 guide](https://learn.adafruit.com/circuitpython-on-raspberrypi-linux/using-neopixels-on-the-pi-5) |
+
+**The PCA9685 cannot help.** It is PWM over I²C; WS2812 is a timed one-wire
+protocol. This is a genuinely new interface on the Pi, not another channel on a
+board that is already there.
+
+Two more, smaller: 3.3 V data into a 5 V WS2812 is marginal — use a 74AHCT125
+level shifter or run the ring nearer 4.5 V so its threshold drops. And 24 LEDs
+at full white is ~1.44 A, which belongs on the ALITOVE 5 V 5 A servo supply and
+never on the Pi. An iris glow at low brightness is a small fraction of that, but
+size the rail for the mistake, not the intent.
+
+### Does it connect to what is already owned?
+
+Power yes, data no. This is the only part in the build that does not plug into
+something already on the bench.
+
+```
+5V 5A ALITOVE ──► ring 5V, both rings        the supply already bought
+1000uF cap    ──► across 5V and GND          the one already on order
+Pi GPIO10     ──► [74AHCT125] ──► ring1 DIN  SPI0 MOSI, hardware-timed
+ring1 DOUT    ──► ring2 DIN                  chainable: one pin drives both eyes
+Pi GND ──► supply GND ──► ring GND           COMMON GROUND, not optional
+```
+
+The rings chain, so **both eyes run off a single data pin** — 24 pixels on one
+line. Nothing on the I²C bus changes and the PCA9685 is untouched.
+
+Adafruit's product copy says the ring "cannot be used with a Linux-based
+microcomputer". That warning is about bit-banging a timing-critical protocol
+under a non-real-time OS, and it is fair. The answer is to stop bit-banging and
+hand the timing to hardware — SPI or the RP1's PIO — which is what all three
+libraries above do, and why Adafruit's own Pi 5 guide contradicts their older
+product text.
+
+**To buy:** two rings ($8.95 each) and a 74AHCT125 (~$1.50). That is all.
+
+**To verify before wiring:** that SPI0 is actually free. The WM8960 hat takes
+I²S on GPIO 18–21 and I²C on 2–3, which should leave GPIO 7–11 alone, but that
+is an assumption about a board already in the stack rather than something
+checked. `raspi-gpio get` settles it in one command.
 
 **None of this blocks the structural work**, which is why the eyeball still is
 not modelled.

@@ -132,6 +132,17 @@ BOARDS = dict(
         slot_h  = 29.100,           # measured, groove z span
         slot_t  = 2.100,            # measured, PCB groove thickness
     ),
+    neopixel12 = dict(
+        label   = "NeoPixel Ring 12",
+        conf    = "exact",          # Adafruit's own Eagle .brd, as with the PCA9685
+        od      = 36.830,           # layer 20 outer arc, r=18.415
+        id      = 23.368,           # layer 20 inner circle, r=11.684
+        led_pcd = 29.464,           # 12 LEDs on r=14.732, 30 deg apart, first at 12 o'clock
+        n_led   = 12,
+        t       = 6.7,              # product page envelope incl. components - not from the .brd
+        # There are NO mounting holes in the board file. It has to be trapped by
+        # a lip or a bezel; there is nothing to screw to.
+    ),
 )
 
 EXPORT_DIR = r"C:\humalien\humalien\exports"
@@ -143,7 +154,9 @@ QUANTITIES = {
     "coupon_b0385": 1,
     "coupon_vl53l1x": 1,
     "coupon_mg90s": 1,
+    "coupon_neopixel12": 1,
     "camera_boss": 1,
+    "tof_mount": 1,
     "pca9685_mount": 1,
     "cable_anchor": 6,
 }
@@ -479,6 +492,39 @@ def coupon_mg90s(loc=(0, 0, 0)):
     return ob
 
 
+def coupon_neopixel12(loc=(0, 0, 0)):
+    """Fit coupon for the NeoPixel ring that lights the iris.
+
+    The ring is static in the socket, not carried by the eyeball - see the
+    brief. So what this has to prove is that the ring seats in its pocket and
+    that the retaining lip actually holds it, because the board file shows no
+    mounting holes at all and there is nothing to screw to.
+
+    The lip is the part worth testing: it overhangs the pocket, so it is a
+    bridge, and a bridge that droops is a ring that will not seat flat."""
+    b = BOARDS["neopixel12"]
+    t = P["coupon_t"] + 2.0
+    pw = b["od"] + 2 * P["board_clear"]
+    W = b["od"] + 14
+    ob = plate("coupon_neopixel12", W, W, t, 3.0, (0, 0, t / 2))
+    top = t
+    pocket_d = 2.2                       # ring PCB plus a little
+    lip = 1.5
+    cuts = [
+        # pocket the ring drops into
+        prism("_p", circle_pts(pw, 96), pocket_d * 2.0, (0, 0, top)),
+        # window through the middle: lets the ring be pushed back out, and is
+        # what the eyeball will look through on the real part
+        prism("_w", circle_pts(b["id"] - 2 * lip, 96), t * 3, (0, 0, t / 2)),
+    ]
+    ob = cut(ob, cuts)
+    ob = scribe_rect(ob, b["od"], b["od"], b["od"] / 2, top)
+    ob = scribe_rect(ob, b["id"], b["id"], b["id"] / 2, top)
+    ob = engrave(ob, "NEO12", 3.4, top, (0, -W / 2 + 4.4))
+    ob = engrave(ob, "OD%.2f ID%.2f" % (b["od"], b["id"]), 2.4, top, (0, W / 2 - 4.0))
+    return ob
+
+
 # ===========================================================================
 # structural parts - independent of what the reference build will answer
 # ===========================================================================
@@ -523,6 +569,49 @@ def camera_boss(loc=(0, 0, 0)):
     # label goes on the pocket floor: the board covers it, and there is no
     # material left on the rim once the pocket takes its 2 mm wall
     ob = engrave(ob, "B0385", 3.4, top - pocket_depth, (0, -pd / 2 + 5.0))
+    return ob
+
+
+def tof_mount(loc=(0, 0, 0)):
+    """Forehead mount for the CQRobot VL53L1X, beside the camera.
+
+    Retention copies the holder that already works on two robots: the board
+    slides into a slot and is trapped by a lip, no screws. Kept as its own part
+    rather than merged into the camera plate, because where these two sit
+    relative to each other is a skull question and the skull does not exist yet.
+
+    The aperture is a wide open window, not a bore. Two reasons: ST's cover
+    glass and crosstalk rules could not be retrieved, and the proven holder
+    simply leaves its whole front face open. A generous opening cannot clip the
+    field of view and cannot bounce IR back into the sensor, and it means the
+    sensor's exact position on the board does not have to be known."""
+    b = BOARDS["vl53l1x"]
+    t = 5.0
+    cav_d = b["t"] + 0.2          # board cavity depth
+    lip_t = 1.0                   # material trapping the board
+    lip = 1.5                     # how far the lip overhangs inward per side
+    ear = 9.0
+    W = b["slot_w"] + 2 * 5.0 + 2 * ear
+    D = b["slot_h"] + 7.0
+    ob = plate("tof_mount", W, D, t, 3.0, (0, 0, t / 2))
+    top = t
+    # pocket runs off the +Y edge so the board slides in from that end
+    y_bot = D / 2 - b["slot_h"]
+    ylen = b["slot_h"] + 14.0
+    ycen = y_bot + ylen / 2.0
+    cuts = [
+        prism("_cav", rrect_pts(b["slot_w"], ylen, 0.5), cav_d,
+              (0, ycen, top - lip_t - cav_d / 2.0)),
+        prism("_lip", rrect_pts(b["slot_w"] - 2 * lip, ylen, 0.5), 8.0,
+              (0, ycen, top + 3.0)),
+        prism("_win", rrect_pts(b["slot_w"] - 2 * lip - 2.0, b["slot_h"] - 8.0, 2.0),
+              t * 3, (0, y_bot + b["slot_h"] / 2.0, t / 2)),
+    ]
+    for sx in (-1, 1):
+        cuts.append(slot("_e", P["m3_free"], P["slot_travel"], t * 3,
+                         (sx * (W / 2 - ear / 2 - 1.0), -D / 2 + 5.0, t / 2), 0.0))
+    ob = cut(ob, cuts)
+    ob = engrave(ob, "VL53L1X", 3.0, top, (0, -D / 2 + 2.6))
     return ob
 
 
@@ -594,7 +683,9 @@ BUILDERS = [
     ("coupon_b0385", coupon_b0385),
     ("coupon_vl53l1x", coupon_vl53l1x),
     ("coupon_mg90s", coupon_mg90s),
+    ("coupon_neopixel12", coupon_neopixel12),
     ("camera_boss", camera_boss),
+    ("tof_mount", tof_mount),
     ("pca9685_mount", pca9685_mount),
     ("cable_anchor", cable_anchor),
 ]
