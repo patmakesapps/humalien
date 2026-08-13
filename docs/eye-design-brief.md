@@ -267,6 +267,24 @@ established, and a through slot serves the cable either way.
 
 ## The eyes light up instead
 
+> **Decision changed — 13 Aug 2026, later the same day.** The light moves
+> *inside* the eyeball: one addressable 5050 pixel per eye, aimed at an iris
+> printed as a thin translucent window (0.8–1.2 mm clear PETG prints frosted
+> — its own diffuser). The glow tracks the pupil at every gaze angle, which
+> a static ring cannot do, and it is what "light coming from within" actually
+> means. The cost is the thing this section was proud of avoiding: wires
+> across the moving joint — 4 from the left eye (5V, GND, DIN, DOUT to chain
+> on), 3 into the right. That is exactly the load the left-eye wiring plan
+> below was written for before the ToF moved to the forehead; it applies
+> verbatim. The rings — already ordered and shipping — are not wasted: one
+> goes **behind each Ø66 ear port**, framing the speaker grille as the
+> reference photos' glowing hub, and they are the bench-test article for the
+> Pi 5 WS2812 chain before any wire is threaded through an eyeball. The
+> ring-bezel styling debt dies with the move; the eye openings become plain
+> Ø30 circles. To buy: two 5050 mini pixels, a couple of dollars. Everything
+> below stands as the record of the ring design and its numbers, which the
+> ear ports now use.
+
 With the sensor out, the eyeball is free, and a
 [NeoPixel Ring 12](https://www.adafruit.com/product/1643) goes in each eye.
 Adafruit publish the board file, so these are `exact`, parsed the same way as
@@ -353,7 +371,9 @@ hand the timing to hardware — SPI or the RP1's PIO — which is what all three
 libraries above do, and why Adafruit's own Pi 5 guide contradicts their older
 product text.
 
-**To buy:** two rings ($8.95 each) and a 74AHCT125 (~$1.50). That is all.
+**To buy:** ~~two rings ($8.95 each) and a 74AHCT125 (~$1.50)~~ — the rings
+are ordered and shipping as of 13 Aug. Still to buy: two addressable 5050
+mini pixels for the eyeballs, and the 74AHCT125 if it was not in that order.
 
 **To verify before wiring:** that SPI0 is actually free. The WM8960 hat takes
 I²S on GPIO 18–21 and I²C on 2–3, which should leave GPIO 7–11 alone, but that
@@ -821,7 +841,8 @@ them.
 | What | Where (x, y, z in head frame) | Note |
 | --- | --- | --- |
 | Eyeballs Ø32 | (±31, 160, 209) | pitch 62 from `P`, pupil line just below the nasion at 213 |
-| NeoPixel rings | back face 12.5 fwd of eye centre | front face lands at 179.2, flush with the shell over the eyes |
+| Eye pixel | inside each eyeball | 5050 addressable, aimed at the translucent iris; LISTING until bought |
+| NeoPixel rings | ear ports, back face &#124;x&#124;=56 | concentric in the Ø66 bore, framing the speaker grilles |
 | `forehead_casing` | upright, boards forward, y 162..167, z 225..283 | aperture row z=257.5; camera at x=+22, ToF at −32; bottom edge clears the eyeball tops by 1.6 |
 | `pi5_tray` | flat, long axis fore-aft, y 43.5..136.5, plate z 256..259 | Pi board top 265.6, hat stack ~282, rear corner 3.5 clear of the dome |
 | `pca9685_mount` | upright on the rear wall, y 42..50, z 209..251 | the wall bows 13 mm across the plate — the skull prints bosses under the slots |
@@ -845,8 +866,9 @@ them.
   them. Currently carried as a styling debt, not a part change.
 - **The rings need bezels.** A flat Ø36.8 ring against a doubly-curved face
   cannot be flush at the centre and buried at the rim: the outboard rim sits
-  ~10 mm proud at x=±49. The styled face grows a bezel/boss around each ring —
-  which is what the reference photos' camera-iris eyes look like anyway.
+  ~10 mm proud at x=±49. *Resolved the same day by removing the cause: the
+  glow moved inside the eyeball and the rings moved to the ear ports, where
+  they sit concentric inside the bore and touch nothing.*
 - **Nothing else fights.** Tray, driver mount, speakers and anchors all sit
   inside with margin once placed to the measured walls; the cranium swallows
   the whole electronics stack with the mic hat exactly where hardware.md
@@ -855,21 +877,34 @@ them.
 ### Styling begun — 13 Aug 2026
 
 `cad/head_style.py`. Builds `STYLE_Head`: `HEAD_CYBORG` is a copy of
-`HEAD_REF` (the original stays, hidden) carrying a non-destructive modifier
-stack — a 4 mm Solidify shell, then boolean cutters for the reads all three
-reference photos share: Ø66 circular ports swallowing the sculpted ears
-(centred on the measured ear centroid, y=95 z=204), the open rear cranium
-(y 12..55, z 162..256, rounded), Ø24 eye openings at the *design* pitch 62,
-and the camera bore + ToF window on the casing's aperture row. Cutters live
-in `STYLE_cutters`, wireframed and hidden; nothing is applied, every opening
-is still a parameter in `S`.
+`HEAD_REF` (the original stays, hidden) carrying the reads all three
+reference photos share: a 4 mm shell, Ø66 circular ports swallowing the
+sculpted ears (centred on the measured ear centroid, y=95 z=204) with the
+NeoPixel rings recessed inside them, the open rear cranium (y 12..55,
+z 162..256, rounded), Ø30 eye openings at the *design* pitch 62, the camera
+bore + ToF window, and a **visor band** across the brow and temples — the
+first piece of the sci-fi-helmet direction chosen 13 Aug. The band's front
+face is a plan arc, not a plane: a flat face sat behind the forehead's own
+bulge and read as inset glass. It stands ~5 mm proud at centre and swallows
+the *stock* casing — the corner-chamfer rev was considered and reverted;
+parts stay untouched and the styling does the work.
+
+Two build lessons are encoded in the script. The eye cuts run Blender's
+FLOAT boolean solver, because EXACT resolves the solidified lid creases'
+self-intersections so badly it discards the whole shell. And the modifier
+stack is **baked to a plain mesh in the same run**: a live stack of seven
+booleans over this sculpt re-evaluated on every depsgraph touch and crashed
+Blender three times. The script is the non-destructive layer — move a number
+in `S`, re-run, and the head regenerates from `HEAD_REF`. The cutters stay
+in `STYLE_cutters` as the visible record of every opening.
 
 The licence note in `head_ref.py` covers the copy too: the mesh never leaves
 the machine and never goes near the MCP generative tools.
 
-Still open, deliberately: the fuller brow band, ring bezels, panel seams and
-the face/cranium split line, and everything neck. Those are sculpting
-sessions with the fit collection as the ruler, not parameters to guess today.
+Still open, deliberately: the segmented helmet cranium panels the visor band
+starts, sockets remodelled to the design pitch, panel seams and the
+face/cranium split line, and everything neck. Those are sculpting sessions
+with the fit collection as the ruler, not parameters to guess today.
 
 ### Deliberately not built
 

@@ -15,22 +15,32 @@ What the three reference photos share, and what this pass builds:
                                                     mesh's sculpted 56
     - camera bore + ToF window in the forehead      boolean cuts onto the
                                                     forehead_casing row
+    - a visor band across the brow and temples      boolean UNION before the
+                                                    solidify, so it merges
+                                                    with the skin and shells
+                                                    hollow; swallows the
+                                                    stock casing the female
+                                                    scan could not, and is
+                                                    the first piece of the
+                                                    sci-fi helmet direction
 
-Everything is non-destructive: HEAD_CYBORG is a copy of HEAD_REF (the
-original is kept and hidden), the cuts are boolean modifiers whose cutter
-objects live in STYLE_cutters, so any opening can be moved, resized or
-toggled. Apply nothing until the shape is settled.
+HEAD_CYBORG is a copy of HEAD_REF (the original is kept and hidden). The
+cuts are built as a modifier stack and then BAKED to a plain mesh in the
+same run: a live stack of seven booleans over this sculpt crashed Blender
+repeatedly - the FLOAT eye cuts through the lid geometry re-evaluating on
+every depsgraph touch - and a saved file must not carry that landmine.
+Nothing is lost by baking: this script IS the non-destructive layer. Move a
+number in S, re-run, and the head regenerates from HEAD_REF. The cutter
+objects stay in STYLE_cutters, wireframed, as the visible record of where
+every opening is.
 
 The licence note in head_ref.py applies to the copy too: the mesh must not
 leave the machine and must never be fed to the MCP generative tools. Boolean
 cuts and modifiers are deterministic CAD and are fine.
 
 Still deliberately NOT done here, recorded as debts in fit_layout.py:
-    - the brow band needs to be fuller/flatter than the female scan so the
-      casing corners and camera board stop breaching the flanks (the
-      plated-face reference has exactly that flatter brow)
-    - ring bezels around the NeoPixels at pitch 62
-    - panel seams / face-cranium split lines
+    - eye sockets remodelled to the design pitch (the scan's sit at 56)
+    - panel seams / face-cranium split lines beyond the band's own crease
     - the neck: cables and mechanism wait for a neck design
 """
 
@@ -47,9 +57,21 @@ S = dict(
     wall        = 4.0,                  # docs/eye-design-brief.md head budget
     ear_port    = dict(y=95.0, z=204.0, dia=66.0),   # ear centroid, fit_layout
     rear_open   = dict(y0=12.0, y1=55.0, z0=162.0, z1=256.0, r=18.0),
-    eye         = dict(pitch=62.0, z=209.0, dia=24.0),  # ring ID is 23.368
+    eye         = dict(pitch=62.0, z=209.0, dia=30.0),  # iris stays visible at +-30 deg pan
     cam_bore    = dict(x=22.0, z=257.5, dia=16.0),   # lens barrel is 14.0
     tof_window  = dict(x=-32.0, z=257.0, w=24.0, h=28.0, r=3.0),
+    # The visor band: a designed volume unioned into the skin BEFORE the
+    # solidify, so it merges where it emerges and shells hollow like
+    # everything else - the intersection crease reads as a helmet seam. The
+    # casing stays completely stock (decided 13 Aug: parts keep their
+    # corners; styling does the work). The front face is a plan ARC, not a
+    # plane: a flat face sat behind the forehead's own bulge and read as
+    # inset glass with skin poking through it. The arc stands ~5 proud at
+    # centre (skin 195.2) and still covers the casing corners at +-48 with
+    # margin (arc y=177.4 there, needs 171). First element of the
+    # sci-fi-helmet direction; the segmented cranium panels come next.
+    brow        = dict(x_half=56.0, y_back=150.0, y_front=200.0, y_end=165.0,
+                       z0=228.0, z1=296.0),
 )
 
 SHELL_RGBA = (0.82, 0.79, 0.74, 1.0)
@@ -137,6 +159,32 @@ def rrect_box(name, coll, mat, w, h, r, length, loc, plane='YZ'):
     return _obj(name, bm, coll, mat)
 
 
+def arc_band(name, coll, mat, x_half, y_back, y_front, y_end, z0, z1,
+             segs=32):
+    """Visor slab: plan profile is an arc front (through (0, y_front) and
+    (+-x_half, y_end)) closed by a straight back edge at y_back, extruded
+    z0..z1."""
+    yc = (y_front ** 2 - y_end ** 2 - x_half ** 2) / (2.0 * (y_front - y_end))
+    r = y_front - yc
+    a_end = math.asin(x_half / r)
+    pts = []
+    for i in range(segs + 1):
+        a = -a_end + 2.0 * a_end * i / segs
+        pts.append((r * math.sin(a), yc + r * math.cos(a)))
+    pts.append((x_half, y_back))
+    pts.append((-x_half, y_back))
+    bm = bmesh.new()
+    bot = [bm.verts.new((x, y, z0)) for (x, y) in pts]
+    top = [bm.verts.new((x, y, z1)) for (x, y) in pts]
+    n = len(pts)
+    for i in range(n):
+        j = (i + 1) % n
+        bm.faces.new((bot[i], bot[j], top[j], top[i]))
+    bm.faces.new(bot[::-1])
+    bm.faces.new(top)
+    return _obj(name, bm, coll, mat)
+
+
 def _copy_head_drop_eyeballs(coll, mat_shell, mat_dark):
     """Copy HEAD_REF, delete its two sculpted-eyeball islands (our eyes sit at
     pitch 62; the sculpted pair at 56 would poke through the proxies)."""
@@ -206,7 +254,17 @@ def build():
                     tw["w"], tw["h"], tw["r"], 60.0, (tw["x"], 175.0, tw["z"]),
                     'XZ')
 
-    # ---- modifier stack: shell first, then the cuts ----
+    # ---- modifier stack: brow union onto the raw skin, then the shell,
+    # then the cuts ----
+    bb = S["brow"]
+    band = arc_band("STYLE_visor_band", cuts, mat_shell,
+                    bb["x_half"], bb["y_back"], bb["y_front"], bb["y_end"],
+                    bb["z0"], bb["z1"])
+    ub = head.modifiers.new("VisorBand", 'BOOLEAN')
+    ub.operation = 'UNION'
+    ub.solver = 'EXACT'
+    ub.object = band
+
     sol = head.modifiers.new("Shell", 'SOLIDIFY')
     sol.thickness = S["wall"]
     sol.offset = -1.0                 # inward: the outer surface stays the face
@@ -231,6 +289,26 @@ def build():
         c.display_type = 'WIRE'
         c.hide_render = True
     cuts.hide_viewport = True
+
+    # ---- bake: one evaluation, then a plain mesh ----
+    # The one heavy moment. After this there is nothing live left to
+    # re-evaluate, and the saved file is dumb data.
+    dg = bpy.context.evaluated_depsgraph_get()
+    ev = head.evaluated_get(dg)
+    baked = bpy.data.meshes.new_from_object(
+        ev, preserve_all_data_layers=True, depsgraph=dg)
+    baked.name = "HEAD_CYBORG_baked"
+    old = head.data
+    head.modifiers.clear()
+    head.data = baked
+    bpy.data.meshes.remove(old)
+
+    # smooth shading, hard edges kept by angle so the port bores and the
+    # visor seam stay crisp
+    baked.polygons.foreach_set("use_smooth", [True] * len(baked.polygons))
+    if hasattr(baked, "set_sharp_from_angle"):
+        baked.set_sharp_from_angle(angle=math.radians(40.0))
+    baked.update()
 
     # the raw reference stays but gets out of the way
     bpy.data.objects[SRC].hide_set(True)

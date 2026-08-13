@@ -30,9 +30,12 @@ y=209 z=177, nasion z=213, ear centroid y=91-102 z=202-205, eye-zone shell
 front y=179.3):
 
     eye line      z=209, just below the nasion at 213
-    eye centres   (+-31, 160, 209): pitch 62 from P["eye_pitch"], depth so the
-                  NeoPixel ring's front face (eye centre +19.2) sits at 179.2,
-                  flush with the 179.3 shell front over the eyes
+    eye centres   (+-31, 160, 209): pitch 62 from P["eye_pitch"]. The glow
+                  comes from a pixel INSIDE each eyeball (13 Aug decision),
+                  through a translucent printed iris - nothing static sits
+                  in front of the eye at all
+    ear rings     the NeoPixel rings (shipping) live behind the ear ports as
+                  accent rings around the speaker grilles, back face |x|=56
     casing        upright, boards facing +Y, front face y=167, aperture row
                   z=257.5. Bottom edge z=225 clears the eyeball tops (an
                   eyeball point forward of y=167 exists only below z=223.4)
@@ -63,7 +66,12 @@ L = dict(
     ring_od      = 36.830,   # Adafruit .brd, exact
     ring_id      = 23.368,
     ring_t       = 6.7,
-    ring_fwd     = 12.5,     # ring BACK face this far forward of eye centre
+    earring_x    = 56.0,     # ring back face; front at 62.7, ~6 recessed
+                             # behind the Ø66 port mouth. Its rim crosses the
+                             # raw skin below the ear, but every such point
+                             # is inside the port bore (ring r 18.4 vs port
+                             # r 33, concentric), so on the styled head it
+                             # lives in the opening - see EXPECTED_OUT
 
     casing_y     = 162.0,    # back face; plate 5 thick -> front face 167
     casing_z     = 254.0,    # plate centre; spans z 225..283, row at 257.5
@@ -77,7 +85,8 @@ L = dict(
     pca_z        = 230.0,    # spans z 209..251
 
     spk_wall_x   = 54.5,     # module outer face at mid-height; dome peaks 75
-                             # at the ear but closes to ~52 by the module ends
+                             # at the ear but closes to ~52 by the module
+                             # ends, and the ear ring wants x 56..62.7 clear
     spk_y        = 97.0,     # behind ear centroid y~95
     spk_z        = 210.0,
     spk_roll     = 12.0,     # deg, top leans outboard to follow the wall
@@ -121,9 +130,20 @@ def _coll():
     return c
 
 
+def _smooth(me, angle=40.0):
+    """Smooth shading with hard edges kept by angle - printed parts stay
+    crisp, curved faces stop showing facets."""
+    me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
+    if hasattr(me, "set_sharp_from_angle"):
+        me.set_sharp_from_angle(angle=math.radians(angle))
+    me.update()
+
+
 def _link(coll, ob, color):
     coll.objects.link(ob)
     ob.color = color
+    if ob.type == 'MESH':
+        _smooth(ob.data)
     return ob
 
 
@@ -207,8 +227,18 @@ def build():
     for sx, side in ((-1, "L"), (1, "R")):          # Humalien's left = -X
         x = sx * L["eye_pitch"] / 2
         sphere(coll, "PROXY_eyeball_%s" % side, L["eyeball_dia"], (x, ey, ez))
-        annulus(coll, "PROXY_neopixel_%s" % side, L["ring_od"], L["ring_id"],
-                L["ring_t"], (x, ey + L["ring_fwd"], ez))
+        # the glow source: an addressable 5050 pixel INSIDE the eyeball,
+        # aimed at a translucent printed iris. Carrier board unbought and
+        # unmeasured, hence LISTING
+        box(coll, "PROXY_eye_led_%s_LISTING" % side, (8.0, 3.0, 8.0),
+            (x, ey - 4.0, ez))
+        # the rings (already shipping) become accent rings in the ear ports,
+        # framing the speaker grille - and the WS2812 bench-test article
+        # before any wire is threaded through an eyeball
+        ring = annulus(coll, "PROXY_neopixel_ear_%s" % side, L["ring_od"],
+                       L["ring_id"], L["ring_t"],
+                       (sx * L["earring_x"], L["ear_port"][0], L["ear_port"][1]))
+        ring.rotation_euler = (0, 0, math.radians(-sx * 90))
 
     # Pi 5 board on its tray standoffs (tray plate 3 + standoff 5)
     bz = L["tray_z"] + 3.0 + 5.0 + PI5["t"] / 2
@@ -258,7 +288,8 @@ def build():
 def report():
     print("FIT_Assembly placements (all provisional, slotted fixings exist for a reason):")
     rows = [
-        ("eyeballs Ø32", "(+-31, 160, 209)", "ring front flush with shell front 179.3"),
+        ("eyeballs Ø32 + pixel", "(+-31, 160, 209)", "glow from inside; nothing in front of the eye"),
+        ("NeoPixel rings", "ear ports, back face |x|=56", "accents framing the speaker grilles"),
         ("forehead_casing", "y 162..167, z 225..283", "row z=257.5, cam +22 / ToF -32"),
         ("pi5_tray", "y 43.5..136.5, z 256..259", "board top 265.6, hat ~282"),
         ("pca9685_mount", "y 42..50, z 209..251", "against rear wall"),
@@ -276,19 +307,20 @@ def report():
 # first, both because parity through them misleads and because those sockets
 # are exactly what the styling pass remodels.
 #
-# Breaches listed in STYLING_DEBT are expected: places where the head must be
-# remodelled to serve the parts (docs/eye-design-brief.md - "the head serves
-# the parts, not the other way round"). Anything else poking out is a layout
-# bug in this file.
+# Breaches listed in EXPECTED_OUT are fine for a recorded reason: either the
+# head gets remodelled to serve the part (docs/eye-design-brief.md - "the
+# head serves the parts, not the other way round"), or the part lives inside
+# an opening the styled head cuts, where a raw-skin check has no meaning.
+# Anything else poking out is a layout bug in this file.
 # ---------------------------------------------------------------------------
-STYLING_DEBT = {
+EXPECTED_OUT = {
     "PROXY_eyeball_L": "design pitch 62 vs sculpted sockets at 56: sockets move outboard",
     "PROXY_eyeball_R": "design pitch 62 vs sculpted sockets at 56: sockets move outboard",
-    "PROXY_neopixel_L": "flat ring vs curved socket: styled face needs a bezel around it",
-    "PROXY_neopixel_R": "flat ring vs curved socket: styled face needs a bezel around it",
-    "FIT_forehead_casing": "brow flanks |x|>40 z>265: styled brow band must be fuller/flatter",
-    "PROXY_b0385_board": "same brow-flank issue as the casing corners",
-    "PROXY_vl53l1x_board": "same brow-flank issue as the casing corners",
+    "FIT_forehead_casing": "brow-flank breach, swallowed by the styled visor band",
+    "PROXY_b0385_board": "camera board corner, swallowed by the styled visor band",
+    "PROXY_vl53l1x_board": "ToF board corner, swallowed by the styled visor band",
+    "PROXY_neopixel_ear_L": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
+    "PROXY_neopixel_ear_R": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
 }
 
 
@@ -352,7 +384,7 @@ def verify():
         ob.evaluated_get(dg).to_mesh_clear()
         if n_out == 0:
             continue
-        debt = STYLING_DEBT.get(ob.name)
+        debt = EXPECTED_OUT.get(ob.name)
         tag = "expected - " + debt if debt else "LAYOUT BUG"
         if not debt:
             clean = False

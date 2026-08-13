@@ -53,12 +53,22 @@ which looks near-identical in listings — cheaper, faster, better in low light,
 and useless here, since "what colour is the object in my hand" is a question
 Humalien is expected to answer. Check the listing says OV9782.
 
+## Ordered — eye glow
+
+Two NeoPixel Ring 12s, shipping as of 13 Aug. The plan they were bought for
+changed the same day — see the design brief: the eye glow now comes from a
+5050 pixel *inside* each printed eyeball, and the rings frame the speaker
+grilles in the ear ports instead. They are also the bench-test article for
+driving WS2812 from the Pi 5 before any wire crosses an eye joint.
+
 ## Next to buy
 
 | Part | Why |
 | --- | --- |
 | M12 lens with IR-cut filter | The B0385 stock lens has none, so colours skew towards IR |
 | Qwiic-to-header adapter | To put the SHT41 and the VL53L1X on the same bus |
+| 2 × addressable 5050 mini pixel | One inside each eyeball — the glow-from-within |
+| 74AHCT125 level shifter | 3.3 V data into 5 V WS2812 — skip if it was in the ring order |
 
 ## Buy when the price is sane
 
