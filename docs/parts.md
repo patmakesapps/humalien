@@ -39,8 +39,14 @@ only soldering in this build is the PCA9685's own pin headers.
 slowly won't spike enough to matter, so printing, soldering and a first sweep can
 all happen before it arrives. Fit it before running all six together.
 
-Optional: a roll of **63/37 leaded solder**. The YIHUA kit ships lead-free,
-which needs more heat and flows worse — noticeably harder to learn on.
+**Soldering lead-free**, which is what the YIHUA kit ships with. Run the iron at
+350–370 °C, keep the tip tinned, and heat the pad and pin together for about two
+seconds before feeding solder into the joint rather than onto the iron. Lead-free
+joints look dull and slightly grainy — that is normal and not a cold joint. Judge
+by shape: a concave cone hugging the pin, not a ball sitting on top.
+
+Solder the **spare** PCA9685 first. The 2-pack means the first attempt costs
+nothing.
 
 The camera is **B0385, not B0332**. B0332 is the OV9281 *monochrome* sensor,
 which looks near-identical in listings — cheaper, faster, better in low light,
@@ -52,7 +58,7 @@ Humalien is expected to answer. Check the listing says OV9782.
 | Part | Why |
 | --- | --- |
 | M12 lens with IR-cut filter | The B0385 stock lens has none, so colours skew towards IR |
-| 63/37 leaded solder | Optional. The YIHUA kit ships lead-free, which is harder to learn on |
+| Qwiic-to-header adapter | To put the SHT41 and the VL53L1X on the same bus |
 
 ## Buy when the price is sane
 
@@ -130,9 +136,9 @@ ground.
 - **The WM8960 is a small amplifier.** 5 W speakers on it will be safe but
   quiet. If Humalien cannot be heard across a room, the amp is the limit, not
   the speakers.
-- **Jetson pricing.** Reseller bundles run three times MSRP. A $769 kit
-  including an SSD, WiFi card and power supply is still worse than $249 plus a
-  $30 SSD, unless it is the only stock available.
+- **Jetson pricing.** Reseller bundles run close to twice NVIDIA's own $399. A
+  $769 kit including an SSD, WiFi card and power supply is still worse than $399
+  plus a $30 SSD, unless it is the only stock available.
 - **X1200 and the audio hat both want the GPIO header.** Confirm the stacking
   order works before assuming both fit.
 - **Head weight** decides neck servos, so do not order those until a dummy mass
