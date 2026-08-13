@@ -140,6 +140,16 @@ The +0.6 is not an assumption bolted on afterwards — it is the only clearance
 that makes *both* axes land on round numbers, and the pair it produces matches
 one of the two competing listings exactly. **The 26 mm listings are wrong.**
 
+> **What is and is not trustworthy in that source.** In the LumaBot model the
+> **hole depths and sizes are known to be wrong**; the **dimensions are
+> correct**. Everything taken above is slot geometry — groove faces, groove
+> depth, groove thickness, groove height — and not a single screw hole, so it
+> all sits on the trustworthy side of that line. Its fastener schedule (Ø3.38
+> clearance, Ø2.59 and Ø2.49 pilots, 6.5 and 10 mm deep) was **not** used
+> anywhere; the M3 fixings on these parts are our own slotted holes. Worth
+> writing down, because the next person to open that file for reference needs
+> to know which half of it to believe.
+
 The holder also answers a question the brief never asked: it uses **no screws**.
 The board slides into a slot. That is why the hole positions never mattered, and
 it is the better answer inside an eyeball anyway, where every gram sits on a
@@ -773,9 +783,15 @@ isolation*, not an acoustic box.
 
 Dimensions are unmeasured and nothing is built to them yet.
 
-Two placements under consideration: **behind the mouth**, or **one behind each
-ear**. There is a real acoustic argument between them, and one constraint that
-decides more than either:
+**Decided: one behind each ear.** It puts the drivers out at the sides, furthest
+from a centre-mounted mic pair, and closest to where a head actually radiates
+sound. The alternative — behind the mouth — is better for the illusion, because
+the voice would appear to come from the mouth, but it is worse for echo and it
+puts a vibrating enclosure in the most crowded part of the skull. Behind the
+ears also gives each module its own pocket in a region with nothing else
+competing for space.
+
+The constraint that decided it, and which is worth keeping in view:
 
 > **The microphones are on the WM8960 hat**, which is bolted to the Pi. So mic
 > position is not a free choice — it is wherever the Pi goes.
@@ -785,11 +801,10 @@ decides more than either:
 > rearward in the cranium — which is also exactly where the open-cranium
 > references put visible mechanism.
 
-Behind the ears puts the drivers out to the sides, furthest from a
-centre-mounted mic pair and closest to where a head actually radiates sound.
-Behind the mouth is acoustically worse for echo but far better for the illusion,
-because the voice appears to come from the mouth. That trade gets decided
-against a real measurement of speaker-to-mic distance, not from a diagram.
+What is still needed before a cradle can be drawn: **length, height and depth of
+one module, and the flange hole spacing.** A ruler to ±1 mm is plenty for
+packaging — this does not need the coupon treatment, because the module is a
+sealed box being bolted down rather than a bare board being located.
 
 ### Deliberately not built
 
