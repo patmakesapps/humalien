@@ -30,9 +30,10 @@ Everything needed to make eyes move. Order `111-1528335-1842633`, placed
 | Camera | Arducam **B0385** / OV9782, Amazon `B0CLXZ29F9` | $64.99 |
 | Soldering station | YIHUA 926 III, 60 W, with helping hands — bought separately | $39.99 |
 
-Jumper wires already on hand. The ALITOVE supply should include a small green
-screw-terminal adapter for the barrel plug; if it doesn't, a "female barrel jack
-to screw terminal" pigtail is the missing link to the PCA9685's V+ terminal.
+Jumper wires already on hand. The ALITOVE supply (`B078RT3ZPS`) ships with a
+green female barrel-jack-to-screw-terminal adapter, so the power rail needs no
+soldering: barrel plug → screw terminal → two wires → PCA9685 V+ / GND. The
+only soldering in this build is the PCA9685's own pin headers.
 
 **The capacitor is not a blocker for first movement.** One or two servos moving
 slowly won't spike enough to matter, so printing, soldering and a first sweep can
