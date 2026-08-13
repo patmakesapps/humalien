@@ -24,6 +24,16 @@ brain/models/
 reference/**/*.3mf
 reference/**/*.stl
 reference/**/*.step
+reference/**/*.obj
+reference/**/*.mtl
+reference/**/*.fbx
+reference/**/*.blend
+
+# The head mesh is royalty-free under a No AI licence: free to use in the
+# build, not free to redistribute, and never to be fed to a generative 3D
+# tool. It stays out of git entirely — cad/head_ref.py reproduces the
+# import and scaling from wherever you keep the file locally.
+**/female_human_head.*
 
 # Editors / OS
 .vscode/

@@ -28,9 +28,10 @@ from mathutils import Matrix
 # Source confidence. The brief's step two: unverified dimensions get slop.
 # ---------------------------------------------------------------------------
 # "exact"    - read out of the manufacturer's own CAD/board file
+# "proven"   - measured off a holder that already works with the real part
 # "drawing"  - read off the manufacturer's mechanical drawing
 # "listing"  - only ever found in a shop listing or a forum. Gets lowconf_pad.
-CONF_PAD = {"exact": 0.0, "drawing": 0.0, "listing": 1.0}
+CONF_PAD = {"exact": 0.0, "proven": 0.0, "drawing": 0.0, "listing": 1.0}
 
 P = dict(
     # ---------------- print / tolerance policy ----------------
@@ -109,14 +110,27 @@ BOARDS = dict(
     ),
     vl53l1x = dict(
         label   = "VL53L1X",
-        conf    = "listing",        # CQRobot's wiki and product page are both 404.
-        w       = 28.5,             # two listings disagree; both are carried
-        w_alt   = 26.0,
+        # Was `listing` and the weakest row in the design: CQRobot's wiki and
+        # product page are both 404 and the surviving listings disagreed,
+        # 28.5x23 against 26x23. Settled by measuring a CQRobot holder already
+        # in service on two robots - LumaBot V2, 04_distance_sensor_mount.
+        # Its retention slot is 23.600 x 29.100 x 2.100. At the +0.6 fit that
+        # mount uses on both axes that is a 23.0 x 28.5 x 1.6 board, which is
+        # two round numbers landing on one of the two competing listings. The
+        # 26 mm listings are wrong.
+        conf    = "proven",
+        w       = 28.5,
         d       = 23.0,
         t       = 1.60,
         corner_r= 1.5,
         hole_d  = 3.00,
-        # hole POSITIONS are unknown. coupon_vl53l1x exists to find them.
+        # Hole POSITIONS remain unknown - and no longer matter. The proven
+        # holder does not use them: it retains the board in a slot, no screws.
+        # That is the better answer inside an eyeball anyway, where every gram
+        # sits on a lever arm the servo has to accelerate.
+        slot_w  = 23.600,           # measured, groove face to groove face
+        slot_h  = 29.100,           # measured, groove z span
+        slot_t  = 2.100,            # measured, PCB groove thickness
     ),
 )
 
@@ -394,31 +408,40 @@ def coupon_b0385(loc=(0, 0, 0)):
 
 
 def coupon_vl53l1x(loc=(0, 0, 0)):
-    """Two candidate outlines side by side. CQRobot's own wiki and product page
-    are both 404, and the surviving listings disagree: 28.5x23 vs 26x23. This
-    coupon settles it, and finds the hole positions, which no source gives."""
+    """Slot-fit coupon for the VL53L1X.
+
+    The board size is no longer in question - see BOARDS. What is still open is
+    whether the *proven* 2.100 mm groove reproduces on this printer in this
+    material, because a groove that small is exactly where over-extrusion and
+    elephant's foot show up. So this carries three: the proven 2.100, one
+    tighter, one looser.
+
+    Retention is a slot rather than screws, copying the holder that works. That
+    is also the right call for an eyeball - no fasteners, no boss, and nothing
+    on the lever arm the servo has to accelerate."""
     b = BOARDS["vl53l1x"]
-    t = P["coupon_t"]
-    c = P["board_clear"]
-    aw, ad = b["w"] + 2 * c, b["d"] + 2 * c          # 28.5 candidate
-    bw, bd = b["w_alt"] + 2 * c, b["d"] + 2 * c      # 26.0 candidate
-    gap = 8.0
-    W = aw + bw + gap + 12
-    D = ad + 14
+    trials = [("A", b["slot_t"] - 0.15), ("B", b["slot_t"]), ("C", b["slot_t"] + 0.15)]
+    depth = 12.0
+    t = depth + 3.0            # 3 mm of floor under the slot
+    D = 16.0
+    cell = b["slot_w"] + 8.0
+    W = cell * len(trials) + 6.0
     ob = plate("coupon_vl53l1x", W, D, t, 3.0, (0, 0, t / 2))
     top = t
-    xa = -(aw + gap) / 2.0
-    xb = (bw + gap) / 2.0
-    cuts = [
-        prism("_pa", rrect_pts(aw, ad, b["corner_r"] + c), 2.0, (xa, 0, top)),
-        prism("_pb", rrect_pts(bw, bd, b["corner_r"] + c), 2.0, (xb, 0, top)),
-    ]
+    slot_y = 3.5               # slot sits back, leaving the front of the face for labels
+    cuts = []
+    xs = []
+    for i, (letter, th) in enumerate(trials):
+        x = -W / 2 + 3.0 + cell * (i + 0.5)
+        xs.append((x, letter, th))
+        cuts.append(prism("_sl", rrect_pts(b["slot_w"], th, 0.4),
+                          depth * 2.0, (x, slot_y, top)))
     ob = cut(ob, cuts)
-    ob = scribe_rect(ob, b["w"], b["d"], b["corner_r"], top, (xa, 0))
-    ob = scribe_rect(ob, b["w_alt"], b["d"], b["corner_r"], top, (xb, 0))
-    ob = engrave(ob, "28.5", 3.2, top, (xa, -ad / 2 - 3.6))
-    ob = engrave(ob, "26.0", 3.2, top, (xb, -ad / 2 - 3.6))
-    ob = engrave(ob, "VL53L1X  mark hole centres", 2.8, top, (0, D / 2 - 3.6))
+    for (x, letter, th) in xs:
+        ob = engrave(ob, letter, 5.0, top, (x, -4.6))
+        ob = engrave(ob, "%.2f" % th, 2.4, top, (x, -0.6))
+    ob = engrave(ob, "VL53L1X 23.0x28.5x1.6  slot %.1f wide" % b["slot_w"],
+                 2.4, top, (0, D / 2 - 2.2))
     return ob
 
 

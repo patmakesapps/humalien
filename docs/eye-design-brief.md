@@ -97,21 +97,65 @@ normal for this part — there are many imitation MG90S.
 The tab hole pitch is the one number no source gives, and it is the number a
 mounting plate is made of. `coupon_mg90s` measures it.
 
-**CQRobot VL53L1X — `listing`, and this is the weak point.** CQRobot's product
-wiki and their product page both return **404** — their site has moved or the
-SKU is gone. No manufacturer drawing exists that could be found. Surviving
-listings disagree with each other:
+**CQRobot VL53L1X — `proven`. Was the weak point; now the best-sourced row in
+the table.** CQRobot's product wiki and product page both return **404**, and
+the surviving listings disagreed with each other — 28.5 × 23 against 26 × 23,
+with hole positions stated nowhere.
 
-| Source | Board size |
+It was settled by measuring a CQRobot holder **already in service on two
+robots**: `04_distance_sensor_mount` from LumaBot V2. A part that has held the
+real board twice beats every datasheet that does not exist.
+
+| Dimension | Value | How |
+| --- | --- | --- |
+| Retention slot, width | 23.600 mm | measured, groove face to groove face |
+| Retention slot, height | 29.100 mm | measured, groove z span |
+| Retention slot, thickness | 2.100 mm | measured, PCB groove |
+| **Board** | **23.0 × 28.5 × 1.6 mm** | slot minus the +0.6 fit that mount uses on both axes |
+
+The +0.6 is not an assumption bolted on afterwards — it is the only clearance
+that makes *both* axes land on round numbers, and the pair it produces matches
+one of the two competing listings exactly. **The 26 mm listings are wrong.**
+
+The holder also answers a question the brief never asked: it uses **no screws**.
+The board slides into a slot. That is why the hole positions never mattered, and
+it is the better answer inside an eyeball anyway, where every gram sits on a
+lever arm a 2.2 kg·cm servo has to accelerate.
+
+`coupon_vl53l1x` changed job accordingly. It no longer asks which outline is
+real. It carries three slots — the proven 2.100 plus 1.95 and 2.25 — because a
+2.1 mm groove is exactly where over-extrusion and elephant's foot show up, and
+that mount was not printed on this machine in this material.
+
+ST's own VL53L1X datasheet still could not be retrieved — `st.com` timed out
+repeatedly. Nothing depends on it.
+
+### The eyeball cannot contain this board
+
+Worth stating on its own, because it kills an assumption the whole design was
+resting on.
+
+The board is 28.5 × 23.0 mm. Its **diagonal is 36.6 mm**. Cogley's eyeball is
+**Ø32**. A rectangle cannot fit inside a sphere smaller than its own diagonal at
+any depth or angle, so the CQRobot board does not fit inside a Ø32 eyeball —
+not tightly, not at all. Enclosing it needs Ø36.6 internal, so about **Ø41**
+once the eyeball has walls. That is nearly twice a human eyeball and well past
+what an MG90S will move convincingly on a lever arm.
+
+So one of these has to give, and it is a decision rather than a calculation:
+
+| Option | Cost |
 | --- | --- |
-| [Amazon listing B07F3TV3G4](https://www.amazon.com/CQRobot-Ocean-Time-Flight-Compatible/dp/B07F3TV3G4) | 28.5 × 23 mm |
-| Several reseller listings | 26 × 23 mm |
-| Both | Ø3.0 mm through holes, positions never stated |
+| **Bare-module carrier** — a Pololu-class [VL53L1X carrier](https://www.pololu.com/product/3415) is 12.7 × 8.9 mm and drops into Ø32 with room to spare | ~$12 and a part order. Kills the problem outright |
+| **Ø41 eyeball** | Stops reading as an eye, and puts real mass on the servo |
+| **Sensor out of the eye** — into the forehead beside the camera | Loses "distance to what it is looking at", which was the whole point of the left eye |
 
-Mounting hole **positions** are not given anywhere at all. So this board gets
-the full listing treatment: +1 mm per side in the model, flagged low-confidence,
-and `coupon_vl53l1x` carries **both** candidate outlines side by side so one
-print settles which is real and lets the hole centres be marked directly.
+The bare carrier is the recommendation, and [hardware.md](hardware.md) already
+anticipated the swap. Note the CQRobot board is not wasted either way — it is
+the right size to sit in the forehead or the chest.
+
+**None of this blocks the structural work**, which is why the eyeball still is
+not modelled.
 
 ST's own VL53L1X datasheet could not be retrieved — `st.com` timed out
 repeatedly. The module package is widely quoted as 4.9 × 2.5 × 1.56 mm, but
@@ -357,7 +401,7 @@ board has been offered up to the real board.
 | --- | --- | --- | --- | --- |
 | `coupon_pca9685` | 1 | 76 × 39 × 2.4 | 5.5 cm³ | Ø2.5 holes at true 55.88 × 19.05, pocket at +0.5/side, nominal outline scribed |
 | `coupon_b0385` | 1 | 52 × 52 × 2.4 | 4.4 cm³ | both hole patterns, 34 × 34 and 28 × 28, plus the lens aperture |
-| `coupon_vl53l1x` | 1 | 76 × 38 × 2.4 | 5.6 cm³ | **both** candidate outlines side by side, labelled 28.5 and 26.0 |
+| `coupon_vl53l1x` | 1 | 101 × 16 × 15 | 8.9 cm³ | three retention slots — the proven 2.100 plus 1.95 and 2.25 |
 | `coupon_mg90s` | 1 | 132 × 32 × 6 | 17.7 cm³ | four trial pockets A–D at +0.20/+0.45/+0.70/+0.95 per side; C also carries tab holes at the assumed 28.0 pitch |
 | `camera_boss` | 1 | 61 × 43 × 5 | 8.9 cm³ | forehead mount for the B0385 |
 | `pca9685_mount` | 1 | 78 × 41 × 6.5 | 9.6 cm³ | driver board plate with standoffs |
@@ -431,6 +475,38 @@ The rest:
   between them touches anything.
 - **Terminates** at the audio hat's I²C pass-through header, alongside the SHT41
   and the MSA311. `0x29`, no conflicts — see [parts.md](parts.md).
+
+### The head
+
+A royalty-free female bust mesh is the starting point for the skull, matched to
+the cyborg references in `reference photos/` — human face shell, mechanical
+cranium, the circular port at the temple, cabling at the neck.
+
+`cad/head_ref.py` imports and scales it. The mesh itself is **not in this repo
+and must not be**: its licence is royalty-free **No AI**, which permits using it
+in the build but not redistributing it, and explicitly forbids feeding it to
+generative 3D tools — worth knowing because the Blender MCP server exposes
+Hyper3D, Rodin and Hunyuan generators. Importing, measuring and cutting it is
+deterministic CAD and is fine. The script keeps the *result* reproducible
+without the asset ever entering git.
+
+The source is Y-up and Z-forward and lying on its back, which no importer preset
+maps correctly, so the script does the reorientation itself. It then finds the
+neck by looking for the narrowest horizontal band between the shoulders and the
+head, and scales on **head breadth = 150 mm** — the cleanest of the three
+anthropometric anchors, since height depends on where you call the chin and
+depth on where you call the occiput.
+
+| | Scaled | Real adult |
+| --- | --- | --- |
+| Head breadth | 150.0 mm | 145–152 |
+| Head depth | 184.7 mm | ~195 |
+| Neck cut to crown | 211.5 mm | — |
+
+**The head fits the A1 whole.** 150 × 185 × 211 against a 256 mm cube. That
+softens [hardware.md](hardware.md)'s assumption that a head must be split with
+alignment pins — splitting becomes a choice about surface finish, support and
+where a skin seam can hide, rather than a limit imposed by the printer.
 
 ### Deliberately not built
 
