@@ -280,8 +280,8 @@ established, and a through slot serves the cable either way.
 > goes **behind each Ø66 ear port**, framing the speaker grille as the
 > reference photos' glowing hub, and they are the bench-test article for the
 > Pi 5 WS2812 chain before any wire is threaded through an eyeball. The
-> ring-bezel styling debt dies with the move; the eye openings become plain
-> Ø30 circles. To buy: two 5050 mini pixels, a couple of dollars. Everything
+> ring-bezel styling debt dies with the move; the eye openings become smooth
+> Ø41 circles. To buy: two 5050 mini pixels, a couple of dollars. Everything
 > below stands as the record of the ring design and its numbers, which the
 > ear ports now use.
 
@@ -841,8 +841,8 @@ them.
 | What | Where (x, y, z in head frame) | Note |
 | --- | --- | --- |
 | Eyeballs Ø32 | (±31, 160, 209) | pitch 62 from `P`, pupil line just below the nasion at 213 |
-| Eye pixel | inside each eyeball | 5050 addressable, aimed at the translucent iris; LISTING until bought |
-| NeoPixel rings | ear ports, back face &#124;x&#124;=56 | concentric in the Ø66 bore, framing the speaker grilles |
+| Eye pixel | inside each eyeball | 5050 addressable behind a Ø12 translucent iris window; LISTING until bought |
+| Ear hub + ring | in the Ø66 ports, face &#124;x&#124;~63 | hub is a TBD printed part (ring seat + speaker grille); ring recessed in its face |
 | `forehead_casing` | upright, boards forward, y 162..167, z 225..283 | aperture row z=257.5; camera at x=+22, ToF at −32; bottom edge clears the eyeball tops by 1.6 |
 | `pi5_tray` | flat, long axis fore-aft, y 43.5..136.5, plate z 256..259 | Pi board top 265.6, hat stack ~282, rear corner 3.5 clear of the dome |
 | `pca9685_mount` | upright on the rear wall, y 42..50, z 209..251 | the wall bows 13 mm across the plate — the skull prints bosses under the slots |
@@ -874,37 +874,54 @@ them.
   the whole electronics stack with the mic hat exactly where hardware.md
   wanted it — high and rearward.
 
-### Styling begun — 13 Aug 2026
+### Styling — 13 Aug 2026, where it settled
 
-`cad/head_style.py`. Builds `STYLE_Head`: `HEAD_CYBORG` is a copy of
+`cad/head_style.py`. Builds `STYLE_Head`: `HEAD_CYBORG` is a cleaned copy of
 `HEAD_REF` (the original stays, hidden) carrying the reads all three
 reference photos share: a 4 mm shell, Ø66 circular ports swallowing the
 sculpted ears (centred on the measured ear centroid, y=95 z=204) with the
-NeoPixel rings recessed inside them, the open rear cranium (y 12..55,
-z 162..256, rounded), Ø30 eye openings at the *design* pitch 62, the camera
-bore + ToF window, and a **visor band** across the brow and temples — the
-first piece of the sci-fi-helmet direction chosen 13 Aug. The band's front
-face is a plan arc, not a plane: a flat face sat behind the forehead's own
-bulge and read as inset glass. It stands ~5 mm proud at centre and swallows
-the *stock* casing — the corner-chamfer rev was considered and reverted;
-parts stay untouched and the styling does the work.
+ear-hub module recessed inside — a dark disc seating the glowing NeoPixel
+ring, the TBD printed part — the open rear cranium (y 12..55, z 162..256,
+rounded), smooth Ø41 eye sockets at the *design* pitch 62, and the camera
+bore + ToF window on the casing row.
 
-Two build lessons are encoded in the script. The eye cuts run Blender's
+**No added volumes.** A visor/helmet band was built here and withdrawn the
+same day, on re-reading the references: every one of them keeps a smooth
+human silhouette and gets its cyborg from seams, hubs and openings — never
+from volume bolted onto the skull. The consequence is honest: the casing's
+top corners vs the brow flanks are an **open debt**. Both candidate fixes
+are parameterized and off — the part-corner chamfer (written and reverted
+twice; the part stays stock) and a subtle normal-direction flank swell
+(`S["swell"]`, parked at amp=0 because nobody asked for added volume).
+
+The copy step cleans the sculpt before any cut: the two eyeball islands go,
+the mouth-bag interior goes (685 hidden faces, found by testing whether a
+point just off each face's outward normal is still inside the closed skin),
+and every lid/lash face within r=19 of an eye axis goes — lash cards are
+zero-thickness strips that enclose no volume, so no boolean solver can
+remove them and they end up floating across the socket. Pre-deleting them
+lets the Ø41 cut land on simple surface and come out a clean circle.
+
+Three build lessons are encoded in the script. The eye cuts run Blender's
 FLOAT boolean solver, because EXACT resolves the solidified lid creases'
-self-intersections so badly it discards the whole shell. And the modifier
-stack is **baked to a plain mesh in the same run**: a live stack of seven
-booleans over this sculpt re-evaluated on every depsgraph touch and crashed
-Blender three times. The script is the non-destructive layer — move a number
-in `S`, re-run, and the head regenerates from `HEAD_REF`. The cutters stay
-in `STYLE_cutters` as the visible record of every opening.
+self-intersections so badly it discards the whole shell. The modifier stack
+is **baked to a plain mesh in the same run**: a live stack of seven booleans
+over this sculpt re-evaluated on every depsgraph touch and crashed Blender
+repeatedly. And **do not rebuild the HUMALIEN parts over the MCP bridge in a
+session that has the styled head in it** — `eye_mech.py`'s rebuild took
+Blender down twice this session; run part rebuilds in a fresh file or from
+Blender's own console. The script is the non-destructive layer — move a
+number in `S`, re-run, and the head regenerates from `HEAD_REF`. The
+cutters stay in `STYLE_cutters` as the visible record of every opening.
 
 The licence note in `head_ref.py` covers the copy too: the mesh never leaves
 the machine and never goes near the MCP generative tools.
 
-Still open, deliberately: the segmented helmet cranium panels the visor band
-starts, sockets remodelled to the design pitch, panel seams and the
-face/cranium split line, and everything neck. Those are sculpting sessions
-with the fit collection as the ruler, not parameters to guess today.
+Still open, deliberately: the brow-flank debt above, panel seams and the
+face/cranium split line, the ear hub as a real printed part (ring seat plus
+speaker grille — needs the ring and speaker measured together), and
+everything neck. Those are design sessions with the fit collection as the
+ruler, not parameters to guess today.
 
 ### Deliberately not built
 

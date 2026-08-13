@@ -15,14 +15,16 @@ What the three reference photos share, and what this pass builds:
                                                     mesh's sculpted 56
     - camera bore + ToF window in the forehead      boolean cuts onto the
                                                     forehead_casing row
-    - a visor band across the brow and temples      boolean UNION before the
-                                                    solidify, so it merges
-                                                    with the skin and shells
-                                                    hollow; swallows the
-                                                    stock casing the female
-                                                    scan could not, and is
-                                                    the first piece of the
-                                                    sci-fi helmet direction
+    - a smooth human silhouette, kept               NO added volumes. A visor
+                                                    band was tried and
+                                                    withdrawn: the refs get
+                                                    their cyborg from seams,
+                                                    hubs and openings. The
+                                                    casing corners vs the
+                                                    brow flanks stay an open
+                                                    debt - chamfer and swell
+                                                    both parameterized, both
+                                                    off, decision pending
 
 HEAD_CYBORG is a copy of HEAD_REF (the original is kept and hidden). The
 cuts are built as a modifier stack and then BAKED to a plain mesh in the
@@ -39,8 +41,8 @@ leave the machine and must never be fed to the MCP generative tools. Boolean
 cuts and modifiers are deterministic CAD and are fine.
 
 Still deliberately NOT done here, recorded as debts in fit_layout.py:
-    - eye sockets remodelled to the design pitch (the scan's sit at 56)
-    - panel seams / face-cranium split lines beyond the band's own crease
+    - panel seams and the face/cranium split lines the references show
+    - the ear hub as a real printed part (ring + speaker grille + mount)
     - the neck: cables and mechanism wait for a neck design
 """
 
@@ -57,21 +59,30 @@ S = dict(
     wall        = 4.0,                  # docs/eye-design-brief.md head budget
     ear_port    = dict(y=95.0, z=204.0, dia=66.0),   # ear centroid, fit_layout
     rear_open   = dict(y0=12.0, y1=55.0, z0=162.0, z1=256.0, r=18.0),
-    eye         = dict(pitch=62.0, z=209.0, dia=30.0),  # iris stays visible at +-30 deg pan
+    # Ø41 swallows the sculpt's ENTIRE eyelid structure per side, so the
+    # bore lands on clean single-surface skin. A Ø30 cut sliced through the
+    # four lid shells and left torn walls inside the opening - the "poor
+    # topology in eye sockets". The eyeball reads near-flush in a smooth
+    # circular opening, which is the white-shell reference's eye.
+    eye         = dict(pitch=62.0, z=209.0, dia=41.0),
     cam_bore    = dict(x=22.0, z=257.5, dia=16.0),   # lens barrel is 14.0
     tof_window  = dict(x=-32.0, z=257.0, w=24.0, h=28.0, r=3.0),
-    # The visor band: a designed volume unioned into the skin BEFORE the
-    # solidify, so it merges where it emerges and shells hollow like
-    # everything else - the intersection crease reads as a helmet seam. The
-    # casing stays completely stock (decided 13 Aug: parts keep their
-    # corners; styling does the work). The front face is a plan ARC, not a
-    # plane: a flat face sat behind the forehead's own bulge and read as
-    # inset glass with skin poking through it. The arc stands ~5 proud at
-    # centre (skin 195.2) and still covers the casing corners at +-48 with
-    # margin (arc y=177.4 there, needs 171). First element of the
-    # sci-fi-helmet direction; the segmented cranium panels come next.
-    brow        = dict(x_half=56.0, y_back=150.0, y_front=200.0, y_end=165.0,
-                       z0=228.0, z1=296.0),
+    # The helmet/visor idea is DEAD (13 Aug, withdrawn after looking at the
+    # reference photos again: every ref keeps a smooth human silhouette and
+    # gets its cyborg from seams, hubs and openings - never added volume).
+    # The casing's top corners still breach the brow flanks by ~10 mm; that
+    # stays an OPEN debt, recorded in fit_layout.py. Two candidate fixes are
+    # parameterized but off: a corner chamfer on the part (written and
+    # reverted twice - the part stays stock until decided) and this smooth
+    # normal-direction swell at the flanks, parked at amp=0 because nobody
+    # asked for added volume. amp~9 centred on the board corners would cover
+    # them if that day comes.
+    swell       = dict(x=42.0, y=167.0, z=274.0, r=30.0, amp=0.0),
+    # Interior junk behind the closed lips - the sculpt's mouth bag. A face
+    # in this box whose outward-normal offset point is still INSIDE the
+    # closed skin is hidden geometry and goes.
+    mouth_bag   = dict(x0=-30.0, x1=30.0, y0=140.0, y1=189.0,
+                       z0=122.0, z1=162.0),
 )
 
 SHELL_RGBA = (0.82, 0.79, 0.74, 1.0)
@@ -159,35 +170,13 @@ def rrect_box(name, coll, mat, w, h, r, length, loc, plane='YZ'):
     return _obj(name, bm, coll, mat)
 
 
-def arc_band(name, coll, mat, x_half, y_back, y_front, y_end, z0, z1,
-             segs=32):
-    """Visor slab: plan profile is an arc front (through (0, y_front) and
-    (+-x_half, y_end)) closed by a straight back edge at y_back, extruded
-    z0..z1."""
-    yc = (y_front ** 2 - y_end ** 2 - x_half ** 2) / (2.0 * (y_front - y_end))
-    r = y_front - yc
-    a_end = math.asin(x_half / r)
-    pts = []
-    for i in range(segs + 1):
-        a = -a_end + 2.0 * a_end * i / segs
-        pts.append((r * math.sin(a), yc + r * math.cos(a)))
-    pts.append((x_half, y_back))
-    pts.append((-x_half, y_back))
-    bm = bmesh.new()
-    bot = [bm.verts.new((x, y, z0)) for (x, y) in pts]
-    top = [bm.verts.new((x, y, z1)) for (x, y) in pts]
-    n = len(pts)
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((bot[i], bot[j], top[j], top[i]))
-    bm.faces.new(bot[::-1])
-    bm.faces.new(top)
-    return _obj(name, bm, coll, mat)
-
-
 def _copy_head_drop_eyeballs(coll, mat_shell, mat_dark):
-    """Copy HEAD_REF, delete its two sculpted-eyeball islands (our eyes sit at
-    pitch 62; the sculpted pair at 56 would poke through the proxies)."""
+    """Copy HEAD_REF and clean it: drop the two sculpted-eyeball islands
+    (our eyes sit at pitch 62; the sculpted pair at 56 would poke through
+    the proxies), delete the hidden mouth-bag geometry, and blend the
+    subtle brow-flank swell in."""
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
     src = bpy.data.objects[SRC]
     me = src.data.copy()
     me.name = "HEAD_CYBORG"
@@ -211,6 +200,67 @@ def _copy_head_drop_eyeballs(coll, mat_shell, mat_dark):
     drop = [v for c in comps[1:] for v in c]
     if drop:
         bmesh.ops.delete(bm, geom=drop, context='VERTS')
+
+    # ---- mouth bag: delete interior faces ----
+    bm.normal_update()
+    tree = BVHTree.FromBMesh(bm)
+    D = Vector((0.331, 0.537, 0.774)).normalized()
+
+    def _inside(p):
+        hits = 0; t0 = 0.0
+        for _ in range(24):
+            loc, nrm, idx, dist = tree.ray_cast(p + D * (t0 + 0.05), D)
+            if loc is None:
+                break
+            hits += 1
+            t0 = (loc - p).dot(D)
+        return hits % 2 == 1
+
+    mb = S["mouth_bag"]
+    doomed = []
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if (mb["x0"] < c.x < mb["x1"] and mb["y0"] < c.y < mb["y1"]
+                and mb["z0"] < c.z < mb["z1"]):
+            if _inside(c + f.normal * 0.6):
+                doomed.append(f)
+    if doomed:
+        print("mouth bag: deleting %d interior faces" % len(doomed))
+        bmesh.ops.delete(bm, geom=doomed, context='FACES')
+
+    # ---- eye region pre-clean ----
+    # The lash cards and lid shells are thin strips a boolean cannot remove
+    # reliably - they enclose no volume, so solvers leave them floating
+    # across the opening. Delete every face within r=19 of an eye axis
+    # first (y>150 so the back of the head, which the same axis crosses, is
+    # untouched); the Ø41 socket cut then trims the surrounding skin to a
+    # clean circle through simple surface.
+    er = S["eye"]
+    doomed = []
+    for f in bm.faces:
+        c = f.calc_center_median()
+        if c.y < 150.0:
+            continue
+        for sx in (-1, 1):
+            dx = c.x - sx * er["pitch"] / 2.0
+            dz = c.z - er["z"]
+            if dx * dx + dz * dz < 19.0 * 19.0:
+                doomed.append(f)
+                break
+    if doomed:
+        print("eye pre-clean: deleting %d lid/lash faces" % len(doomed))
+        bmesh.ops.delete(bm, geom=doomed, context='FACES')
+
+    # ---- brow-flank swell, both sides ----
+    bm.normal_update()
+    sw = S["swell"]
+    for v in bm.verts:
+        for sx in (-1, 1):
+            d = (Vector((sx * sw["x"], sw["y"], sw["z"])) - v.co).length
+            if d < sw["r"]:
+                t = 1.0 - d / sw["r"]
+                v.co += v.normal * (sw["amp"] * t * t * (3.0 - 2.0 * t))
+
     for f in bm.faces:
         f.smooth = True
     bm.to_mesh(me)
@@ -254,17 +304,7 @@ def build():
                     tw["w"], tw["h"], tw["r"], 60.0, (tw["x"], 175.0, tw["z"]),
                     'XZ')
 
-    # ---- modifier stack: brow union onto the raw skin, then the shell,
-    # then the cuts ----
-    bb = S["brow"]
-    band = arc_band("STYLE_visor_band", cuts, mat_shell,
-                    bb["x_half"], bb["y_back"], bb["y_front"], bb["y_end"],
-                    bb["z0"], bb["z1"])
-    ub = head.modifiers.new("VisorBand", 'BOOLEAN')
-    ub.operation = 'UNION'
-    ub.solver = 'EXACT'
-    ub.object = band
-
+    # ---- modifier stack: shell first, then the cuts ----
     sol = head.modifiers.new("Shell", 'SOLIDIFY')
     sol.thickness = S["wall"]
     sol.offset = -1.0                 # inward: the outer surface stays the face

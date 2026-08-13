@@ -66,12 +66,21 @@ L = dict(
     ring_od      = 36.830,   # Adafruit .brd, exact
     ring_id      = 23.368,
     ring_t       = 6.7,
-    earring_x    = 56.0,     # ring back face; front at 62.7, ~6 recessed
-                             # behind the Ø66 port mouth. Its rim crosses the
-                             # raw skin below the ear, but every such point
-                             # is inside the port bore (ring r 18.4 vs port
+    earring_x    = 56.6,     # ring back face; front at 63.3, sitting 0.3
+                             # proud of the ear hub's face, recessed behind
+                             # the Ø66 port mouth. Its rim crosses the raw
+                             # skin below the ear, but every such point is
+                             # inside the port bore (ring r 18.4 vs port
                              # r 33, concentric), so on the styled head it
                              # lives in the opening - see EXPECTED_OUT
+    hub          = dict(d=64.0, t=8.0, x=59.0),
+                             # the future printed ear-hub part: a dark disc
+                             # filling the port bore, ring recessed in its
+                             # face, speaker grille behind. TBD until the
+                             # ring and speaker have been measured together
+    iris         = dict(d=12.0, t=1.6),
+                             # translucent printed iris window the eye pixel
+                             # glows through; sits on the eyeball front pole
 
     casing_y     = 162.0,    # back face; plate 5 thick -> front face 167
     casing_z     = 254.0,    # plate centre; spans z 225..283, row at 257.5
@@ -114,6 +123,24 @@ R_SIDE_L = Matrix.Rotation(math.radians(90), 4, 'Y')    # local +z -> +X (left w
 COL_PART  = (0.20, 0.65, 0.70, 1.0)
 COL_PROXY = (0.90, 0.50, 0.15, 1.0)
 COL_CHECK = (0.95, 0.85, 0.20, 1.0)
+COL_GLOW  = (0.55, 0.85, 1.00, 1.0)
+COL_HUB   = (0.06, 0.06, 0.07, 1.0)
+
+
+def _mat(name, rgba, emit=0.0):
+    m = bpy.data.materials.get(name)
+    if m is None:
+        m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    b = m.node_tree.nodes.get("Principled BSDF")
+    if b:
+        b.inputs["Base Color"].default_value = rgba
+        if "Emission Color" in b.inputs:
+            b.inputs["Emission Color"].default_value = rgba
+        if "Emission Strength" in b.inputs:
+            b.inputs["Emission Strength"].default_value = emit
+    m.diffuse_color = rgba
+    return m
 
 
 def _coll():
@@ -179,6 +206,27 @@ def sphere(coll, name, dia, loc):
     return _link(coll, ob, COL_PROXY)
 
 
+def cyl(coll, name, dia, length, loc, axis='Y', color=COL_PROXY, mat=None):
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, radius1=dia / 2, radius2=dia / 2,
+                          depth=length, segments=48)
+    if axis == 'Y':
+        rot = Matrix.Rotation(math.radians(90), 4, 'X')
+    elif axis == 'X':
+        rot = Matrix.Rotation(math.radians(90), 4, 'Y')
+    else:
+        rot = Matrix.Identity(4)
+    bmesh.ops.transform(bm, matrix=rot, verts=bm.verts[:])
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    ob.location = loc
+    if mat:
+        me.materials.append(mat)
+    return _link(coll, ob, color)
+
+
 def annulus(coll, name, od, idia, t, loc, segs=48):
     """Flat ring, axis +Y, front face at loc.y + t (built from y=0..t)."""
     bm = bmesh.new()
@@ -223,22 +271,32 @@ def build():
     part(coll, "cable_anchor", "FIT_cable_anchor_6_PARKED", (-14, 70, 108))
 
     # ---- proxies for what the parts hold ----
+    mat_glow = _mat("MAT_glow", COL_GLOW, emit=3.0)
+    mat_hub = _mat("MAT_hub", COL_HUB)
     ey, ez = L["eye_y"], L["eye_z"]
     for sx, side in ((-1, "L"), (1, "R")):          # Humalien's left = -X
         x = sx * L["eye_pitch"] / 2
         sphere(coll, "PROXY_eyeball_%s" % side, L["eyeball_dia"], (x, ey, ez))
-        # the glow source: an addressable 5050 pixel INSIDE the eyeball,
-        # aimed at a translucent printed iris. Carrier board unbought and
-        # unmeasured, hence LISTING
+        # the glow: an addressable 5050 pixel INSIDE the eyeball behind a
+        # translucent printed iris window on the front pole. Pixel carrier
+        # unbought and unmeasured, hence LISTING
         box(coll, "PROXY_eye_led_%s_LISTING" % side, (8.0, 3.0, 8.0),
             (x, ey - 4.0, ez))
-        # the rings (already shipping) become accent rings in the ear ports,
-        # framing the speaker grille - and the WS2812 bench-test article
-        # before any wire is threaded through an eyeball
+        cyl(coll, "PROXY_iris_%s" % side, L["iris"]["d"], L["iris"]["t"],
+            (x, ey + L["eyeball_dia"] / 2 + L["iris"]["t"] / 2 - 0.8, ez),
+            'Y', COL_GLOW, mat_glow)
+        # the ear hub: dark disc filling the port bore - the future printed
+        # part that mounts ring and speaker grille as one module - with the
+        # ring (already shipping) recessed in its face, glowing
+        cyl(coll, "PROXY_ear_hub_%s_TBD" % side, L["hub"]["d"], L["hub"]["t"],
+            (sx * L["hub"]["x"], L["ear_port"][0], L["ear_port"][1]),
+            'X', COL_HUB, mat_hub)
         ring = annulus(coll, "PROXY_neopixel_ear_%s" % side, L["ring_od"],
                        L["ring_id"], L["ring_t"],
                        (sx * L["earring_x"], L["ear_port"][0], L["ear_port"][1]))
         ring.rotation_euler = (0, 0, math.radians(-sx * 90))
+        ring.data.materials.append(mat_glow)
+        ring.color = COL_GLOW
 
     # Pi 5 board on its tray standoffs (tray plate 3 + standoff 5)
     bz = L["tray_z"] + 3.0 + 5.0 + PI5["t"] / 2
@@ -288,8 +346,8 @@ def build():
 def report():
     print("FIT_Assembly placements (all provisional, slotted fixings exist for a reason):")
     rows = [
-        ("eyeballs Ø32 + pixel", "(+-31, 160, 209)", "glow from inside; nothing in front of the eye"),
-        ("NeoPixel rings", "ear ports, back face |x|=56", "accents framing the speaker grilles"),
+        ("eyeballs Ø32 + pixel", "(+-31, 160, 209)", "glow through the iris window on the front pole"),
+        ("ear hub + ring", "in the Ø66 ports, face |x|~63", "hub is the TBD printed part; ring recessed in it, glowing"),
         ("forehead_casing", "y 162..167, z 225..283", "row z=257.5, cam +22 / ToF -32"),
         ("pi5_tray", "y 43.5..136.5, z 256..259", "board top 265.6, hat ~282"),
         ("pca9685_mount", "y 42..50, z 209..251", "against rear wall"),
@@ -314,13 +372,17 @@ def report():
 # Anything else poking out is a layout bug in this file.
 # ---------------------------------------------------------------------------
 EXPECTED_OUT = {
-    "PROXY_eyeball_L": "design pitch 62 vs sculpted sockets at 56: sockets move outboard",
-    "PROXY_eyeball_R": "design pitch 62 vs sculpted sockets at 56: sockets move outboard",
-    "FIT_forehead_casing": "brow-flank breach, swallowed by the styled visor band",
-    "PROXY_b0385_board": "camera board corner, swallowed by the styled visor band",
-    "PROXY_vl53l1x_board": "ToF board corner, swallowed by the styled visor band",
+    "PROXY_eyeball_L": "styled Ø41 sockets at pitch 62 replace the sculpted 56s",
+    "PROXY_eyeball_R": "styled Ø41 sockets at pitch 62 replace the sculpted 56s",
+    "PROXY_iris_L": "on the eyeball front pole, inside the styled Ø41 socket",
+    "PROXY_iris_R": "on the eyeball front pole, inside the styled Ø41 socket",
+    "FIT_forehead_casing": "brow-flank breach - OPEN DEBT, chamfer/swell parameterized but off",
+    "PROXY_b0385_board": "camera board corner - same open brow-flank debt",
+    "PROXY_vl53l1x_board": "ToF board corner - same open brow-flank debt",
     "PROXY_neopixel_ear_L": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
     "PROXY_neopixel_ear_R": "concentric inside the Ø66 ear-port bore (r 18.4 vs 33)",
+    "PROXY_ear_hub_L_TBD": "concentric inside the Ø66 ear-port bore (r 32 vs 33)",
+    "PROXY_ear_hub_R_TBD": "concentric inside the Ø66 ear-port bore (r 32 vs 33)",
 }
 
 
