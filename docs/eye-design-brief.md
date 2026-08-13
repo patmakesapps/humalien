@@ -619,6 +619,35 @@ softens [hardware.md](hardware.md)'s assumption that a head must be split with
 alignment pins — splitting becomes a choice about surface finish, support and
 where a skin seam can hide, rather than a limit imposed by the printer.
 
+### The head serves the parts, not the other way round
+
+Worth stating before it gets forgotten, because it is easy to drift the other
+way once a nice mesh is in the scene. **The mesh is a styling surface and
+nothing more.** It gets remodelled into a cyborg head around the mechanism. It
+does not get measured for dimensions the mechanism then has to honour.
+
+Concretely: do **not** derive interpupillary distance by measuring the mesh's
+eyes. `eye_pitch` is a design parameter — set by what the mechanism needs and
+what reads as human — and the sockets get moved to suit it. Anything measured
+off the mesh is a starting proportion, never a constraint.
+
+So the number that matters is the envelope the head has to swallow:
+
+| Demand | Across | From |
+| --- | --- | --- |
+| Two Ø32 eyeballs at 62 mm pitch | 94.0 mm | eyeball Ø from Cogley, pitch by design |
+| Two static Ø36.83 NeoPixel rings at the same pitch | 98.8 mm | Adafruit board file |
+| Cogley's longest ε3.2 part | ~99 mm | measured from the reference |
+
+Call it **~100 mm across** for the mechanism and its rings. The head at 150 mm
+breadth leaves about 142 mm inside a 4 mm wall, so it fits with room — and the
+rings clear each other easily, since 62 mm of pitch against a 36.83 mm ring
+leaves 25 mm between them.
+
+That is the check worth repeating whenever the head is restyled: not "does this
+look right", but "is there still 100 mm across and 185 mm front to back". If a
+styling change ever costs that, the styling loses.
+
 ### Deliberately not built
 
 Linkage geometry, the eyeball, its socket, the eyelids, and the hard stops. All
