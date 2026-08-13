@@ -122,11 +122,18 @@ first answers whether 4 Hz recognition and a 0.12 s smoothing constant read as
 alive, which is the question a custom design would otherwise be built on top of
 untested. Model a bespoke one afterwards, reusing the tuning.
 
-The plan for this head differs from the reference in one way: the **left pupil
-holds the VL53L1X**, so distance is measured to whatever Humalien is looking
-at. The right eye stays a plain eyeball and the camera lives in the forehead,
-which keeps the vision loop open — a camera that moves with the eye turns face
-position into an error signal and needs a nulling loop instead.
+Both eyes are plain printed balls. **The camera and the VL53L1X live together
+in the forehead**, side by side on `forehead_casing`, which keeps the vision
+loop open — a camera that moves with the eye turns face position into an error
+signal and needs a nulling loop instead — and keeps the distance reading from
+swinging around with gaze.
+
+> Until 13 Aug 2026 this read "the **left pupil** holds the VL53L1X, so
+> distance is measured to whatever Humalien is looking at". Moving it to the
+> forehead unblocked the eyeball, which had been waiting on board dimensions
+> nobody publishes, and cut what crosses each eye joint from six wires to the
+> three the 5050 pixel needs. See the note at the top of
+> [eye-design-brief.md](eye-design-brief.md).
 
 ## Wiring
 

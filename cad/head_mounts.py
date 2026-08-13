@@ -128,7 +128,10 @@ M = dict(
                      arm_a=(90.0, 210.0, 330.0),   # deg, 0 = +y
                      spk_pitch=72.0,     # LISTING - flange holes unmeasured
                      spk_post=6.0,
-                     spine=(16.0, 90.0, 4.0)),
+                     # 90 tall put the spine's top edge 1.00 mm under the
+                     # tray rail. 80 gives 6 and still spans the speaker's
+                     # 72 mm flange pitch with 4 mm each end.
+                     spine=(16.0, 80.0, 4.0)),
 
     # idia was 33.6, which measured 1.29 mm from the eyeball at its closest -
     # no intersection, but too close to look right and too close to trust
@@ -137,6 +140,14 @@ M = dict(
     # the Ø41 socket leaves around a Ø32 ball.
     eye       = dict(pitch=62.0, y=160.0, z=209.0, socket=41.0,
                      od=39.6, idia=35.6, t=6.0, ball=32.0, recess=1.5),
+
+    # The eye mechanism's bulkhead. y is the BACK face; 134 front puts it
+    # 1 mm behind the y=135 split, so it lives in the cranium.
+    eye_plate = dict(y=128.0, t=6.0, w=140.0, z0=178.0, z1=240.0,
+                     bore=30.0,
+                     grid_x=(-40.0, -20.0, 0.0, 20.0, 40.0),
+                     grid_z=(186.0, 206.0, 226.0),
+                     screw_z=(188.0, 232.0)),
 
     # Pi 5 tray: plate z 256..259, slots at (0,131.5) (0,48.5) (+-27, 90)
     tray      = dict(z=256.0, slot_x=27.0, slot_y=(60.0, 120.0),
@@ -522,11 +533,23 @@ def ear_hubs(probe, coll, head):
     # lives in that bore on purpose. Only the arms, which sit at r=36 well
     # outside the Ø66 bore, are the zone's business. Clipped, they stop
     # 1.5 mm under the skin instead of reaching it.
+    # Each arm is MEASURED to its own bit of wall and then clipped. Both
+    # halves matter. A 60 mm cylinder clipped only by the head's volume does
+    # not come back as a lug - it comes back as a long strip hugging the
+    # inside of the skin, running away down the cheek wherever the skin goes,
+    # because the volume is happy to contain it the whole way. And a measured
+    # arm without the clip pushes its flat end out through a curved wall.
+    # Measure the length, then clip what is left.
     arms = bmesh.new()
     for a in e["arm_a"]:
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
-        _cyl(arms, e["arm_d"], 60.0, (fx - 1.0, ay, az), 'X')
+        loc, d = probe.inner((0.0, ay, az), (1, 0, 0))
+        end = (loc.x if loc else fx) + 3.0        # 3 mm into the wall for
+        start = fx - e["plug_t"]                  # the screw to bite
+        if end <= start:
+            continue
+        _cyl(arms, e["arm_d"], end - start, ((start + end) / 2, ay, az), 'X')
     arm_ob = _link(coll, "_ARMS", _mesh("_ARMS", arms))
     boolean(arm_ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
     boolean(hub, arm_ob, 'UNION')
@@ -777,6 +800,79 @@ def bosses(probe, add, cut):
     return rows
 
 
+def eye_plate(probe, coll, shell_cut):
+    """The bulkhead the eye mechanism bolts to.
+
+    Every other part in this head had somewhere to go and the eyes did not:
+    raked sockets, printed bezels, a clear bay behind them, and nothing at
+    all to carry six servos. This is that something.
+
+    **Where.** A vertical plate at y 128..134, which is 1 mm behind the y=135
+    split, so it belongs entirely to the cranium half and goes in while that
+    half is an open bowl. Measured, the interior there is 110-116 mm across
+    against the ~100 mm the brief budgets for the mechanism and its rings,
+    and there is 90 mm of clear depth behind it before the occiput. The
+    eyeballs live at y 144..176, wholly in front of it, so the plate never
+    fouls a ball - only the linkages reach through, which is what the two
+    Ø30 bores are for.
+
+    **How it is held.** The tray_rail pattern, because that one is proven:
+    run the ends long, clip to MOUNT_ZONE so they stop 1.5 mm under the
+    skin, and take two M3 per side from outside through the temple. Screw
+    heads on the temple are consistent with the ear hubs and with every
+    reference photo.
+
+    **Why the mounting field is slots.** Cogley's ε3.2 hole pattern has not
+    been measured - the mechanism is in the scene as an imported STEP for
+    measuring off, and nobody has taken those numbers yet. The project's own
+    rule covers this: slot what is unknown, not everything. So the plate
+    carries a slotted grid on a 20 mm pitch rather than a hole pattern
+    pretending to be exact. When the reference build is assembled and the
+    real pattern is known, the grid becomes holes and this comment goes.
+    """
+    p = M["eye_plate"]
+    bm = bmesh.new()
+    _box(bm, (p["w"], p["t"], p["z1"] - p["z0"]),
+         (0.0, p["y"] + p["t"] / 2, (p["z0"] + p["z1"]) / 2))
+    ob = _link(coll, "eye_plate", _mesh("eye_plate", bm))
+    boolean(ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
+
+    cut = bmesh.new()
+    # linkage clearance, one per eye
+    for sx in (-1, 1):
+        _cyl(cut, p["bore"], 40.0,
+             (sx * M["eye"]["pitch"] / 2, p["y"] + p["t"] / 2, M["eye"]["z"]),
+             'Y')
+    # the slotted mounting field
+    for gx in p["grid_x"]:
+        for gz in p["grid_z"]:
+            if abs(abs(gx) - M["eye"]["pitch"] / 2) < p["bore"] / 2 + 6 and \
+               abs(gz - M["eye"]["z"]) < p["bore"] / 2 + 6:
+                continue                      # would land in a bore
+            for dy in (-0.5, 0.5):
+                _cyl(cut, M["m3_free"], 40.0,
+                     (gx + dy, p["y"] + p["t"] / 2, gz), 'Y', segs=24)
+            _box(cut, (1.0, 40.0, M["m3_free"]),
+                 (gx, p["y"] + p["t"] / 2, gz))
+    # two M3 per side, in from the temple
+    zc = (p["z0"] + p["z1"]) / 2
+    for sx in (1, -1):
+        for sz in p["screw_z"]:
+            loc, d = probe.inner((0.0, p["y"] + p["t"] / 2, sz), (sx, 0, 0))
+            if loc is None:
+                continue
+            _cyl(cut, M["m3_pilot"], 26.0,
+                 (loc.x - sx * 13.0, p["y"] + p["t"] / 2, sz), 'X', segs=24)
+            _cyl(shell_cut, M["m3_free"], 30.0,
+                 (loc.x - sx * 5.0, p["y"] + p["t"] / 2, sz), 'X', segs=24)
+    _apply(coll, ob, cut, "_CUT_eye_plate", 'DIFFERENCE')
+    print("  eye_plate: y %.0f..%.0f, %d slots on a %.0f mm grid, "
+          "2 x Ø%.0f linkage bores, 2 x M3 per side through the temple"
+          % (p["y"], p["y"] + p["t"],
+             len(p["grid_x"]) * len(p["grid_z"]), 20.0, p["bore"]))
+    return ob
+
+
 def casing_chamfer():
     """Take the forehead casing's unused top corners off.
 
@@ -864,6 +960,7 @@ def build(S=None, eye_axis=None, save=True):
     if eye_axis is not None:
         eye_bezels(probe, coll, eye_axis)
     tray_rails(probe, coll, head, shell_cut)
+    eye_plate(probe, coll, shell_cut)
     tray_side_slots()
     casing_chamfer()
     if save:

@@ -10,12 +10,30 @@ Design a two-eye animatronic mechanism for a printed cyborg head, driven by
 MG90S servos over a PCA9685, consuming the normalized gaze targets that
 `brain/gaze.py` already produces.
 
-It differs from every reference mechanism online in one way, and that difference
-drives the whole design: **the left eyeball contains a VL53L1X time-of-flight
-distance sensor**, so Humalien measures distance to whatever it is looking at.
-The right eyeball is a plain printed eye. The camera does not move with the eyes
-— it lives in the forehead, which keeps face position usable as an absolute
-signal instead of an error signal to null out.
+Neither eyeball carries anything but a light. **The camera and the VL53L1X both
+live in the forehead**, side by side on one plate — `forehead_casing` — which
+keeps face position usable as an absolute signal instead of an error signal to
+null out, and keeps the distance reading steady instead of swinging with gaze.
+
+> **Superseded, 13 Aug 2026.** This brief was written around a different
+> idea: *the left eyeball contains a VL53L1X, so Humalien measures distance to
+> whatever it is looking at.* That was the difference that "drove the whole
+> design", and it drove a lot of this document — the eyeball diameter, the
+> wiring, the whole section on wires crossing a moving joint. It is dead. The
+> sensor moved to the forehead casing next to the camera and has been built
+> that way since; the paragraphs it touched are corrected in place below and
+> marked like this one.
+>
+> What retiring it buys, which is more than tidiness:
+>
+> - **The eyeball is unblocked.** It was waiting on VL53L1X board dimensions
+>   nobody publishes any more. Both eyes are now plain Ø32 printed balls.
+> - **Nothing crosses the eye joint but the pixel's three wires.** The hard
+>   problem this brief spends a section on mostly evaporates.
+> - **Eyeball diameter is a free choice again.** Ø32 came from Cogley's part,
+>   not from a board that had to fit inside it.
+> - `coupon_vl53l1x` still earns its print — it now proves the slot in the
+>   forehead casing instead of a pocket in an eyeball.
 
 ## Dimensions come from datasheets, then get proven by a test print
 
@@ -412,9 +430,11 @@ correct the model, and only then print the part that matters. This is the
 substitute for calipers, and for mounting patterns it is a better one — it tests
 the hole positions *and* the printer's dimensional accuracy in a single shot.
 
-The VL53L1X is the constraining part. Its board sets the minimum eyeball
-diameter, and the eyeball diameter sets everything else. Get its drawing first
-and design outward from it.
+> **Superseded, 13 Aug 2026.** *"The VL53L1X is the constraining part. Its
+> board sets the minimum eyeball diameter, and the eyeball diameter sets
+> everything else."* Not any more — the sensor is in the forehead casing.
+> Nothing sets the eyeball diameter now except what reads as an eye and what
+> the mechanism wants, so Ø32 is a choice rather than a floor.
 
 ## Hard constraints
 
@@ -424,10 +444,12 @@ glass requirements around thickness, air gap and crosstalk. Design for an **open
 aperture** in front of the sensor. If a cover is wanted later for looks, treat
 it as a change that requires re-testing the sensor, not a cosmetic detail.
 
-**Wires cross a moving joint.** Six wires leave the left eyeball and the eyeball
-rotates. No slip ring — at this scale it is more mechanism than the problem
-deserves. Limit travel, use fine silicone-jacket wire, and design an explicit
-service loop with somewhere for it to live. Route it through the rotation axis
+**Wires cross a moving joint** — but far fewer than this brief was written for.
+It used to be six, for the VL53L1X in the left eyeball, and that was the hardest
+constraint in the document. With the sensor in the forehead it is **three wires
+per eye** for the 5050 pixel, and both eyes are the same. The advice still
+holds and is now easy to follow: no slip ring, fine silicone-jacket wire, an
+explicit service loop with somewhere to live, routed through the rotation axis
 where possible, because wire twisted about its own axis survives far longer than
 wire bent back and forth.
 
@@ -475,8 +497,11 @@ and snap to wherever they think they are.
 4. A fastener BOM. **None of these are currently owned** — M2 screws, possibly
    heat-set inserts. Cogley's mechanism will reveal what is actually needed once
    it is assembled, which is another reason to build it first.
-5. A wiring plan for the left eyeball specifically — wire gauge, service loop
-   path, strain relief, and where the six wires terminate.
+5. A wiring plan for each eyeball — wire gauge, service loop path, strain
+   relief, and where the pixel's three wires terminate. This used to say "for
+   the left eyeball specifically… where the six wires terminate", back when
+   the VL53L1X lived in it. Both eyes are the same now and it is a much
+   smaller job.
 
 ## The reference mechanism is a measuring tool
 
@@ -567,9 +592,11 @@ from his model, listed above, and it re-implements the *idea* of his servo
 fitting block, which is an idea and not a shape. The reference `.3mf` stays
 git-ignored, as `reference/eye-mechanism/README.md` already sets out.
 
-The bespoke design departs from it in the ways [parts.md](parts.md) sets out —
-the VL53L1X in the left pupil above all — so it is a starting point and a
-measuring stick, not a base model to edit.
+The bespoke design departs from it in the ways [parts.md](parts.md) sets out,
+so it is a starting point and a measuring stick, not a base model to edit. It
+used to depart from it most in putting the VL53L1X in the left pupil; with the
+sensor in the forehead the two are now closer than they were, and the reference
+is a better measuring stick for it.
 
 ## What the reference build answers
 
@@ -588,7 +615,10 @@ mount, cable routing — is independent of them and can start immediately.
 ## Things that are already decided
 
 - Camera in the forehead, not in an eye.
-- VL53L1X in the left pupil, right eye plain.
+- **VL53L1X in the forehead too**, on the same plate as the camera, on one
+  shared aperture row. Both eyes are plain printed balls, each with a 5050
+  pixel behind a translucent iris window. (This line read "VL53L1X in the left
+  pupil, right eye plain" until 13 Aug 2026.)
 - Servos driven from a PCA9685 at `0x40`, on their own 5 V rail, common ground.
 - The node executes, the brain decides. Nothing in this mechanism implies logic
   on the Pi beyond converting an angle to a PWM value.
@@ -668,22 +698,31 @@ mechanism will settle the rest once assembled.
 Buy M2 and M3 in a socket-head assortment rather than to this list — the counts
 will change the moment anything is offered up.
 
-### Wiring the left eyeball
+### Wiring the eyeballs
 
-Six wires leave the eyeball, and the eyeball rotates. Every trick below is worth
-less than reducing the number of wires that cross the joint at all:
+**Three wires per eye**, and both eyes are the same: `5V`, `GND`, `DIN` for the
+5050 pixel that lights the iris from inside. The chain can run in one eye and
+out the other, so the second eye costs one extra crossing wire, not three.
 
-- `VIN`, `GND`, `SDA`, `SCL` have to cross. Four.
-- `XSHUT` only earns its wire if a **second** VL53L1X is ever fitted — they
-  share address `0x29` and the only way to run two is to hold one in reset while
-  the other is re-addressed. There is one. Pull it high at the eyeball with a
-  10 kΩ to VIN and it stops crossing.
-- `GPIO1` is the interrupt. Polling over I²C at 4 Hz is nothing, and the gaze
-  loop is already timer-driven. Leave it off.
+> **Superseded, 13 Aug 2026.** This section used to be the hardest constraint
+> in the brief, titled *"Wiring the left eyeball"*, and it argued six wires
+> down to four:
+>
+> - `VIN`, `GND`, `SDA`, `SCL` have to cross. Four.
+> - `XSHUT` only earns its wire if a **second** VL53L1X is ever fitted — they
+>   share address `0x29`, and the only way to run two is to hold one in reset
+>   while the other is re-addressed. There is one. Pull it high at the eyeball
+>   with a 10 kΩ to VIN and it stops crossing.
+> - `GPIO1` is the interrupt. Polling over I²C at 4 Hz is nothing, and the gaze
+>   loop is already timer-driven. Leave it off.
+>
+> All of it moot: the sensor is in the forehead casing, where its six-wire
+> cable crosses nothing that moves. Kept because the `XSHUT` reasoning is
+> still correct and will matter the day a second VL53L1X is fitted anywhere.
 
-**So four wires cross, not six.** That is a third fewer wear points for the cost
-of one resistor, and it is worth doing before any mechanism is designed around
-the loom.
+The advice that survives is the mechanical half: no slip ring, fine
+silicone-jacket wire, an explicit service loop with somewhere to live, and
+route through the rotation axis where possible.
 
 The rest:
 

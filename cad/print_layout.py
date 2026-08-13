@@ -75,6 +75,8 @@ PARTS = [
     # -Z. Keep the two angles in step with head_style.S["eye"].
     ("eye_bezel_R",   1, _flatten_rake(+1), "front face down, on its bore axis"),
     ("eye_bezel_L",   1, _flatten_rake(-1), "mirror of R"),
+    ("eye_plate",     1, Matrix.Rotation(math.radians(90), 4, 'X'),
+     "flat on its face, slot grid up"),
     ("tray_rail_R",   1, Matrix.Identity(4), "flat, as built"),
     ("tray_rail_L",   1, Matrix.Identity(4), "flat, as built"),
     ("forehead_casing", 1, Matrix.Identity(4), "flat on its plate, as eye_mech built it"),
