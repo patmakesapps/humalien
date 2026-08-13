@@ -131,6 +131,14 @@ BOARDS = dict(
         slot_w  = 23.600,           # measured, groove face to groove face
         slot_h  = 29.100,           # measured, groove z span
         slot_t  = 2.100,            # measured, PCB groove thickness
+        # The 6-way JST sits on the SAME face as the sensor and stands proud of
+        # it, wires and all. That is the actual reason the proven holder leaves
+        # its whole front open - not modesty about the field of view. Anything
+        # covering the board fouls the connector before it ever reaches the
+        # sensor. Height is UNMEASURED: no calipers, and it is not in any
+        # drawing. 9.0 is a deliberate over-estimate for a vertical JST plus a
+        # gentle wire bend, and it is a keep-out the face shell must respect.
+        conn_keepout = 9.0,
     ),
     neopixel12 = dict(
         label   = "NeoPixel Ring 12",
@@ -540,9 +548,9 @@ def forehead_casing(loc=(0, 0, 0)):
     fastener set, and the two cannot drift out of line relative to each other
     because there is no joint between them to drift.
 
-    The camera is trapped by screws through slotted holes; the VL53L1X slides
-    in from the outboard edge and is trapped by a lip, copying the CQRobot
-    holder that already works. Neither needs support to print."""
+    The camera is trapped by screws through slotted holes. The VL53L1X drops
+    down a channel onto a shelf and gravity holds it, so it needs no fastener
+    at all. Neither needs support to print."""
     cam = BOARDS["b0385"]
     tof = BOARDS["vl53l1x"]
     t = 5.0
@@ -554,8 +562,8 @@ def forehead_casing(loc=(0, 0, 0)):
 
     row_y = 3.5                       # the shared centreline both apertures sit on
     cam_x = -22.0
-    tof_x = 34.2
-    W = 92.0
+    tof_x = 32.0
+    W = 96.0
     D = 58.0
     ob = plate("forehead_casing", W, D, t, 3.0, (0, 0, t / 2))
     top = t
@@ -573,21 +581,40 @@ def forehead_casing(loc=(0, 0, 0)):
             cuts.append(slot("_s", P["m2_free"], P["slot_travel"], t * 3,
                              (cam_x + dx, row_y + dy, t / 2),
                              math.degrees(math.atan2(dy, dx))))
-    # S4B-ZR cable exit, out through the top wall of the camera pocket
-    cuts.append(prism("_cn", rrect_pts(cam["conn_w"] + 3.0, P["wall"] * 3, 0.6),
-                      (cam_depth + 1.0) * 2.0,
-                      (cam_x - cam["w"] / 2 + cam["conn_x"], row_y + cam_pd / 2, top)))
+    # S4B-ZR cable exit. The drawing puts the connector 8.24 mm from the left
+    # edge and 3.47 mm from the BOTTOM edge, so the exit belongs on the bottom
+    # wall of the pocket - an earlier version notched the top, which is simply
+    # the wrong side of the board. Cut through the full thickness rather than
+    # just breaching the pocket wall, because which face the socket stands on
+    # is not established: a through slot serves the cable either way.
+    conn_cx = cam_x - cam["w"] / 2 + cam["conn_x"] + cam["conn_w"] / 2
+    cuts.append(prism("_cn", rrect_pts(cam["conn_w"] + 7.0, 10.0, 1.5), t * 3,
+                      (conn_cx, row_y - cam_pd / 2, t / 2)))
 
-    # ---- distance sensor: slides in from the +X edge ----
-    x_in = tof_x - tof["slot_w"] / 2.0        # inboard wall of the slot
-    xlen = (W / 2 - x_in) + 16.0              # run it off the outboard edge
-    xcen = x_in + xlen / 2.0
-    cuts.append(prism("_cav", rrect_pts(xlen, tof["slot_h"], 0.5), cav_d,
-                      (xcen, row_y, top - lip_t - cav_d / 2.0)))
-    cuts.append(prism("_lip", rrect_pts(xlen, tof["slot_h"] - 2 * lip, 0.5), 8.0,
-                      (xcen, row_y, top + 3.0)))
-    cuts.append(prism("_win", rrect_pts(20.0, tof["slot_h"] - 7.0, 2.0), t * 3,
-                      (tof_x, row_y, t / 2)))
+    # ---- distance sensor: slides DOWN a channel onto a shelf ----
+    # Down, not up and not sideways, and that choice is what removes the
+    # fastener. Loaded downwards the board lands on a closed shelf and gravity
+    # holds it there. Loaded any other way gravity works to eject it and a screw
+    # becomes mandatory - and there is nowhere trustworthy to put one, because
+    # the board's mounting hole positions are still unknown.
+    #
+    # A C-channel each side takes the board's vertical edges only: `lip` of
+    # material in front and `lip` behind, so it is trapped front-to-back while
+    # nothing at all crosses its face. Fit it CONNECTOR UP, so the wires leave
+    # through the same opening the board slid in through and never cross the
+    # shelf.
+    y_shelf = row_y - tof["slot_h"] / 2.0     # closed bottom the board rests on
+    ylen = (D / 2 - y_shelf) + 16.0           # channel runs off the TOP to load
+    ycen = y_shelf + ylen / 2.0
+    chan = tof["slot_w"] - 2 * lip            # what the channel leaves open
+    cuts.append(prism("_cav", rrect_pts(tof["slot_w"], ylen, 0.5), cav_d,
+                      (tof_x, ycen, top - lip_t - cav_d / 2.0)))
+    cuts.append(prism("_lip", rrect_pts(chan, ylen, 0.5), 8.0,
+                      (tof_x, ycen, top + 3.0)))
+    # Open right through in front of the board. The sensor is not what sets
+    # this - the 6-way JST is on the same face and stands far prouder.
+    cuts.append(prism("_win", rrect_pts(chan, ylen, 0.5), t * 3,
+                      (tof_x, ycen, t / 2)))
 
     # ---- skull fixings: a three point strip along the bottom ----
     for mx in (-35.0, 0.0, 35.0):

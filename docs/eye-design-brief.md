@@ -79,6 +79,14 @@ supplied cable. And the M12 holder footprint is drawn but **not dimensioned**;
 18 × 18 mm was scaled off the drawing, so the aperture is cut at 19 × 19 and the
 coupon carries it.
 
+> **Check the SKU before trusting any of this.** The order screenshot reads
+> *"...M12 Lens **With** Microphones"*, and [parts.md](parts.md) specifies the
+> **without**-microphones B0385 — which is the variant the datasheet above
+> describes. If a with-microphones board actually arrived, it is a different
+> SKU and its outline, hole pattern and connector may all differ. Everything in
+> this table would then be describing the wrong board. `coupon_b0385` catches
+> it, but confirming the part number is faster than printing.
+
 **MG90S — `drawing` for the body, `listing` for the tab pitch.** TowerPro's own
 [product page](https://towerpro.com.tw/product/mg90s-3/) says 22.8 × 12.2 ×
 28.5 mm; the [distributor datasheet](https://www.electronicoscaldas.com/datasheet/MG90S_Tower-Pro.pdf)
@@ -165,11 +173,52 @@ If the coupling is ever wanted back, the bare-carrier option above reopens it
 without disturbing anything else — that is the merit of keeping the sensor's
 mount a separate part rather than merging it into the camera plate.
 
-The aperture is a wide open window rather than a bore. ST's cover glass and
-crosstalk rules could not be retrieved, and the proven CQRobot holder simply
-leaves its whole front face open. A generous opening cannot clip the field of
-view, cannot bounce IR back into the sensor, and means the sensor's exact
-position on the board never has to be established.
+**The connector is the constraint, not the sensor.** The 6-way JST sits on the
+*same face as the sensor* and stands proud of it, wires and all. Anything
+covering the board fouls the connector long before it gets near the optics.
+That — not modesty about the field of view — is the real reason the proven
+CQRobot holder leaves its whole front face open.
+
+This was got wrong once: the first version of the casing had a modest 20 × 22
+window sized for the sensor, which the connector would have collided with on
+first assembly. The rule that came out of it is worth keeping: **when copying a
+proven part, copy the reason, not just the dimension.** The open face was
+recorded and then not carried across, because the measurement was taken and the
+question "why is it like that" was not asked.
+
+So the face of the board is left completely clear, and it is held by its two
+vertical edges alone — 1.5 mm of material in front and 1.5 mm behind, forming a
+C-channel each side.
+
+### Which way it loads decides whether it needs screws
+
+**Down.** The board drops into the channel and lands on a closed shelf, and
+gravity holds it there. Nothing else is needed.
+
+Loaded any other way — up from below, or sideways from an edge — gravity works
+to eject it and a fastener becomes mandatory. There is nowhere trustworthy to
+put one: the board's mounting hole positions are still unknown, which is the
+whole reason the slot approach was copied in the first place. So the loading
+direction is not a detail, it is what removes the fastener from the design.
+
+An earlier version had it sliding in sideways from the outboard edge with the
+channel open at that end, which meant precisely nothing stopped it sliding back
+out. It would have hung there. Now the channel is a U: open at the top to load,
+closed at the bottom by an 18 mm shelf.
+
+**Fit it connector up.** The wires then leave through the same opening the board
+slid in through, and never have to cross the shelf. If belt-and-braces retention
+is ever wanted, a zip tie through a `cable_anchor` does it without needing a
+hole in the board.
+
+Connector height is **unmeasured** — no calipers, and it is in no drawing.
+`conn_keepout` is set to a deliberately generous 9.0 mm to cover a vertical JST
+plus a gentle wire bend. It is a **keep-out the face shell has to respect**, and
+it is the number to take off the real board when the coupon goes on.
+
+An open window also happens to satisfy the optical rule for free: it cannot clip
+the field of view, cannot bounce IR back into the sensor, and means the sensor's
+exact position on the board never has to be established.
 
 **Both sit in one row on one plate.** The camera and the sensor are side by
 side with their apertures on a single horizontal centreline, 56.2 mm apart. An
@@ -181,8 +230,15 @@ geometry rather than something to get right at assembly.
 It costs nothing to guarantee, because the B0385's sensor is dead centre on its
 board — 19.00 mm from two adjacent edges on Arducam's drawing — so lining the
 pocket centres up lines the optical axes up. Camera by screws through slotted
-holes, sensor sliding in from the outboard edge under a 1.5 mm lip, three M3
+holes, sensor dropped down a channel onto a shelf and held by gravity, three M3
 fixings along the bottom, no supports anywhere.
+
+The camera's cable exit is a **through slot on the bottom wall** of its pocket.
+The drawing puts the S4B-ZR 3.47 mm from the board's bottom edge, so that is the
+edge it has to leave by — a first version notched the top, which is simply the
+wrong side of the board. It is cut through the full plate thickness rather than
+just breaching the pocket wall, because which face the socket stands on is not
+established, and a through slot serves the cable either way.
 
 ## The eyes light up instead
 
