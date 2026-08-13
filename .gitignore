@@ -19,6 +19,12 @@ brain/models/
 *.db-wal
 *.db-shm
 
+# Somebody else's 3D models, kept locally as a measuring reference.
+# Not ours to redistribute — see reference/eye-mechanism/README.md
+reference/**/*.3mf
+reference/**/*.stl
+reference/**/*.step
+
 # Editors / OS
 .vscode/
 .DS_Store
