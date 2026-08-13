@@ -30,7 +30,7 @@ URL you got it from* in the table. A dimension without a source is a guess.
 
 | Part | Where to look | What is needed |
 | --- | --- | --- |
-| MG90S servo | TowerPro datasheet; the MG90S is a de-facto standard so drawings are widely mirrored | Body envelope, tab hole spacing and diameter, output shaft height above the tabs, spline size, horn thickness |
+| MG90S servo | **Cogley's model first** — see below — then the TowerPro datasheet to cross-check | Body envelope, tab hole spacing and diameter, output shaft height above the tabs, spline size, horn thickness |
 | CQRobot VL53L1X | CQRobot product wiki; ST's VL53L1X datasheet for the sensor itself and its optical requirements | Board outline, mounting hole positions, sensor window height above the board, cable connector footprint and exit direction |
 | Arducam B0385 | docs.arducam.com — Arducam publish per-SKU mechanical drawings | Board outline, mounting hole pattern, M12 lens holder diameter and protrusion, USB connector position |
 | HiLetgo PCA9685 | It is a clone of Adafruit's 16-channel driver; Adafruit publish full dimensions and the boards are dimensionally interchangeable | Outline, mounting holes, header height once soldered |
@@ -43,6 +43,9 @@ real part gets deliberate tolerance:
 - Board pockets **+0.5 mm on each side** of the drawing dimension
 - Any dimension that came from a forum post rather than a manufacturer gets
   **+1 mm**, and gets flagged in the model as low-confidence
+
+Where a dimension can be taken from Cogley's reference model instead, prefer it
+over a datasheet — it is a proven fit rather than a nominal figure. See below.
 
 **Step three — print a fit coupon before printing the part.** For each board,
 make a small flat test piece carrying only that board's outline and hole
@@ -117,10 +120,43 @@ and snap to wherever they think they are.
 5. A wiring plan for the left eyeball specifically — wire gauge, service loop
    path, strain relief, and where the six wires terminate.
 
-## What the reference build is for
+## The reference mechanism is a measuring tool
 
-Cogley's mechanism is being printed and assembled first, on purpose. It answers
-questions this design would otherwise be built on top of untested:
+[Will Cogley's Animatronic Eye Mechanism](https://makerworld.com/en/models/1184807-animatronic-eye-mechanism-e3-2)
+(also on [Printables](https://www.printables.com/model/1220172-animatronic-eye-mechanism-e31))
+is being printed on the Bambu A1 and assembled first. It is free, and MakerWorld
+opens straight into Bambu Studio.
+
+**Import it into Blender as reference geometry.** Export the plate from Bambu
+Studio as STL or 3MF into `reference/eye-mechanism/`, then bring it into the
+scene. This matters more than it sounds: Cogley has already fitted an MG90S,
+already chosen linkage geometry that does not bind, already sized an eyeball.
+Measuring his servo pocket in Blender is a *better* source than a TowerPro
+datasheet, because it is a dimension that has been printed and proven to work
+rather than a nominal number with unstated tolerance.
+
+Use it to pull:
+
+- The servo pocket and its clearances, which encode the real fit rather than the
+  nominal envelope
+- Eyeball diameter and the socket that retains it
+- Linkage lengths and pivot spacing that are known not to bind through travel
+- Wall thicknesses that print cleanly on this class of printer
+
+**Licensing.** Check the licence on the model page before deriving geometry from
+it. Cogley's work is typically shared non-commercially, which is fine for this
+build but constrains what could ever be published. Take *dimensions and
+approach* freely; copying his geometry wholesale into a redistributed model is a
+different thing. Record the licence in this file once confirmed.
+
+The bespoke design departs from it in the ways [parts.md](parts.md) sets out —
+the VL53L1X in the left pupil above all — so it is a starting point and a
+measuring stick, not a base model to edit.
+
+## What the reference build answers
+
+Assembling it also answers questions this design would otherwise be built on top
+of untested:
 
 - Does 4 Hz recognition with a 0.12 s smoothing constant read as alive?
 - What travel actually looks right, versus what looks mechanical?
