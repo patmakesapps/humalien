@@ -18,19 +18,25 @@ What Humalien is made of. Prices are what was seen at the time and will drift.
 
 ## Ordered — eye motion
 
-Everything needed to make eyes move. Ordered 12 Aug 2026, ~$109.
+Everything needed to make eyes move. Order `111-1528335-1842633`, placed
+13 Aug 2026, $144.27. Arrives 14 Aug, except the capacitor on 16 Aug.
 
 | Part | Chosen | Price |
 | --- | --- | --- |
 | PCA9685 servo driver | HiLetgo, 2-pack | $13.99 |
 | MG90S micro servos | Beffkkip, 8-pack (6 used, 2 spare) | $23.98 |
-| Power supply, 5 V 5 A | ALITOVE, includes screw-terminal adapter | $16.49 |
-| Capacitor, 1000 µF 25 V | Cionyce, 10-pack | $4.49 |
-| Soldering station | YIHUA 926 III, 60 W, with helping hands | $39.99 |
+| Power supply, 5 V 5 A | ALITOVE, 5.5 × 2.5 mm plug | $15.50 |
+| Capacitor, 1000 µF 25 V | Rubycon low-ESR, 10-pack | $6.99 |
 | Camera | Arducam **B0385** / OV9782, Amazon `B0CLXZ29F9` | $64.99 |
+| Soldering station | YIHUA 926 III, 60 W, with helping hands — bought separately | $39.99 |
 
-Jumper wires already on hand. The screw-terminal adapter came with the ALITOVE
-supply, so no separate one was needed.
+Jumper wires already on hand. The ALITOVE supply should include a small green
+screw-terminal adapter for the barrel plug; if it doesn't, a "female barrel jack
+to screw terminal" pigtail is the missing link to the PCA9685's V+ terminal.
+
+**The capacitor is not a blocker for first movement.** One or two servos moving
+slowly won't spike enough to matter, so printing, soldering and a first sweep can
+all happen before it arrives. Fit it before running all six together.
 
 Optional: a roll of **63/37 leaded solder**. The YIHUA kit ships lead-free,
 which needs more heat and flows worse — noticeably harder to learn on.
