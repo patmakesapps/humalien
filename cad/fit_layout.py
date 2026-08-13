@@ -252,7 +252,8 @@ def annulus(coll, name, od, idia, t, loc, segs=48):
     return _link(coll, ob, COL_PROXY)
 
 
-def build():
+def build(force=False):
+    guard(collection_contents(COLL_NAME), "fit_layout.build()", force)
     coll = _coll()
 
     # ---- the real printed parts, linked ----

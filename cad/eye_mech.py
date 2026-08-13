@@ -869,7 +869,8 @@ def export_stls():
     return written
 
 
-def build(export=True):
+def build(export=True, force=False):
+    guard(collection_contents(COLL_NAME), "eye_mech.build()", force)
     setup_scene()
     clear()
     objs = []

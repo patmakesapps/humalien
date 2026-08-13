@@ -35,6 +35,16 @@ reference/**/*.blend
 # import and scaling from wherever you keep the file locally.
 **/female_human_head.*
 
+# Blender working files, including the .blend1/.blend2 rolling backups and any
+# hand-made safety copy. Same rule as print/ and for the same first reason:
+# HEAD_FACE and HEAD_CRANIUM live inside these and are cut from the
+# No-AI-licence head sculpt above, so the file is not ours to redistribute.
+# It is also 50 MB of binary that git cannot diff, and cad/*.py rebuilds it.
+# What is NOT reproducible - the USERFIX_HEAD_CRANIUM hand edit - is a
+# liability precisely because it only exists here. See commit 30235e1.
+*.blend
+*.blend[0-9]
+
 # Editors / OS
 .vscode/
 .DS_Store

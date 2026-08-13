@@ -78,7 +78,15 @@ P = dict(
 )
 
 
-def build(head_name=HEAD, keep_whole=True):
+def build(head_name=HEAD, keep_whole=True, force=False):
+    # This is the function that would have eaten USERFIX_HEAD_CRANIUM: it
+    # deletes everything in SPLIT_Head and makes HEAD_FACE and HEAD_CRANIUM
+    # fresh from the whole head, every run. The hand edit near both ear ports
+    # lives on the mesh it replaces, and nothing in this file could put it
+    # back. guard() is defined in head_mounts.py - same shared namespace that
+    # already supplies _cyl, _box and _apply to this file.
+    guard(collection_contents(COLL) + [head_name],
+          "head_split.build()", force)
     head = bpy.data.objects[head_name]
     c = bpy.data.collections.get(COLL)
     if c:

@@ -108,6 +108,7 @@ SKIN = "HEAD_SKIN"
 SOLID = "HEAD_SOLID"    # closed volume of the head; nothing may leave it
 ZONE = "MOUNT_ZONE"     # where mount geometry is allowed to exist
 ZONE_INSET = 1.5        # mm below the outer skin the zone stops
+ARM_MIN = 6.0           # mm of reach below which an arm is a stub, not a boss
 
 M = dict(
     m3_free   = 3.4,      # clearance for an M3
@@ -125,7 +126,23 @@ M = dict(
                      grille=22.0,        # aperture under the ring's Ø23.4 ID
                      arm_r=36.0,         # screw circle, outside the Ø66 bore
                      arm_d=13.0,
-                     arm_a=(90.0, 210.0, 330.0),   # deg, 0 = +y
+                     # deg, 0 = +y. NOT (90, 210, 330), which was wrong twice
+                     # over. Measured at r=36 from the arm root plane x=39.5,
+                     # the skull leaves: 90 deg 23.2 mm, 330 deg 16.7 mm, and
+                     # 210 deg 2.6 mm. 2.6 mm is not a boss. It built as a
+                     # 0.07 mm disc buried in the wall - 72 verts of it inside
+                     # the shell, with an M3 pilot drilled into nothing - and
+                     # that is the lump that reads as a boss smashed into the
+                     # head on both ears. The whole lower-rear quadrant is
+                     # dead: 190-260 deg all measure under 6 mm because the
+                     # skull closes on the hub's back plane there.
+                     # 90 deg was separately wrong: spk_pitch/2 is also 36, so
+                     # the +z speaker post sat on that exact axis (0.000 mm
+                     # apart) and both pilots were drilled down it.
+                     # (50, 170, 290) is the only clean answer - an exact
+                     # 120 deg pattern, every arm >= 19.2 deg clear of both
+                     # speaker posts, bosses 20.6 / 9.6 / 10.3 mm.
+                     arm_a=(50.0, 170.0, 290.0),
                      spk_pitch=72.0,     # LISTING - flange holes unmeasured
                      spk_post=6.0,
                      # 90 tall put the spine's top edge 1.00 mm under the
@@ -338,6 +355,83 @@ def _mark_done(ob, tag):
     ob["humalien_%s" % tag] = PART_REV
 
 
+# ---------------------------------------------------------------------------
+# Overwrite guard
+#
+# _is_done above stops a part rotting from a boolean applied twice. This stops
+# something worse: a rebuild silently destroying geometry no script can put
+# back. USERFIX_HEAD_CRANIUM is the case that forced it - geometry moved by
+# hand near both ear ports, not reproducible from S or M, and head_split.build()
+# deletes and recreates HEAD_CRANIUM every time it runs. It would have gone
+# without a word.
+#
+# The rule is deliberately blunt: mark a thing protected and the builds that
+# would destroy it refuse to run, naming what and why. force=True overrides,
+# because a guard you cannot get past is a guard people delete.
+# ---------------------------------------------------------------------------
+PROTECT = "humalien_protect"
+
+
+def protect(ob, why):
+    """Mark an object as irreproducible. `why` is shown when a build refuses."""
+    ob[PROTECT] = why
+    if ob.data is not None:
+        ob.data[PROTECT] = why
+    return ob
+
+
+def unprotect(ob):
+    for holder in (ob, ob.data):
+        if holder is not None and PROTECT in holder.keys():
+            del holder[PROTECT]
+    return ob
+
+
+def protected(names):
+    """Which of `names` are marked, as (object, mesh, reason) triples."""
+    held = []
+    seen = set()
+    for n in names:
+        if n in seen:       # callers pass a collection's contents PLUS the
+            continue        # head by name, and the head is often in both
+        seen.add(n)
+        ob = bpy.data.objects.get(n)
+        if ob is None:
+            continue
+        why = ob.get(PROTECT) or (ob.data.get(PROTECT) if ob.data else None)
+        if why:
+            held.append((n, ob.data.name if ob.data else "-", why))
+    return held
+
+
+def guard(names, what, force=False):
+    """Refuse to run `what` if it would destroy anything protected."""
+    held = protected(names)
+    if not held:
+        return
+    msg = ["", "%s would destroy protected geometry:" % what, ""]
+    for n, dn, why in held:
+        msg.append("    %-22s (mesh %s)" % (n, dn))
+        msg.append("        %s" % why)
+    msg += ["",
+            "These are marked because no script can reproduce them. The .blend",
+            "is the source of truth for this geometry, not cad/*.py.",
+            "",
+            "Save a copy, then pass force=True if you really mean to lose it.",
+            ""]
+    if force:
+        print("\n".join(msg))
+        print("  force=True given - proceeding and destroying the above.")
+        return
+    raise RuntimeError("\n".join(msg))
+
+
+def collection_contents(coll_name):
+    """Object names a build is about to delete along with its collection."""
+    c = bpy.data.collections.get(coll_name)
+    return [ob.name for ob in c.objects] if c else []
+
+
 def shade(ob, angle=40.0):
     """Smooth shading with hard edges kept by angle."""
     me = ob.data
@@ -541,6 +635,7 @@ def ear_hubs(probe, coll, head):
     # arm without the clip pushes its flat end out through a curved wall.
     # Measure the length, then clip what is left.
     arms = bmesh.new()
+    built = []                  # only these get a pilot drilled later
     for a in e["arm_a"]:
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
@@ -562,12 +657,29 @@ def ear_hubs(probe, coll, head):
         start = fx - e["plug_t"]
         loc, d = probe.inner((start, ay, az), (1, 0, 0))
         if loc is None:
-            print("    arm at %.0f deg: NO WALL FOUND, skipped" % a)
+            # Nearly always this means the ray went straight down a clearance
+            # hole a PREVIOUS run drilled at this angle, not that the head has
+            # a gap. Rebuild the shell before the mounts, or the arms measure
+            # their own old holes.
+            print("    arm at %.0f deg: NO WALL FOUND - rebuild the shell "
+                  "first, this ray is going down an existing screw hole" % a)
             continue
         end = loc.x
-        if end <= start:
+        if end - start < ARM_MIN:
+            # A stub is worse than nothing: it still gets a pilot drilled into
+            # it, so the assembly reads as a mount that exists when there is
+            # no thread behind it. This is what (90, 210, 330) did at 210 deg
+            # for three revisions - 2.59 mm of reach built as a 0.07 mm disc
+            # mashed into the shell wall. Fail loudly, do not build it.
+            print("    arm at %.0f deg: only %.2f mm of reach (need %.1f) - "
+                  "NOT BUILT. Move this angle out of the dead quadrant."
+                  % (a, end - start, ARM_MIN))
             continue
         _cyl(arms, e["arm_d"], end - start, ((start + end) / 2, ay, az), 'X')
+        built.append(a)
+    if len(built) < 3:
+        print("    WARNING: ear hub has only %d of %d arms - %s"
+              % (len(built), len(e["arm_a"]), built))
     arm_ob = _link(coll, "_ARMS", _mesh("_ARMS", arms))
     boolean(arm_ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
     boolean(hub, arm_ob, 'UNION')
@@ -594,7 +706,7 @@ def ear_hubs(probe, coll, head):
     stages.append(("grille", grille))
 
     pilots = bmesh.new()        # these are disjoint, so one batch is fine
-    for a in e["arm_a"]:
+    for a in built:             # never drill a pilot where no arm was built
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
         _cyl(pilots, M["m3_pilot"], 34.0, (fx - 2.0, ay, az), 'X', segs=24)
@@ -990,7 +1102,13 @@ def ear_screw_holes(cut):
 
 
 # ---------------------------------------------------------------------------
-def build(S=None, eye_axis=None, save=True):
+def build(S=None, eye_axis=None, save=False, force=False):
+    # save defaults to FALSE. It used to be True, and this function called
+    # save_mainfile() twice - so merely running it wrote the result to disk
+    # before anyone had looked at it, and there was no undo. Nothing that
+    # rebuilds geometry should also commit it. Pass save=True when you have
+    # seen the result and want it kept.
+    guard(collection_contents(COLL) + [HEAD], "head_mounts.build()", force)
     head = bpy.data.objects[HEAD]
     c = bpy.data.collections.get(COLL)
     if c:

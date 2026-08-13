@@ -590,7 +590,12 @@ def _clean_copy(coll, mat_shell, mat_dark):
     return ob
 
 
-def build():
+def build(force=False):
+    # Upstream of everything. This remakes HEAD_CYBORG, which head_split then
+    # cuts into HEAD_FACE and HEAD_CRANIUM - so running it is the first half
+    # of losing any hand edit on those. guard() comes from head_mounts.py.
+    guard(collection_contents(COLL_NAME) + ["HEAD_CYBORG", "HEAD_SKIN"],
+          "head_style.build()", force)
     coll, cuts = _reset()
     mat_shell = _mat("MAT_shell", SHELL_RGBA, 0.35)
     mat_dark = _mat("MAT_interior", DARK_RGBA, 0.6)

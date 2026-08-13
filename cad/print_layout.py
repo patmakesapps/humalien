@@ -59,9 +59,16 @@ def _flatten_rake(sx):
 # Rotations are about the world origin and are applied to a throwaway copy;
 # nothing in the scene moves.
 PARTS = [
-    ("HEAD_FACE",     1, Matrix.Rotation(math.radians(-90), 4, 'X'),
+    # These two signs were swapped, and the docstring above was describing the
+    # intent rather than the code. A rotation of -90 about X maps z = -y, so
+    # HEAD_FACE came out NOSE DOWN on the bed with the cut face in the air -
+    # every feature on the face printed against the plate, and the shell's
+    # rim overhung into space. +90 maps z = +y, which puts the y=135 cut plane
+    # on the bed and the nose at the top, which is what was always meant.
+    # HEAD_CRANIUM had the same error mirrored: it printed dome-down.
+    ("HEAD_FACE",     1, Matrix.Rotation(math.radians(90), 4, 'X'),
      "cut face down, nose up - no support on the face"),
-    ("HEAD_CRANIUM",  1, Matrix.Rotation(math.radians(90), 4, 'X'),
+    ("HEAD_CRANIUM",  1, Matrix.Rotation(math.radians(-90), 4, 'X'),
      "cut face down, dome up"),
     ("ear_hub_R",     1, Matrix.Rotation(math.radians(90), 4, 'Y'),
      "outer face down, arms and speaker spine up"),
