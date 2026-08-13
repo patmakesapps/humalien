@@ -595,6 +595,39 @@ def build():
     skin.hide_render = True
     skin.hide_set(True)
 
+    # ...and HEAD_SOLID, the same surface with every remaining hole filled -
+    # the eye sockets the pre-clean opened, and the neck. Closed, so it is a
+    # SOLID: the volume the head occupies, skin included.
+    #
+    # This is the object that stops parts leaving the head. Sizing a mount
+    # by raycasting the wall and then building a flat-ended cylinder does
+    # not work and cannot be made to work: the wall is curved, so a ray down
+    # the boss's centreline says 19 mm of clearance while the boss's own rim
+    # is already 6.6 mm outside the skull. Every one of the eleven bosses
+    # broke out that way. Clipping them against this instead is exact - a
+    # part intersected with HEAD_SOLID physically cannot leave the head,
+    # whatever the curvature does.
+    solid_me = head.data.copy()
+    solid_me.name = "HEAD_SOLID"
+    bm = bmesh.new()
+    bm.from_mesh(solid_me)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    # Keep filling until nothing is open. One pass leaves a handful of edges
+    # behind - holes_fill can bridge a loop into two smaller loops - and
+    # "closed" has to mean closed: the MANIFOLD solver refuses the object
+    # otherwise, and a boolean that refuses silently returns rubble.
+    for _ in range(6):
+        if not any(e.is_boundary for e in bm.edges):
+            break
+        _fill_small_holes(bm, max_extent=1e9)
+    bm.to_mesh(solid_me)
+    bm.free()
+    solid = bpy.data.objects.new("HEAD_SOLID", solid_me)
+    coll.objects.link(solid)
+    solid.display_type = 'WIRE'
+    solid.hide_render = True
+    solid.hide_set(True)
+
     # ---- cutters (dark material, so every bore reads mechanical) ----
     ep = S["ear_port"]
     ports = []

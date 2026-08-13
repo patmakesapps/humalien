@@ -105,6 +105,7 @@ from mathutils.bvhtree import BVHTree
 COLL = "MOUNT_Parts"
 HEAD = "HEAD_CYBORG"
 SKIN = "HEAD_SKIN"
+SOLID = "HEAD_SOLID"    # closed volume of the head; nothing may leave it
 
 M = dict(
     m3_free   = 3.4,      # clearance for an M3
@@ -731,7 +732,30 @@ def build(S=None, eye_axis=None, save=True):
     add = bmesh.new()
     bosses(probe, add, shell_cut)
     ear_screw_holes(shell_cut)
-    _apply(coll, head, add, "_ADD_mounts", 'UNION')
+    # Clip everything being added against the head's own volume BEFORE
+    # unioning it in, so no boss can end up outside the skull. See the
+    # HEAD_SOLID note in head_style.py for why measuring the wall and
+    # trusting the number does not work here.
+    add_ob = _link(coll, "_ADD_mounts", _mesh("_ADD_mounts", add))
+    before = len(add_ob.data.vertices)
+    # EXACT, not MANIFOLD, and this is the one place that is true. HEAD_SOLID
+    # will not close completely - it comes down to six sliver edges under a
+    # millimetre long that neither holes_fill nor a weld will take - and
+    # MANIFOLD refuses an open input by handing back the target UNCHANGED.
+    # It did exactly that here: the boss came out of the clip still 25 mm
+    # long and still sticking through the forehead, with no error. EXACT
+    # does not care about the slivers and trims correctly.
+    boolean(add_ob, bpy.data.objects[SOLID], 'INTERSECT', solver='EXACT')
+    after = len(add_ob.data.vertices)
+    if after == before:
+        raise RuntimeError(
+            "clip against %s did nothing (%d verts in and out) - the solver "
+            "refused it. Do NOT union this; every boss would break out."
+            % (SOLID, before))
+    print("  clipped mounts to the head volume: %d -> %d verts"
+          % (before, after))
+    boolean(head, add_ob, 'UNION')
+    bpy.data.objects.remove(add_ob, do_unlink=True)
     _apply(coll, head, shell_cut, "_CUT_holes", 'DIFFERENCE')
 
     me = head.data
