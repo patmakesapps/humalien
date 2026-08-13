@@ -1212,6 +1212,37 @@ run, so it is still the non-destructive layer: move a number in `S`, re-run
 the four, and everything downstream re-measures itself against the new shell.
 
 
+### Open, end of 13 Aug 2026
+
+Four things, in the order they block work.
+
+**The eye mechanism has nowhere to bolt.** Every other part in the head has a
+home; the eyes have raked sockets, printed bezels and a clear bay, and nothing
+to carry six servos. A bulkhead was built and withdrawn the same hour, because
+it turns out **the eye mechanism and the ear hubs want the same space**: each
+hub occupies x 29.5..65.5 over y 59..131 and z 163..246, on both sides, so
+behind the y=135 split there is only 59 mm of clear width at the eye line
+against the ~100 mm the mechanism needs. Three ways forward are recorded on
+`head_mounts.eye_plate`, which is kept but not called. This is a design
+decision, not a bug fix.
+
+**A hand edit to `HEAD_CRANIUM` is not in the scripts.** Somebody moved
+geometry near both ear ports "in a bit on the Y" to clear a collision, in edit
+mode, on 13 Aug. It is preserved in the .blend as `USERFIX_HEAD_CRANIUM`, and
+it is **not** reproducible: the port rim and all three screw positions measure
+identical to a fresh script build, so the delta could not be found by
+comparison, and the vertex counts differ because the edit was made against an
+earlier build. Any re-run of `head_style` + `head_split` regenerates both
+halves and loses it. Before the next rebuild, someone who knows what was moved
+needs to say so, and it needs to go into `S` or `M` as a number.
+
+**Two sub-millimetre interferences remain**, both under a 0.4 mm nozzle's
+ability to care: the eye bezels sit 0.89 mm into the socket wall, and the
+forehead casing 0.36 mm into the shell at its two bottom corners.
+
+**The 5050 pixels are not ordered.** Both eyeballs need one, and until they
+are bought the iris window and the eyeball itself stay proxies.
+
 ### Deliberately not built
 
 Linkage geometry, the eyeball, its socket, the eyelids, and the hard stops. All
