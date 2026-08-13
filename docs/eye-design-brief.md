@@ -806,6 +806,71 @@ one module, and the flange hole spacing.** A ruler to ±1 mm is plenty for
 packaging — this does not need the coupon treatment, because the module is a
 sealed box being bolted down rather than a bare board being located.
 
+### The fit study — 13 Aug 2026
+
+`cad/fit_layout.py`. Run it after `eye_mech.py` and `head_ref.py`; it rebuilds
+a `FIT_Assembly` collection that places every structural part inside the head
+at its working position — linked duplicates of the printed parts (same mesh
+data, so a part rebuild flows through on re-run), `PROXY_*` objects for the
+boards and bought parts built from the same numbers `BOARDS` carries, and the
+100 mm envelope gauge. The script checks itself: `verify()` ray-casts every
+part against the head skin and reports anything poking out, with the known
+head-remodelling debts whitelisted so a layout regression cannot hide among
+them.
+
+| What | Where (x, y, z in head frame) | Note |
+| --- | --- | --- |
+| Eyeballs Ø32 | (±31, 160, 209) | pitch 62 from `P`, pupil line just below the nasion at 213 |
+| NeoPixel rings | back face 12.5 fwd of eye centre | front face lands at 179.2, flush with the shell over the eyes |
+| `forehead_casing` | upright, boards forward, y 162..167, z 225..283 | aperture row z=257.5; camera at x=+22, ToF at −32; bottom edge clears the eyeball tops by 1.6 |
+| `pi5_tray` | flat, long axis fore-aft, y 43.5..136.5, plate z 256..259 | Pi board top 265.6, hat stack ~282, rear corner 3.5 clear of the dome |
+| `pca9685_mount` | upright on the rear wall, y 42..50, z 209..251 | the wall bows 13 mm across the plate — the skull prints bosses under the slots |
+| Speakers | outer face ~|x| 54.5, z 175..245, leaning 12° with the wall | LISTING-grade dims; re-place when a ruler has met the module |
+| Cable anchors | 2 rear wall, 2 side walls, 2 parked | anchors only earn a position once a loom exists |
+
+**What the study found — the places the head must change to serve the parts:**
+
+- **The mesh's own eye sockets sit at pitch 56, centre z≈214.** The design
+  pitch is 62 (`P["eye_pitch"]`, provisional). So either the styled sockets
+  move ~3 mm outboard per side, or `eye_pitch` drops toward 56 — one number
+  either way, and it is a decision, not a calculation. The sculpted eyeball
+  components in the mesh were measured for this and then dropped from the
+  styled copy.
+- **The brow flanks are the one real fight.** The casing's top corners breach
+  the skin by up to 10.3 mm at |x|>40, z>265, and the camera board's own
+  corner by 3.3 — the female scan's forehead is too curved for a 96-wide flat
+  plate high in the brow. Two honest fixes: restyle the brow band fuller and
+  flatter (the plated-face reference has exactly that brow), or chamfer the
+  casing's spare top corners in a rev — the fixings and pockets don't use
+  them. Currently carried as a styling debt, not a part change.
+- **The rings need bezels.** A flat Ø36.8 ring against a doubly-curved face
+  cannot be flush at the centre and buried at the rim: the outboard rim sits
+  ~10 mm proud at x=±49. The styled face grows a bezel/boss around each ring —
+  which is what the reference photos' camera-iris eyes look like anyway.
+- **Nothing else fights.** Tray, driver mount, speakers and anchors all sit
+  inside with margin once placed to the measured walls; the cranium swallows
+  the whole electronics stack with the mic hat exactly where hardware.md
+  wanted it — high and rearward.
+
+### Styling begun — 13 Aug 2026
+
+`cad/head_style.py`. Builds `STYLE_Head`: `HEAD_CYBORG` is a copy of
+`HEAD_REF` (the original stays, hidden) carrying a non-destructive modifier
+stack — a 4 mm Solidify shell, then boolean cutters for the reads all three
+reference photos share: Ø66 circular ports swallowing the sculpted ears
+(centred on the measured ear centroid, y=95 z=204), the open rear cranium
+(y 12..55, z 162..256, rounded), Ø24 eye openings at the *design* pitch 62,
+and the camera bore + ToF window on the casing's aperture row. Cutters live
+in `STYLE_cutters`, wireframed and hidden; nothing is applied, every opening
+is still a parameter in `S`.
+
+The licence note in `head_ref.py` covers the copy too: the mesh never leaves
+the machine and never goes near the MCP generative tools.
+
+Still open, deliberately: the fuller brow band, ring bezels, panel seams and
+the face/cranium split line, and everything neck. Those are sculpting
+sessions with the fit collection as the ruler, not parameters to guess today.
+
 ### Deliberately not built
 
 Linkage geometry, the eyeball, its socket, the eyelids, and the hard stops. All
