@@ -1079,6 +1079,41 @@ is the neck plate, and there is no neck. Pins and four M3s through a neck
 plate is the intended end state; pins and a bead of glue is what this prints
 as today.
 
+### The check that should have existed from day one — 13 Aug 2026
+
+`fit_layout.collide()`. Until this was written, `verify()` was the only check
+in the project and it asked exactly one question: *is this part inside the
+skin?* It answered that correctly every time. Nobody had asked the other
+question, which is whether the parts pass through **each other**, and while
+`verify()` was reporting CLEAN the eye bezel was running through the forehead
+casing, two cable anchors were running through the ear hubs, and every boss
+in the head was pushing 1.5 mm into the part it was supposed to be holding.
+It took someone looking at the screen to notice.
+
+Two things make it useful rather than noisy:
+
+**Touching is not a fault.** Most of these parts are meant to touch — a board
+on its standoffs, a tray on its rails, a ring in its recess. `CONTACT` names
+those pairs, and anything not on it has to clear.
+
+**Inside-ness is ray parity across three directions, not the sign of the
+nearest surface normal.** The normal test is the obvious one and it is wrong
+on any part that is not convex: asked whether the eyeball is inside the eye
+bezel, it finds the nearest surface is the ring's *bore*, whose normal points
+inward, and reports 21.8 mm of interference through a 2.2 mm gap. And one ray
+is not enough on a 180k shell covered in seam grooves — a ray that grazes a
+crease miscounts its crossings, and a single miscount flips the verdict. With
+one direction it put the forehead casing 33.8 mm inside the skull. Three
+directions and a majority vote, and every number it prints is one you can act
+on.
+
+The first honest run found eleven **sealed voids**, one per boss: each pilot
+hole started 1 mm proud of a boss that started 1.5 mm proud of the part, so
+the hole was entirely enclosed in material. Not a hole at all — a bubble no
+screw could reach, and eleven loose islands in a mesh that was otherwise
+manifold. Both numbers are now measured from the part's mounting face: the
+post starts on it, the pilot starts 4 mm short of it.
+
 ### Blender's boolean solver — 13 Aug 2026
 
 Worth writing down, because two rules in this repo looked like laws and were
@@ -1109,6 +1144,11 @@ Three more traps, all silent, all now guarded in code:
   look at the shell, and both edits to them did nothing until that was
   noticed.
 - A boolean against an *empty* cutter does not no-op. It returns rubble.
+- Batching cutters into one mesh is fine while they are **disjoint**. Two
+  interpenetrating solids in a single cutter is not: the eye bezel's bore and
+  the trim box shared a cutter, and the bore came back at r13.4 instead of
+  r17.8 — straight through the eyeball. Batch what does not touch; run
+  overlapping cutters one at a time.
 
 ### Running the head pipeline
 

@@ -87,7 +87,7 @@ L = dict(
     tray_y       = 90.0,     # tray/board centre; plate z below
     tray_z       = 256.0,    # plate 256..259, standoffs to 264, board to 265.6
 
-    pca_y        = 42.0,     # back face: rear wall inner reaches 41.4 at the
+    pca_y        = 44.0,     # back face: rear wall inner reaches 41.4 at the
                              # plate's x=39 corners; the bowed wall gets
                              # printed bosses under the slots like any fixing
     pca_z        = 230.0,    # spans z 209..251
@@ -267,8 +267,12 @@ def build():
     # only earn a position once a loom exists to hold
     part(coll, "cable_anchor", "FIT_cable_anchor_1", (14, 35, 240), R_FWD)
     part(coll, "cable_anchor", "FIT_cable_anchor_2", (-14, 35, 240), R_FWD)
-    part(coll, "cable_anchor", "FIT_cable_anchor_3", (40, 92, 158), R_SIDE_R)
-    part(coll, "cable_anchor", "FIT_cable_anchor_4", (-40, 92, 158), R_SIDE_L)
+    # 3 and 4 dropped from z=158 to z=140: at the old height they shared
+    # space with the ear hub's speaker spine, which did not exist when they
+    # were placed. Low on the side wall is still where the loom turns down
+    # towards the neck.
+    part(coll, "cable_anchor", "FIT_cable_anchor_3", (38, 92, 140), R_SIDE_R)
+    part(coll, "cable_anchor", "FIT_cable_anchor_4", (-38, 92, 140), R_SIDE_L)
     part(coll, "cable_anchor", "FIT_cable_anchor_5_PARKED", (14, 70, 108))
     part(coll, "cable_anchor", "FIT_cable_anchor_6_PARKED", (-14, 70, 108))
 
@@ -470,7 +474,145 @@ def verify(head_name=None):
     return clean
 
 
+# ---------------------------------------------------------------------------
+# collision check: does any part pass through any other part?
+#
+# This should have existed from the first day and did not, and the cost of
+# that was a session where `verify()` reported CLEAN while the eye bezel ran
+# through the forehead casing, two cable anchors ran through the ear hubs,
+# and every boss in the head pushed 1.5 mm into the part it was holding.
+# `verify()` only ever asked one question - is this part inside the skin -
+# and answered it correctly. Nobody had asked the other one.
+#
+# Touching is not a fault. Most of these parts are *supposed* to touch: a
+# board sits on its standoffs, a tray sits on its rails, a ring sits in its
+# recess. So the number that matters is not "do the surfaces overlap" but
+# "how far is one part inside the other", and CONTACT lists the pairs where
+# any depth at all is by design.
+# ---------------------------------------------------------------------------
+CONTACT = {
+    ("FIT_pi5_tray", "PROXY_pi5_board"): "board on its standoffs",
+    ("FIT_pi5_tray", "tray_rail_R"): "tray sits on the rail",
+    ("FIT_pi5_tray", "tray_rail_L"): "tray sits on the rail",
+    ("FIT_pca9685_mount", "PROXY_pca9685_board"): "board on its bosses",
+    ("FIT_forehead_casing", "PROXY_b0385_board"): "board in its pocket",
+    ("FIT_forehead_casing", "PROXY_vl53l1x_board"): "board in its channel",
+    ("FIT_forehead_casing", "PROXY_b0385_holder"): "lens holder over the pocket",
+    ("PROXY_b0385_board", "PROXY_b0385_holder"): "the camera's own stack",
+    ("PROXY_b0385_barrel", "PROXY_b0385_holder"): "the camera's own stack",
+    ("PROXY_eyeball_R", "PROXY_iris_R"): "iris window set into the front pole",
+    ("PROXY_eyeball_L", "PROXY_iris_L"): "iris window set into the front pole",
+    ("ear_hub_R", "PROXY_neopixel_ear_R"): "ring in the hub's recess",
+    ("ear_hub_L", "PROXY_neopixel_ear_L"): "ring in the hub's recess",
+    ("ear_hub_R", "PROXY_speaker_R_LISTING"): "speaker on the hub's posts",
+    ("ear_hub_L", "PROXY_speaker_L_LISTING"): "speaker on the hub's posts",
+}
+# Parts that were cut FROM the shell or trimmed BY it share surfaces with it
+# by construction, and a nearest-surface depth test inside a hollow shell is
+# meaningless anyway - it measures the distance to the far wall. Skip the
+# shell against anything it shaped.
+SHELL = ("HEAD_CYBORG", "HEAD_FACE", "HEAD_CRANIUM")
+SHAPED_BY_SHELL = ("ear_hub_R", "ear_hub_L", "tray_rail_R", "tray_rail_L",
+                   "HEAD_FACE", "HEAD_CRANIUM")
+
+COLLIDE_TOL = 0.15      # mm; below this it is contact, not interference
+
+
+def collide(verbose=True):
+    import itertools
+    from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
+    dg = bpy.context.evaluated_depsgraph_get()
+    names = [o.name for o in bpy.data.objects
+             if (o.name.startswith(("FIT_", "PROXY_"))
+                 or o.name in ("ear_hub_R", "ear_hub_L", "eye_bezel_R",
+                               "eye_bezel_L", "tray_rail_R", "tray_rail_L")
+                 or o.name in SHELL)
+             and not o.name.startswith("CHECK_")]
+    data = {}
+    for n in names:
+        ob = bpy.data.objects[n]
+        bm = bmesh.new()
+        bm.from_object(ob, dg)
+        bm.transform(ob.matrix_world)
+        bm.normal_update()
+        data[n] = (bm, BVHTree.FromBMesh(bm))
+
+    from mathutils import Vector
+    # Three directions, majority vote. One ray is not enough on a 180k shell
+    # covered in seam grooves and raked bores: a ray that grazes a crease
+    # miscounts its crossings, and a single miscount flips the verdict. With
+    # one direction this reported the forehead casing 33.8 mm inside the
+    # skull and the eyeball 13 mm inside a bezel it clears by 2.2.
+    DIRS = [Vector(v).normalized() for v in ((0.331, 0.537, 0.774),
+                                             (-0.71, 0.35, 0.61),
+                                             (0.45, -0.83, 0.33))]
+
+    def depth(a, b):
+        """furthest a vertex of a sits inside the solid b.
+
+        Inside-ness is ray parity, not the sign of the nearest surface
+        normal. The normal test is the obvious one and it is wrong on any
+        part that is not convex: asked whether the eyeball is inside the eye
+        bezel, it finds the nearest surface is the ring's *bore*, whose
+        normal points inward, and reports 21.8 mm of interference through a
+        2.2 mm gap. Every part here is a closed solid, so parity is exact.
+        """
+        bma = data[a][0]
+        tb = data[b][1]
+        worst = 0.0
+        vs = bma.verts[:]
+        step = max(1, len(vs) // 1500)
+        for i in range(0, len(vs), step):
+            p = vs[i].co
+            votes = 0
+            for D in DIRS:
+                hits, t0 = 0, 0.0
+                for _ in range(40):
+                    loc, nrm, idx, d = tb.ray_cast(p + D * (t0 + 0.03), D)
+                    if loc is None:
+                        break
+                    hits += 1
+                    t0 = (loc - p).dot(D)
+                votes += hits % 2
+            if votes < 2:
+                continue
+            loc, nrm, idx, d = tb.find_nearest(p, 60.0)
+            if d is not None and d > worst:
+                worst = d
+        return worst
+
+    bad = []
+    for a, b in itertools.combinations(sorted(names), 2):
+        # a part that was cut from the shell or trimmed by it shares
+        # surfaces with it by construction
+        if (a in SHELL and b in SHAPED_BY_SHELL) or \
+           (b in SHELL and a in SHAPED_BY_SHELL):
+            continue
+        # the whole head and its own two halves are the same geometry
+        if a in SHELL and b in SHELL:
+            continue
+        if not data[a][1].overlap(data[b][1]):
+            continue
+        note = CONTACT.get((a, b)) or CONTACT.get((b, a))
+        d = max(depth(a, b), depth(b, a))
+        if note or d <= COLLIDE_TOL:
+            if verbose and note:
+                print("  contact  %-24s x %-24s %s" % (a, b, note))
+            continue
+        bad.append((d, a, b))
+    for bm, _ in data.values():
+        bm.free()
+    bad.sort(reverse=True)
+    for d, a, b in bad:
+        print("  COLLISION %6.2f mm  %-24s x %s" % (d, a, b))
+    print("collision check:", "CLEAN" if not bad
+          else "%d INTERFERENCES ABOVE" % len(bad))
+    return not bad
+
+
 if __name__ == "__main__":
     build()
     report()
     verify()
+    collide()

@@ -133,7 +133,7 @@ M = dict(
     # 35.6 puts 2.3 mm all round and still closes most of the 4.5 mm annulus
     # the Ø41 socket leaves around a Ø32 ball.
     eye       = dict(pitch=62.0, y=160.0, z=209.0, socket=41.0,
-                     od=40.4, idia=35.6, t=6.0, ball=32.0, recess=1.5),
+                     od=39.6, idia=35.6, t=6.0, ball=32.0, recess=1.5),
 
     # Pi 5 tray: plate z 256..259, slots at (0,131.5) (0,48.5) (+-27, 90)
     tray      = dict(z=256.0, slot_x=27.0, slot_y=(60.0, 120.0),
@@ -165,14 +165,17 @@ BOSSES = [
     ("casing_C",   Vector((  0.0, 167.0, 229.0)), Vector((0, 1, 0)),  "m3", {}),
     ("casing_L",   Vector((-35.0, 167.0, 229.0)), Vector((0, 1, 0)),  "m3",
      dict(lift=Vector((0, 0, 4.0)), dia=15.0)),
-    ("pca_RT",     Vector(( 34.1,  42.0, 245.7)), Vector((0, -1, 0)), "m3", {}),
-    ("pca_LT",     Vector((-34.1,  42.0, 245.7)), Vector((0, -1, 0)), "m3", {}),
-    ("pca_RB",     Vector(( 34.1,  42.0, 214.3)), Vector((0, -1, 0)), "m3", {}),
-    ("pca_LB",     Vector((-34.1,  42.0, 214.3)), Vector((0, -1, 0)), "m3", {}),
+    ("pca_RT",     Vector(( 34.1,  44.0, 245.7)), Vector((0, -1, 0)), "m3", {}),
+    ("pca_LT",     Vector((-34.1,  44.0, 245.7)), Vector((0, -1, 0)), "m3", {}),
+    ("pca_RB",     Vector(( 34.1,  44.0, 214.3)), Vector((0, -1, 0)), "m3", {}),
+    ("pca_LB",     Vector((-34.1,  44.0, 214.3)), Vector((0, -1, 0)), "m3", {}),
     ("anchor_1",   Vector((  7.6,  35.0, 240.0)), Vector((0, -1, 0)), "m2", {}),
     ("anchor_2",   Vector(( -7.6,  35.0, 240.0)), Vector((0, -1, 0)), "m2", {}),
-    ("anchor_3",   Vector(( 40.0,  92.0, 164.4)), Vector((1, 0, 0)),  "m2", {}),
-    ("anchor_4",   Vector((-40.0,  92.0, 164.4)), Vector((-1, 0, 0)), "m2", {}),
+    # Dropped from z=164.4 to z=146.4. At the old height these two sat
+    # exactly where the ear hub's speaker spine now runs (x 35.5..39.5,
+    # z 159..249) and the two parts shared 1.5 mm of the same space.
+    ("anchor_3",   Vector(( 38.0,  92.0, 146.4)), Vector((1, 0, 0)),  "m2", {}),
+    ("anchor_4",   Vector((-38.0,  92.0, 146.4)), Vector((-1, 0, 0)), "m2", {}),
 ]
 # The tray's own front and rear fixings, at (0, 131.5) and (0, 48.5), get
 # nothing. There is no wall behind the rear one - that is where the cranial
@@ -498,6 +501,23 @@ def eye_bezels(probe, coll, eye_axis):
         ob = _link(coll, "eye_bezel_%s" % side,
                    _mesh("eye_bezel_%s" % side, bm), COL_HUB)
         _apply(coll, ob, cut, "_CUT_bez_%s" % side, 'DIFFERENCE')
+
+        # The forehead casing's bottom edge crosses the top of this ring. The
+        # casing cannot move - its bottom is already as low as the eyeball
+        # tops allow and its top is already as high as the brow allows - so
+        # the ring gives way, which costs nothing: the flat it leaves is on
+        # the ring's upper rear, behind the shell, out of sight. The casing's
+        # ENVELOPE is used rather than the part, to keep this file
+        # independent of where fit_layout puts things.
+        #
+        # A SEPARATE boolean, and that matters. Batching this box into the
+        # same cutter as the bore cone above put two interpenetrating solids
+        # in one cutter mesh, and the bore came back at r13.4 instead of
+        # r17.8 - straight through the eyeball. Batch cutters that are
+        # disjoint; run overlapping ones one at a time.
+        trim = bmesh.new()
+        _box(trim, (120.0, 9.0, 64.0), (0.0, 164.5, 254.0))
+        _apply(coll, ob, trim, "_CUT_bez_trim_%s" % side, 'DIFFERENCE')
         out.append(ob)
         if sx == 1:
             print("  eye_bezel_R/L: Ø%.1f in the Ø%.0f socket; rim spread "
@@ -598,12 +618,20 @@ def bosses(probe, add, cut):
             rows.append((label, None))
             continue
         axis = 'X' if abs(d.x) > 0.5 else ('Y' if abs(d.y) > 0.5 else 'Z')
-        length = dist + 5.0
+        # The post starts exactly ON the part's mounting face and ends 3 mm
+        # inside the wall. It used to start 1.5 mm short of the face "to
+        # guarantee the union", which meant every boss in the head pushed
+        # 1.5 mm into the part it was supposed to be holding.
+        length = dist + 3.5
         _cyl(add, opt.get("dia", M["boss_d"]), length,
-             pt + lift + d * (length / 2.0 - 1.5), axis)
+             pt + lift + d * (length / 2.0), axis)
+        # The pilot has to break OUT of the boss at the near end, or it is
+        # not a hole, it is a sealed void: it showed up as eleven loose
+        # 48-vertex islands inside the shell, one per boss, each of them a
+        # cavity no screw could ever reach. Start it 4 mm proud of the face.
         pd = M["m3_pilot"] if size == "m3" else M["m2_pilot"]
-        plen = dist + 2.0
-        _cyl(cut, pd, plen, pt + d * (plen / 2.0 - 1.0), axis, segs=24)
+        plen = dist + 5.0
+        _cyl(cut, pd, plen, pt + d * (plen / 2.0 - 4.0), axis, segs=24)
         rows.append((label, dist))
     print("  bosses - gap each post crosses, mm:")
     for label, dist in rows:
