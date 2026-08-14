@@ -12,6 +12,7 @@ a natural voice conversation you can interrupt and talk over.
 | [vision.md](vision.md) | USB webcam face tracking and the gaze-target contract |
 | [people.md](people.md) | Recognising people, remembering them, and looking on request |
 | [running.md](running.md) | Starting Humalien by hand, and on boot |
+| [resume-here.md](resume-here.md) | Where the build got to, what is printed, and what is still open |
 
 ## The two machines
 
