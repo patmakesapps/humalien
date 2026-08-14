@@ -22,9 +22,17 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 
 ## What to do next
 
-1. **Export STLs for plates 1, 2 and 4** as you come to print them. Only plate
-   3 is exported. Naming follows `print_layout`: `<part>_x<qty>.stl`, and the
-   `_xN` is the quantity to set in the slicer, not bodies in the file.
+1. **Export STLs for plates 1 and 2** as you come to print them. Plates 3 and
+   4 are done. Run it from `cad/export_plate.py`:
+
+   ```python
+   exec(open(r"C:\Humalien\cad\export_plate.py").read())
+   verify(1)            # plate copies still match the real parts?
+   export_plate(1)      # -> exports/plate1/
+   ```
+
+   Naming is `<part>_x<qty>.stl`, and the `_xN` is the quantity to set in the
+   slicer, not bodies in the file.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
@@ -36,8 +44,12 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 | --- | --- | --- |
 | 1 | `HEAD_CRANIUM` | not exported |
 | 2 | `HEAD_FACE` | not exported |
-| 3 | `pi5_tray`, `forehead_casing`, `pca9685_mount`, both `eye_bezel`, both `tray_rail`, 4× `cable_anchor` | **printed 13 Aug**, STLs in `exports/` |
-| 4 | both `ear_hub`, both `ear_spine`, all 5 coupons | not exported |
+| 3 | `pi5_tray`, `forehead_casing`, `pca9685_mount`, both `eye_bezel`, both `tray_rail`, 4× `cable_anchor` | **printed 13 Aug**, STLs in `exports/plate3/` |
+| 4 | both `ear_hub`, both `ear_spine`, all 5 coupons | exported 14 Aug to `exports/plate4/` |
+
+`exports/` is one folder per plate — `exports/plate3/`, `exports/plate4/`.
+Everything in `plate3/` is exactly the files that were printed on 13 Aug,
+moved rather than regenerated, so it stays a record of what came off the bed.
 
 The plate layout lives in the `print ready` collection and includes a hand
 arrangement: `ear_hub_L` was moved to sit with `ear_hub_R`. That position is in
@@ -73,6 +85,32 @@ they differ, which is why they were measured). Those plugs exist in the
 As one piece it had features standing off **both** faces, so no orientation put
 a flat surface on the bed. Rejoined with **2 × M3 × 10** at y=95, z=204±24 —
 clearance through the 4 mm spine, 6.5 mm blind thread into the 8 mm plug.
+
+## What the plate 4 export turned up, 14 Aug
+
+Eight of the nine parts left Blender **not watertight**, and it had never
+shown up because plate 3 happened to be clean. Two separate causes, both now
+repaired on the export copy by `export_plate.print_clean()`:
+
+- **Zero-area slits** on four of the five coupons, on `ear_hub`, and on
+  `eye_bezel_L`. A coplanar boolean seam left a T-junction — three short
+  collinear edges tiling one long one, with a zero-width face missing between
+  them. `coupon_mg90s` had seven. They enclose no volume, so nothing prints
+  differently, but every slicer stops to repair them.
+- **`ear_spine` was three overlapping shells**, not one solid: a box with two
+  Ø9 posts pushed through it, merged into one bmesh with no union. That welds
+  into 48 edges used more than twice. Fixed with a self-union, rolled back
+  automatically if it moves the bounding box.
+
+Checked afterwards straight from the files, not from Blender: all nine
+watertight, every edge shared exactly twice, and `ear_spine_L`/`_R` identical
+at 5715.3 mm³ despite the union tessellating the mirror differently — which
+is the evidence the union did not eat anything.
+
+Worth knowing: `verify()` in that file compares plate copies to source parts
+in **local** coordinates on purpose. Doing it in world space reported all nine
+plate-4 parts as different when the real disagreement was 8×10⁻⁴ mm of float
+noise from the differing transforms and the local distances were bit-identical.
 
 ## The eye mechanism — the real open question
 
@@ -132,7 +170,14 @@ Two practical notes for whoever draws it:
   Ø41 circles. Worth checking before printing them again.
 - `print_layout.OUT_DIR` still points at `C:\humalien\humalien\print\v1`, a path
   from an older repo layout. Running `print_layout.build()` silently creates
-  that folder instead of writing to `exports/`.
-- `eye_bezel_l` exports with two degenerate slivers 0.0007 mm across. Below any
-  toolpath, repaired by the slicer on import, but it is a real artifact of the
-  raked bezel boolean.
+  that folder instead of writing to `exports/`, and it writes every part flat
+  in one folder rather than by plate. Use `export_plate.py` instead;
+  `print_layout` is now only consulted for its `PARTS` orientation table.
+- `eye_bezel_l` has two degenerate slivers 0.0007 mm across, an artifact of the
+  raked bezel boolean. `export_plate.py` cleans these on the way out, but the
+  file in `exports/plate3/` predates that and still carries them. Harmless -
+  below any toolpath - but re-export plate 3 if you print it again.
+- The **source parts still carry the defects**; only the exports are cleaned.
+  That is deliberate - `Humalien_v1.blend` keeps the geometry that was
+  inspected and signed off - but it means the coupons and `ear_spine` will
+  need cleaning again on every export, which `export_plate.py` does for you.

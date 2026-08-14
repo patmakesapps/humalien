@@ -54,3 +54,11 @@ Thumbs.db
 # the No-AI-licence head sculpt above - free to use in this build, not free
 # to redistribute. Same rule as the source mesh: it stays out of git.
 print/
+
+# exports/ is one folder per print plate and IS tracked - those parts are all
+# our own geometry and it is useful to have the exact file that was printed.
+# Plates 1 and 2 are the exception and are not negotiable: they are
+# HEAD_CRANIUM and HEAD_FACE, cut straight from the No-AI-licence head
+# sculpt. Exporting them is fine, committing them is redistribution.
+exports/plate1/
+exports/plate2/
