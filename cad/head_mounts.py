@@ -1142,6 +1142,29 @@ def casing_chamfer():
 
 
 def ear_screw_holes(cut):
+    """Clearance through the shell for the ear hub's arms, both sides.
+
+    Reads arm_a, so a clean build always drills where the arms actually are
+    and this function needs no maintenance when they move.
+
+    An EXISTING .blend is a different matter, and it caught us once. When
+    arm_a moved from (90, 210, 330) to (50, 170, 290) on 13 Aug 2026, the
+    shell in the file still carried six holes on the old circle and none on
+    the new one - so every arm was flush against solid wall with no way to
+    reach it, and there were six open holes where nothing was any more. Both
+    parts were individually correct and self-consistent; they simply no
+    longer agreed with each other, which is not something comparing a part to
+    itself will ever show.
+
+    The file was repaired by hand: six new holes cut, six old ones plugged
+    with cylinders measured to each wall. Those plugs are in the .blend only.
+    A clean rebuild never makes the old holes, so there is nothing here to
+    reproduce them - and nothing that should.
+
+    The lesson worth keeping: after changing arm_a, the shell in the file is
+    stale until it is re-cut. Check the two against each other, not each
+    against its own copy.
+    """
     e = M["ear"]
     for sx in (1, -1):
         for a in e["arm_a"]:
