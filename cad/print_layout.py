@@ -70,9 +70,23 @@ PARTS = [
      "cut face down, nose up - no support on the face"),
     ("HEAD_CRANIUM",  1, Matrix.Rotation(math.radians(-90), 4, 'X'),
      "cut face down, dome up"),
-    ("ear_hub_R",     1, Matrix.Rotation(math.radians(90), 4, 'Y'),
-     "outer face down, arms and speaker spine up"),
-    ("ear_hub_L",     1, Matrix.Rotation(math.radians(-90), 4, 'Y'),
+    # Same swapped sign as the head halves above, and it mattered more here.
+    # Ry +90 maps z = -x, which put the ARMS down - and the three arms are not
+    # the same length, because each is measured to its own bit of skull. The
+    # 50 degree arm stands 12.60 mm proud of the outer face against 1.59 and
+    # 2.32 for the other two, so the part balanced on that one arm tip: a
+    # 12.7 x 12.9 mm contact patch with the whole Ø65 disc floating 11.6 mm in
+    # the air and the visible face pointing at the plate.
+    # Ry -90 rests it on the two speaker posts instead - 81.0 x 9.0 mm of
+    # stance - puts the visible outer face up as a free-air top surface, and
+    # leaves the ring recess opening upward as a pocket, which is what the
+    # note at the top of this file was always describing.
+    # It still wants support under the disc. See the note on ear_hubs in
+    # head_mounts.py: the part has no flat face in either direction, and the
+    # real cure is splitting it at the plug's back plane.
+    ("ear_hub_R",     1, Matrix.Rotation(math.radians(-90), 4, 'Y'),
+     "outer face up, posts down - rests on the two speaker posts"),
+    ("ear_hub_L",     1, Matrix.Rotation(math.radians(90), 4, 'Y'),
      "mirror of R"),
     # The bezels are built on the RAKED socket axis - 25 degrees outboard,
     # 10 down - so no rotation about a single world axis lays them flat. A
