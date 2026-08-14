@@ -145,6 +145,12 @@ M = dict(
                      arm_a=(50.0, 170.0, 290.0),
                      spk_pitch=72.0,     # LISTING - flange holes unmeasured
                      spk_post=6.0,
+                     # The two screws holding the spine onto the back of the
+                     # plug, at y=ear y and z=ear z +/- this. 24 keeps them
+                     # outside the Ø37.6 ring recess (r=18.8, which leaves only
+                     # 1.1 mm of plug behind it) and 12 mm clear of the speaker
+                     # posts at +/-36. Anywhere between about 21 and 30 works.
+                     join_dz=24.0,
                      # 90 tall put the spine's top edge 1.00 mm under the
                      # tray rail. 80 gives 6 and still spans the speaker's
                      # 72 mm flange pitch with 4 mm each end.
@@ -611,13 +617,21 @@ def ear_hubs(probe, coll, head):
     # originals and the clipped copies - and the originals had one arm
     # standing proud of the skin below the port, which is the tab that kept
     # showing up on the outside of the head.
-    # spine across the back of the plug, carrying the two speaker posts
+    #
+    # NO SPINE HERE EITHER. It is its own part now - see ear_spine below.
+    # As one piece this had features standing off BOTH faces: posts and spine
+    # reaching 10 mm behind the plug's back plane, arms reaching up to 12.6 mm
+    # past its front face. That leaves no orientation with a flat surface on
+    # the bed. Laid arms-down it balanced on the single longest arm tip, a
+    # 12.7 x 12.9 mm contact patch with the whole Ø65 disc floating 11.6 mm in
+    # the air; laid posts-down it stood on two Ø9 circles with the disc 10 mm
+    # up. Either way the disc needed support under it, and no rotation fixes
+    # that - the part is the wrong shape for one.
+    # Split on the plug's back plane and both halves lie flat with nothing
+    # underneath them: the plug on its own Ø65 face with the arms standing up
+    # as columns off the bed, the spine on its 16 x 80 face with the posts
+    # standing up. Two M3 put it back together.
     sw, sh, st = e["spine"]
-    _box(body, (st, sw, sh), (fx - e["plug_t"] - st / 2 + 0.01, e["y"], e["z"]))
-    for sz in (-1, 1):
-        _cyl(body, 9.0, e["spk_post"] + st,
-             (fx - e["plug_t"] - st / 2 - e["spk_post"] / 2, e["y"],
-              e["z"] + sz * e["spk_pitch"] / 2), 'X')
     hub = _link(coll, "ear_hub_R", _mesh("ear_hub_R", body), COL_HUB)
     boolean(hub, head)                    # trims arms and spine to the shell
 
@@ -710,26 +724,61 @@ def ear_hubs(probe, coll, head):
         ay = e["y"] + e["arm_r"] * math.cos(math.radians(a))
         az = e["z"] + e["arm_r"] * math.sin(math.radians(a))
         _cyl(pilots, M["m3_pilot"], 34.0, (fx - 2.0, ay, az), 'X', segs=24)
+    # Thread for the two spine screws, BLIND. 6.5 mm into an 8 mm plug leaves
+    # 1.5 mm of material, so nothing breaks out onto the face that shows in
+    # the ear port. The speaker pilots are not here any more - they belong to
+    # the spine, which is where the speaker bolts.
     for sz in (-1, 1):
-        _cyl(pilots, M["m3_pilot"], 16.0,
-             (fx - e["plug_t"] - 4.0, e["y"],
-              e["z"] + sz * e["spk_pitch"] / 2), 'X', segs=24)
+        _cyl(pilots, M["m3_pilot"], 6.5,
+             (fx - e["plug_t"] + 3.25, e["y"], e["z"] + sz * e["join_dz"]),
+             'X', segs=24)
     stages.append(("pilots", pilots))
 
     for tag, cbm in stages:
         _apply(coll, hub, cbm, "_CUT_hub_%s" % tag, 'DIFFERENCE')
 
-    left = hub.copy()
-    left.data = hub.data.copy()
-    left.name = "ear_hub_L"
-    left.data.name = "ear_hub_L"
-    left.data.transform(Matrix.Diagonal((-1.0, 1.0, 1.0, 1.0)))
-    if hasattr(left.data, "flip_normals"):
-        left.data.flip_normals()
-    coll.objects.link(left)
-    left.color = COL_HUB
-    print("  ear_hub_R/L: %d verts, Ø%.0f plug, ring recess Ø%.1f, 3 x M3"
-          % (len(hub.data.vertices), e["plug_d"], e["ring_od"]))
+    # ---- the spine, now a part in its own right ----
+    # Built on the split plane, not overlapping it: the box's front face IS
+    # x = fx - plug_t, so it mates flat against the back of the plug. The old
+    # one was offset +0.01 to guarantee a weld when this was a single solid,
+    # and that 0.01 would now be a gap in an assembly.
+    spine_bm = bmesh.new()
+    _box(spine_bm, (st, sw, sh), (fx - e["plug_t"] - st / 2, e["y"], e["z"]))
+    for sz in (-1, 1):
+        _cyl(spine_bm, 9.0, e["spk_post"] + st,
+             (fx - e["plug_t"] - st / 2 - e["spk_post"] / 2, e["y"],
+              e["z"] + sz * e["spk_pitch"] / 2), 'X')
+    spine = _link(coll, "ear_spine_R", _mesh("ear_spine_R", spine_bm), COL_HUB)
+    boolean(spine, head)
+    scut = bmesh.new()          # disjoint, so one batch is fine
+    for sz in (-1, 1):          # speaker fixings, down the posts
+        _cyl(scut, M["m3_pilot"], 16.0,
+             (fx - e["plug_t"] - 4.0, e["y"],
+              e["z"] + sz * e["spk_pitch"] / 2), 'X', segs=24)
+    for sz in (-1, 1):          # clearance for the two screws into the plug
+        _cyl(scut, M["m3_free"], 20.0,
+             (fx - e["plug_t"] - st / 2, e["y"],
+              e["z"] + sz * e["join_dz"]), 'X', segs=24)
+    _apply(coll, spine, scut, "_CUT_spine", 'DIFFERENCE')
+
+    def _mirror(src, name):
+        ob = src.copy()
+        ob.data = src.data.copy()
+        ob.name = name
+        ob.data.name = name
+        ob.data.transform(Matrix.Diagonal((-1.0, 1.0, 1.0, 1.0)))
+        if hasattr(ob.data, "flip_normals"):
+            ob.data.flip_normals()
+        coll.objects.link(ob)
+        ob.color = COL_HUB
+        return ob
+
+    left = _mirror(hub, "ear_hub_L")
+    _mirror(spine, "ear_spine_L")
+    print("  ear_hub_R/L:   %d verts, Ø%.0f plug, recess Ø%.1f, %d arms"
+          % (len(hub.data.vertices), e["plug_d"], e["ring_od"], len(built)))
+    print("  ear_spine_R/L: %d verts, %.0f x %.0f x %.0f, 2 posts, 2 x M3 to the plug"
+          % (len(spine.data.vertices), st, sw, sh))
     return hub, left
 
 

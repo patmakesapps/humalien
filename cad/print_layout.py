@@ -84,9 +84,19 @@ PARTS = [
     # It still wants support under the disc. See the note on ear_hubs in
     # head_mounts.py: the part has no flat face in either direction, and the
     # real cure is splitting it at the plug's back plane.
+    # The hub is now the plug and its arms only, so it has one flat face and
+    # sits on it: the Ø65 back plane on the bed, arms standing up off it as
+    # columns, ring recess opening upward as a pocket. No support anywhere.
     ("ear_hub_R",     1, Matrix.Rotation(math.radians(-90), 4, 'Y'),
-     "outer face up, posts down - rests on the two speaker posts"),
+     "Ø65 back face down, arms up - no support"),
     ("ear_hub_L",     1, Matrix.Rotation(math.radians(90), 4, 'Y'),
+     "mirror of R"),
+    # The spine takes the OPPOSITE sign to the hub, and that is not a typo -
+    # the two mate face to face, so the face that has to meet the bed points
+    # the other way. Lands on its 16 x 80 plane with both posts standing up.
+    ("ear_spine_R",   1, Matrix.Rotation(math.radians(90), 4, 'Y'),
+     "16 x 80 mating face down, speaker posts up - no support"),
+    ("ear_spine_L",   1, Matrix.Rotation(math.radians(-90), 4, 'Y'),
      "mirror of R"),
     # The bezels are built on the RAKED socket axis - 25 degrees outboard,
     # 10 down - so no rotation about a single world axis lays them flat. A
