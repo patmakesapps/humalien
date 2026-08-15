@@ -96,7 +96,13 @@ P = dict(
 
     # Yoke: stub axles top and bottom into blind sockets in the dome's back
     # face. Snap-fit, no fastener - the arms flex apart to take the eye.
-    pin_d     = 4.0,
+    # Ø3.4, not Ø4. The forehead casing's underside is at z=225 and the top of
+    # the eyeball is at z=225 - the same height - so the pan axle at the top
+    # pole grazes its corner. A Ø4 axle centred on y=160 spans 158..162 and
+    # the casing starts at exactly 162. Ø3.4 clears by 0.3. The real fault is
+    # that the casing sits level with the top of the eye, but it is mounted,
+    # printed and on plate 5, so the axle gives way instead.
+    pin_d     = 3.4,
     pin_len   = 3.6,
     pin_fit   = 0.25,       # per side; the socket is pin_d + 2*fit
     yoke_t    = 4.0,        # arm thickness
@@ -113,6 +119,7 @@ P = dict(
     # Tilt bearings. MEASURED, not chosen: on the tilt axis MOUNT_ZONE runs
     # out between |x|=50 and 52, and the eyeballs reach |x|=47, so 48.5 is
     # the middle of a three-millimetre window. See gimbal().
+    casing_y  = 162.0,      # FIT_forehead_casing starts here - measured
     tilt_x    = 48.5,
     trunnion  = 5.0,
     boss_wall = 3.0,
@@ -129,11 +136,31 @@ P = dict(
     # The pad's cranium-side depth is about 4 mm, y 131..135, so a spigot into
     # it gets 4 mm of engagement and no more.
     pad_x     = 49.79,
-    pad_y     = 135.0,      # the parting plane
     pad_z     = 215.0,
-    pad_d     = 14.0,       # under the pad's own Ø16
-    spigot    = 4.9,        # into the Ø5.2 bore
-    spigot_l  = 3.6,        # 4 mm of pad, less a chamfer
+    # The pad runs y 131..147 - measured on BOTH halves by listing crossings
+    # along +X at z=215 - and ends by y=148. So the frame cannot sit against
+    # it at the parting plane: y=135 is the middle of solid plastic, which is
+    # where the first version put a Ø14 disc and got 78 face pairs through
+    # HEAD_CRANIUM. It mounts on the FACE side, past the end of the pad.
+    pad_face  = 148.0,
+    # Ø7, not Ø14. Past the end of the pad the only thing left is the 4 mm
+    # wall, which at y=150, z=215 stands at x 52.67..56.89 - so a Ø14 disc
+    # centred on the bore at 49.79 reaches 56.79 and is inside it. Ø7 stops
+    # at 53.3 and clears.
+    # Ø5. The face half's inner wall was mapped ray by ray and it closes in
+    # as you go forward: x 53.7 at y=147, 52.7 at 150, 51.5 at 153, 50.5 at
+    # 156, and 49.0 by y=162. Ø7 on the bore at 49.79 reaches 53.29 and is
+    # through the wall at y=150. Ø5 stops at 52.29 and clears it by 0.3.
+    pad_d     = 5.0,
+    arm_x     = 47.5,       # arm centre - 49.0 is the wall at y=162
+    arm_t     = 3.0,
+    # And the spigot goes all the way THROUGH the pad rather than a few mm
+    # into it, so it is the head's own temple locating pin as well as the
+    # frame's fixing. Ø5 is what head_split drew that bore for. This means
+    # the eye frame goes in before the halves close, which it had to anyway.
+    spigot    = 4.9,
+    spigot_y0 = 130.0,      # back end, in the cranium half
+    spigot_y1 = 148.0,      # front end, at the frame
 
     m3_free   = 3.4,
     m2_free   = 2.2,
@@ -200,13 +227,44 @@ def eyeball(hm, coll, sx):
     # pixel needs - they occupy only the outer 6 mm at each pole.
     add = bmesh.new()
     for sz in (-1, 1):
-        hm["_cyl"](add, P["pin_d"] + 2 * P["yoke_t"], 6.0,
-                   (cx, cy, cz + sz * (r - 3.0)), 'Z')
-    # pan lever, a post off the back face offset from the pan axis
-    hm["_cyl"](add, P["lever_t"] * 2, 10.0,
-               (cx + P["lever_r"], cy - P["back_cut"] - 5.0, cz), 'Y')
-    hm["_box"](add, (P["lever_r"], P["lever_t"], P["lever_t"] * 2),
-               (cx + P["lever_r"] / 2.0, cy - P["back_cut"] - P["lever_t"] / 2.0, cz))
+        # Kept INSIDE the sphere. A Ø12 boss centred at the pole sticks out
+        # of a Ø32 ball above z = r - sqrt(r^2 - 6^2), and that 1.2 mm of
+        # proud plastic was touching the forehead casing, whose underside is
+        # at exactly z=225 - the same height as the top of the eyeball.
+        hm["_cyl"](add, P["pin_d"] + 2 * P["yoke_t"], 8.0,
+                   (cx, cy, cz + sz * (r - 6.0)), 'Z')
+    # The pan lever points BACKWARD along -y, not sideways.
+    #
+    # Sideways was wrong and not just untidy. Linked pan needs both levers
+    # offset the SAME way, so with a sideways lever one eye's lever ends up
+    # outboard - at x=42 for the right eye - and HEAD_FACE has wall there
+    # from x=44.5 at y=144. It went straight through the skull.
+    #
+    # Backward is symmetric and behind everything: the pin lands at
+    # (cx, y - lever_r, z), rotating the eye about its vertical axis still
+    # sweeps that pin in +/-x, and a bar along X still drives both eyes
+    # together. Same linkage, no part of it outboard of the eyeball.
+    hm["_box"](add, (P["lever_t"] * 2, P["lever_r"] - P["back_cut"] + 2.0,
+                     P["lever_t"] * 2),
+               # Overlapping the dome's back face, not butted against it.
+               # Butted, the lever's front face landed exactly on y=153 - the
+               # back plane - and a coincident face is not an intersection,
+               # so the lever unioned as a SECOND SHELL and the eyeball came
+               # out in two pieces. It reaches 2 mm into the dome now.
+               (cx, cy - (P["lever_r"] + P["back_cut"] - 2.0) / 2.0, cz))
+    # And a rib across the back opening to actually anchor it.
+    #
+    # The lever alone was a FREE-FLOATING SHELL, and reaching further into
+    # the dome would never have fixed it: the dome is hollow, so its back is
+    # an annulus from r=11.7 to r=16, and the lever sits on the axis at
+    # r<4.2 - straight through the hole in the middle, touching nothing.
+    # Pushing it deeper just pushes it further into the cavity.
+    #
+    # The rib spans to r=14, which is past the inner surface at this depth
+    # (12.2 at y=154), so it lands in shell material on both sides. It also
+    # leaves the opening clear above and below for the pixel and its wires.
+    hm["_box"](add, (28.0, 3.0, P["lever_t"] * 2),
+               (cx, cy - P["back_cut"] + 1.5, cz))
     lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
     hm["boolean"](ob, lob, 'UNION')
     bpy.data.objects.remove(lob, do_unlink=True)
@@ -218,7 +276,7 @@ def eyeball(hm, coll, sx):
         hm["_cyl"](cut2, P["pin_d"] + 2 * P["pin_fit"], depth,
                    (cx, cy, cz + sz * (r - depth / 2.0 + 0.01)), 'Z', segs=24)
     hm["_cyl"](cut2, P["link_d"], 20.0,
-               (cx + P["lever_r"], cy - P["back_cut"] - 5.0, cz), 'Y', segs=24)
+               (cx, cy - P["lever_r"], cz), 'Z', segs=24)
     hm["_apply"](coll, ob, cut2, "_CUT_eye_holes_%s" % side, 'DIFFERENCE')
     return ob
 
@@ -238,7 +296,13 @@ def gimbal(hm, coll):
     alternative and would have been a 20 mm span on the same load.
     """
     ty, tz = P["y"], P["z"]
-    bar_y = ty - 10.0          # the bar runs behind the eyeballs
+    # The cross bar sits BELOW the eye line, not behind it. Behind, it fouled
+    # two things at once: the socket boss, which comes inboard to x=44.5 by
+    # y=144, and the pan link, which has to live at y=149 where the lever
+    # pins are. Below the eyes both problems disappear - the wall there is at
+    # x 52.8 and the link is nowhere near.
+    bar_y = ty - 8.0
+    bar_z = tz - 20.0
     prims = []
 
     def _p():
@@ -247,14 +311,24 @@ def gimbal(hm, coll):
 
     bm = _p()
     # the cross bar, and the trunnions on the tilt axis
-    hm["_box"](bm, (2 * P["tilt_x"], 6.0, 10.0), (0.0, bar_y, tz))
+    hm["_box"](bm, (2 * P["tilt_x"], 6.0, 8.0), (0.0, bar_y, bar_z))
     for sx in (-1, 1):
         bm = _p()
         # Wide enough to REACH the trunnion. At 8 wide it stopped 0.5 mm
         # short of it and the trunnion came out as a free cylinder - the bar
         # cannot do the job itself because it sits at y 147..153 and the
         # trunnion is on the tilt axis at y=160, so they never touch.
-        hm["_box"](bm, (10.0, 12.0, 10.0), (sx * (P["tilt_x"] - 4.0), ty - 5.0, tz))
+        # Two pieces, not one block, and the split is forced by where the
+        # wall is. The face half closes to x=49.19 at y=159, z=196 - the
+        # tightest point in the bay - but at z=209 there is no wall at all,
+        # because that is the socket opening. So the structure stays BACK at
+        # y<=155 while it is low, and only reaches forward to the tilt axis
+        # up at eye height where the opening gives it room.
+        hm["_box"](bm, (9.0, 6.0, abs(tz - bar_z) + 4.0),
+                   (sx * (P["tilt_x"] - 4.5), bar_y, (tz + bar_z) / 2.0))
+        bm = _p()
+        hm["_box"](bm, (3.0, ty - bar_y + 3.0, 8.0),
+                   (sx * P["tilt_x"], (bar_y + ty) / 2.0 + 1.5, tz))
         # The trunnion is 3 mm long, and that is the whole window. Between the
         # eyeball at |x|=47 and the edge of MOUNT_ZONE at 50 there are three
         # millimetres, so the bearing is short by necessity rather than
@@ -270,12 +344,18 @@ def gimbal(hm, coll):
         for sz in (-1, 1):
             bm = _p()
             zarm = tz + sz * (r + P["yoke_gap"] + P["yoke_t"] / 2.0)
-            # arm: from the bar forward to the pole, over the top of the ball
-            hm["_box"](bm, (P["yoke_t"] * 2, ty - bar_y + 6.0, P["yoke_t"]),
-                       (cx, (bar_y + ty) / 2.0 + 3.0, zarm))
+            # Arm: from the bar forward to the pole, over the top of the
+            # ball - and STOPPING at casing_y. FIT_forehead_casing occupies
+            # y 162..167 and z 225..283, and the top of the eyeball is at
+            # z=225, so there is no room above the ball where the casing is.
+            # The arm only has to reach the pole at y=160 anyway; the first
+            # version ran to y=166 and put 37 faces through the casing.
+            a_y0, a_y1 = bar_y - 3.0, P["casing_y"] - 1.0
+            hm["_box"](bm, (P["yoke_t"] * 2, a_y1 - a_y0, P["yoke_t"]),
+                       (cx, (a_y0 + a_y1) / 2.0, zarm))
             # the post joining that arm back down to the bar
-            hm["_box"](bm, (P["yoke_t"] * 2, 6.0, abs(zarm - tz)),
-                       (cx, bar_y, (zarm + tz) / 2.0))
+            hm["_box"](bm, (P["yoke_t"] * 2, 6.0, abs(zarm - bar_z)),
+                       (cx, bar_y, (zarm + bar_z) / 2.0))
             # The stub axle, pointing inward along the pan axis. It has to
             # span from the arm's underside all the way into the ball's pole
             # socket - the first version stopped 0.4 mm short of the arm and
@@ -308,21 +388,26 @@ def frame(hm, coll, sx):
         return prims[-1]
 
     if True:
+        # face against the end of the pad
         bm = _p()
-        # pad face against the temple pad, plus a spigot down its Ø5.2 bore
         hm["_cyl"](bm, P["pad_d"], P["plate_t"],
-                   (sx * P["pad_x"], P["pad_y"] + P["plate_t"] / 2.0, P["pad_z"]), 'Y')
-        bm = _p()
-        hm["_cyl"](bm, P["spigot"], P["spigot_l"],
-                   (sx * P["pad_x"], P["pad_y"] - P["spigot_l"] / 2.0 + 0.2,
+                   (sx * P["pad_x"], P["pad_face"] + P["plate_t"] / 2.0,
                     P["pad_z"]), 'Y')
-        # arm inward and forward to the bearing
+        # the spigot: through the whole pad, so it is the locating pin too
         bm = _p()
-        hm["_box"](bm, (P["plate_t"], ty - P["pad_y"], 14.0),
-                   (sx * P["tilt_x"], (P["pad_y"] + ty) / 2.0, tz + 3.0))
-        hm["_box"](bm, (abs(P["pad_x"] - P["tilt_x"]) + 6.0, P["plate_t"], 14.0),
-                   (sx * (P["pad_x"] + P["tilt_x"]) / 2.0,
-                    P["pad_y"] + P["plate_t"] / 2.0, P["pad_z"]))
+        span = P["spigot_y1"] - P["spigot_y0"]
+        hm["_cyl"](bm, P["spigot"], span,
+                   (sx * P["pad_x"], (P["spigot_y0"] + P["spigot_y1"]) / 2.0,
+                    P["pad_z"]), 'Y')
+        # arm forward to the bearing, stopping short of the forehead casing
+        bm = _p()
+        hm["_box"](bm, (P["arm_t"], P["casing_y"] - P["pad_face"], 16.0),
+                   (sx * P["arm_x"], (P["pad_face"] + P["casing_y"]) / 2.0,
+                    (tz + P["pad_z"]) / 2.0))
+        bm = _p()
+        hm["_box"](bm, (abs(P["pad_x"] - P["arm_x"]) + P["arm_t"], P["plate_t"], 12.0),
+                   (sx * (P["pad_x"] + P["arm_x"]) / 2.0,
+                    P["pad_face"] + P["plate_t"] / 2.0, P["pad_z"]))
         # The bearing tab. 3 mm thick, in the same three-millimetre window,
         # and a BOX rather than a disc: a Ø11 boss centred on the tilt axis
         # reaches 5.5 mm forward of it, and the skull is narrowing there - it
