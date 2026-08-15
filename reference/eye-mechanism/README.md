@@ -31,9 +31,23 @@ The download contains five plates, and two of them are for the wrong servo:
 | 04 | `MG90s - B` | **Yes** |
 | 05 | `ServoSizingPlate` | **Yes** |
 
-Confirmed by reading `Metadata/slice_info.config` out of the `.3mf`. Each of
-plates 1–4 holds 19 objects and quotes 4.8 h and about 126 g; plate 5 is 0.2 h
-and 2.3 g.
+Confirmed 15 Aug by reading `Metadata/model_settings.config` out of the `.3mf`,
+which carries the plate names directly: `SG90 - A`, `SG90 - B`, `MG90s -A`,
+`MG90s - B`, and plate 5 unnamed. Each of plates 1–4 holds 19 objects and
+quotes 4.8 h and about 126 g; plate 5 is 0.2 h and 2.3 g.
+
+**Not `slice_info.config`** — in the MakerWorld download that file holds only a
+client-version header, because the project ships unsliced. Two things this file
+used to claim that the actual download does not support:
+
+- there is **no `Auxiliaries/` folder and no assembly guide inside the `.3mf`**.
+  Its only non-model entry is `_rels/.rels`. Cogley's assembly instructions are
+  on the model page, not in the archive.
+- the file is 5.6 MB, not ~10 MB.
+
+`plate-previews/plate_1.png` … `plate_5.png` are extracted beside this README
+so a plate can be identified by eye without opening Bambu Studio. Plate 5 is a
+rounded tab with two countersunk bores, engraved **A** and **B**.
 
 Plates 1 and 3 differ by exactly one part (`AG` versus `CA`), as do 2 and 4
 (`BE` versus `D`). Those four parts are the only ones that care which servo you

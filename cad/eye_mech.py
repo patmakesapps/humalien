@@ -608,6 +608,26 @@ def forehead_casing(loc=(0, 0, 0)):
     # ---- camera ----
     cuts.append(prism("_cp", rrect_pts(cam_pw, cam_pd, cam["corner_r"] + P["board_clear"]),
                       cam_depth * 2.0, (cam_x, row_y, top)))
+    # Corner reliefs, and they are not optional. The pocket is rounded to
+    # `corner_r + board_clear` = 2.5 mm because Arducam's drawing gives the
+    # board a 2.0 mm corner radius. The board in hand has SQUARE corners.
+    # Measured: the pocket reaches a diagonal 18.77 mm from centre, a 38 mm
+    # square board's corner is at 19.00, so it stood 0.23 mm proud at all
+    # four corners and would not seat - only two screws went in, 15 Aug.
+    #
+    # A relief rather than `corner_r = 0`, because setting the radius to zero
+    # asserts the drawing is wrong in one specific way AND puts a sharp
+    # internal corner in the print, which a 0.4 mm nozzle cannot cut - so the
+    # fit would be decided by whatever radius the slicer happens to leave.
+    # A Ø3 bore at each corner swallows a square corner with 0.79 mm to spare
+    # and changes nothing if the board turns out to be radiused after all.
+    # The straight walls survive from -18 to +18, so the board is still
+    # located on 36 mm of edge per side.
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cuts.append(cyl("_cr", 3.0, cam_depth * 2.0,
+                            (cam_x + sx * cam_pw / 2, row_y + sy * cam_pd / 2,
+                             top)))
     ap = cam["lens_holder"] + 2 * P["board_clear"]
     cuts.append(prism("_ap", rrect_pts(ap, ap, 2.0), t * 3, (cam_x, row_y, t / 2)))
     for sx in (-1, 1):
