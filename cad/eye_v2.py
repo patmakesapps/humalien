@@ -294,6 +294,31 @@ P = dict(
     casing_y  = 162.0,      # FIT_forehead_casing starts here - measured
     casing_z  = 225.0,      # and is solid from here up, full width
 
+    # --- the eyeball, split three ways so every piece prints ------------
+    # One piece it could not be. The pan lever reaches 4 mm BEHIND the back
+    # face, so the ball cannot sit on it; the bearing boss hangs 16 mm BELOW
+    # the ball, so it cannot sit on that either; and those two point at right
+    # angles, so no orientation solves both. `printability()` says so in
+    # numbers rather than in argument.
+    #
+    #   eye_dome   shell, iris, pupil, and a O10.4 bore up its bottom pole.
+    #              Prints on its flat back face, nothing behind it, nothing
+    #              below it.
+    #   eye_stem   a O22.8 spigot into the dome's back opening, carrying the
+    #              pan lever and the pixel's pad. Prints spigot-face down,
+    #              and every layer after the first is SMALLER than the one
+    #              below - so it cannot overhang at all.
+    #   eye_axle   a plain O10 rod. Glues into the dome, turns in the cradle.
+    #
+    # The torque path is servo -> wire -> lever -> stem -> glue -> dome ->
+    # axle, and the glue joint is the full O23 wall of the back opening.
+    stem_spig = 22.8,      # into the back opening, which is O23.32
+    stem_t    = 3.0,       # how far the spigot reaches into the cavity
+    axle_d    = 10.0,
+    axle_fit  = 0.4,       # diametral, in the dome's bore
+    axle_z0   = 177.0,     # bottom of the rod
+    axle_z1   = 203.0,     # top, buried in the dome's plug
+
     m2_free   = 2.2,
 )
 
@@ -531,57 +556,11 @@ def eyeball(hm, coll, sx):
     hm["_apply"](coll, ob, hollow, "_CUT_eye_hollow_%s" % side, 'DIFFERENCE')
 
     add = bmesh.new()
-    # Meat at the bottom pole to hang the journal off. The dome is hollow to
-    # 2.4 mm, so there is nothing to grow a O10 boss from; this plug fills
-    # the bottom of the cavity only, up to z=203, and the 5050 sits at
-    # z 205..213 above it.
+    # Meat at the bottom pole for the axle to glue into. The dome is hollow
+    # to 2.4 mm, so there is nothing to bore; this plug fills the bottom of
+    # the cavity up to z=203 and gives the joint 10 mm of length. The 5050
+    # sits at z 205..213, clear above it.
     hm["_cyl"](add, 14.0, 10.0, (cx, cy, cz - 11.0), 'Z')
-    # and the journal itself, reaching down through the cradle
-    hm["_cyl"](add, P["pan_d"], 194.0 - (P["pan_z0"] + 0.2),
-               (cx, cy, (194.0 + P["pan_z0"] + 0.2) / 2.0), 'Z')
-
-    # The pan lever points BACKWARD along -y, not sideways.
-    #
-    # Sideways was wrong and not just untidy. Linked pan needs both levers
-    # offset the SAME way, so with a sideways lever one eye's lever ends up
-    # outboard - at x=42 for the right eye - and HEAD_FACE has wall there
-    # from x=44.5 at y=144. It went straight through the skull.
-    hm["_box"](add, (P["lever_t"] * 2, P["lever_r"] - P["back_cut"] + 2.0,
-                     P["lever_t"] * 2),
-               # Overlapping the dome's back face, not butted against it.
-               # Butted, the lever's front face landed exactly on y=153 - the
-               # back plane - and a coincident face is not an intersection,
-               # so the lever unioned as a SECOND SHELL and the eyeball came
-               # out in two pieces. It reaches 2 mm into the dome now.
-               (cx, cy - (P["lever_r"] + P["back_cut"] - 2.0) / 2.0, cz))
-    # And a rib across the back opening to actually anchor it.
-    #
-    # The lever alone was a FREE-FLOATING SHELL, and reaching further into
-    # the dome would never have fixed it: the dome is hollow, so its back is
-    # an annulus from r=11.7 to r=16, and the lever sits on the axis at
-    # r<4.2 - straight through the hole in the middle, touching nothing.
-    #
-    # 10 mm tall, not 6, because it is also the pad the 5050 pixel glues to.
-    # The pixel is 8 mm square and lives right behind the pupil; it used to
-    # sit 66 faces INSIDE this rib, and nothing reported it because check()
-    # skips every PROXY_ object. It does not skip this one any more.
-    hm["_box"](add, (28.0, 3.0, 10.0),
-               (cx, cy - P["back_cut"] + 1.5, cz))
-    # The link pin hangs BELOW the lever. The pan bar is a bar across both
-    # eyes at the lever pins, and at eye-centre height its body would run
-    # straight through the levers' own bodies - they are 6 mm deep in y and
-    # the bar is 4. Dropping the pin puts the bar under them.
-    #
-    # A shouldered post, not one cylinder: the shoulder is what the bar
-    # hangs on, and the O2.5 spigot below it is what goes through the bar's
-    # O2.6 hole. Built as one O5.2 post, the post itself was 2.6 mm fatter
-    # than the hole it was supposed to enter.
-    drop_top = cz - 1.0
-    drop_bot = cz - P["pin_drop"] + 3.5
-    hm["_cyl"](add, P["link_d"] + 2.6, drop_top - drop_bot,
-               (cx, cy - P["lever_r"], (drop_top + drop_bot) / 2.0), 'Z')
-    hm["_cyl"](add, P["link_d"] - 0.15, 8.0,
-               (cx, cy - P["lever_r"], drop_bot - 4.0 + 0.5), 'Z', segs=24)
     lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
     hm["boolean"](ob, lob, 'UNION')
     bpy.data.objects.remove(lob, do_unlink=True)
@@ -602,6 +581,12 @@ def eyeball(hm, coll, sx):
     # to leave a 0.5 mm step it only reaches r=3.97, so a "O15 iris" came out
     # O7.9 and the depth ran away at the centre. Against a sphere the depth
     # is the same everywhere, and the cylinder just decides how wide.
+    # the axle's bore, up the bottom pole into that plug
+    bore = bmesh.new()
+    hm["_cyl"](bore, P["axle_d"] + P["axle_fit"], 16.0,
+               (cx, cy, P["axle_z1"] - 8.0 + 1.0), 'Z', segs=48)
+    hm["_apply"](coll, ob, bore, "_CUT_axlebore_%s" % side, 'DIFFERENCE')
+
     # The two cuts are opposite ways round, and getting that backwards is
     # what a first attempt did: it hollowed the iris out from the INSIDE and
     # left a 0.4 mm skin over the whole disc, which read as "iris depth 0.4"
@@ -636,6 +621,68 @@ def eyeball(hm, coll, sx):
         bpy.data.objects.remove(cob, do_unlink=True)
         hm["boolean"](ob, tmp, 'DIFFERENCE')
         bpy.data.objects.remove(tmp, do_unlink=True)
+    return ob
+
+
+def eye_stem(hm, coll, sx):
+    """The eyeball's back plug: the pan lever, and the pixel's pad.
+
+    Glues into the dome's back opening. It exists because the lever cannot
+    be part of the dome - it reaches 4 mm behind the dome's back face, which
+    is the only face the dome can be printed on.
+
+    Prints SPIGOT-FACE DOWN, and that orientation is the point of the shape:
+    the first layer is the full O22.8 disc and every layer above it is
+    smaller than the one below, so there is no overhang anywhere in the part
+    by construction rather than by luck.
+    """
+    side = "R" if sx > 0 else "L"
+    cx, cy, cz = sx * P["pitch"] / 2.0, P["y"], P["z"]
+    back = cy - P["back_cut"]                      # the dome's back face
+    prims, _p = _prims()
+
+    # the spigot, reaching forward into the cavity. Its front face is the
+    # pad the 5050 glues to.
+    bm = _p()
+    hm["_cyl"](bm, P["stem_spig"], P["stem_t"],
+               (cx, back + P["stem_t"] / 2.0, cz), 'Y', segs=64)
+    # the lever, reaching back to the pan bar's pin
+    bm = _p()
+    hm["_box"](bm, (P["lever_t"] * 2, P["stem_t"] + P["lever_r"] - P["back_cut"],
+                    P["lever_t"] * 2),
+               (cx, (back + P["stem_t"] + cy - P["lever_r"]) / 2.0, cz))
+    ob = _union(hm, coll, "eye_stem_%s" % side, prims)
+
+    cuts, _c = _prims()
+    cut = _c()
+    hm["_cyl"](cut, P["link_d"], 20.0, (cx, cy - P["lever_r"], cz), 'Z',
+               segs=24)
+    # and a bite out of the spigot's lower front edge, where the axle's top
+    # comes up past it into the dome's plug. Only the bottom 1 mm of the
+    # axle's back surface is in the way, and the bite is entirely below
+    # z=203 - well clear of the 5050's pad at z 205..213.
+    cut = _c()
+    hm["_cyl"](cut, P["axle_d"] + 1.2, 50.0, (cx, cy, P["axle_z1"] - 20.0),
+               'Z', segs=48)
+    _cut_each(hm, coll, ob, cuts, "_CUT_stem_%s" % side)
+    return ob
+
+
+def eye_axle(hm, coll, sx):
+    """The eyeball's own shaft. Glues into the dome, turns in the cradle.
+
+    A plain rod, so it prints standing on end - the only way to get a round
+    journal out of an FDM printer. 10 mm of it is buried in the dome's
+    bottom plug and the rest runs in the gimbal's bore.
+    """
+    side = "R" if sx > 0 else "L"
+    bm = bmesh.new()
+    hm["_cyl"](bm, P["axle_d"], P["axle_z1"] - P["axle_z0"],
+               (sx * P["pitch"] / 2.0, P["y"],
+                (P["axle_z0"] + P["axle_z1"]) / 2.0), 'Z', segs=48)
+    ob = hm["_link"](coll, "eye_axle_%s" % side,
+                     hm["_mesh"]("eye_axle_%s" % side, bm))
+    ob.color = (0.78, 0.78, 0.80, 1.0)
     return ob
 
 
@@ -1350,6 +1397,10 @@ def pose(tilt=0.0, pan=0.0, lid_R=None, lid_L=None, lid=None, rods=True):
         # The 5050 is glued INSIDE the dome, so it goes where the dome goes.
         # Left standing still it was perfectly placed at rest and swept
         # through by its own eyeball at every other angle.
+        for nm in ("eye_stem_%s" % side, "eye_axle_%s" % side):
+            o = bpy.data.objects.get(nm)
+            if o:
+                o.matrix_world = T @ _pan_m(sx, pan)
         led = bpy.data.objects.get("PROXY_eye_led_%s_LISTING" % side)
         if led is not None:
             if side not in _LED_REST:
@@ -1450,6 +1501,68 @@ def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
 
 
 # ---------------------------------------------------------------------------
+def printability(name, up=(0.0, 1.0, 0.0), limit=45.0, verbose=True):
+    """How much of a part overhangs, printed with `up` pointing at the sky.
+
+    This project's rule is no supports anywhere, and until now that has been
+    argued rather than measured - which is how the eyeball domes came to
+    carry a docstring saying they print flat-back-down when no orientation
+    prints them at all.
+
+    It is first-order on purpose: it reports downward-facing area steeper
+    than `limit` off vertical, and how far above the lowest point that area
+    starts. A face that overhangs but sits on the very first layer is a
+    chamfer the bed holds up; the same face 10 mm in the air is a support.
+    """
+    ob = bpy.data.objects.get(name)
+    if ob is None:
+        return None
+    u = Vector(up).normalized()
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.transform(bm, verts=bm.verts[:], matrix=ob.matrix_world)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    lo = min((v.co.dot(u) for v in bm.verts), default=0.0)
+    hi = max((v.co.dot(u) for v in bm.verts), default=0.0)
+    total = bad = 0.0
+    worst_h, worst_a = 0.0, 0.0
+    cos_lim = -math.cos(math.radians(90.0 - limit))
+    for f in bm.faces:
+        a = f.calc_area()
+        total += a
+        d = f.normal.normalized().dot(u)
+        if d >= cos_lim:
+            continue                       # not a steep downward face
+        h = f.calc_center_median().dot(u) - lo
+        if h < 0.6:
+            continue                       # sitting on the bed
+        bad += a
+        ang = math.degrees(math.acos(max(-1.0, min(1.0, -d))))
+        if h > worst_h:
+            worst_h, worst_a = h, 90.0 - ang
+    bm.free()
+    frac = bad / total if total else 0.0
+    if verbose:
+        print("  %-16s %6.1f mm tall, %7.1f mm2 overhangs past %.0f deg (%.1f%%)"
+              % (name, hi - lo, bad, limit, 100.0 * frac), end="")
+        if bad <= 0.0:
+            print("   PRINTS")
+        else:
+            print(", highest %.1f mm up" % worst_h)
+    return dict(height=hi - lo, frac=frac, area=bad, worst_h=worst_h)
+
+
+def printability_all(up=(0.0, 1.0, 0.0), limit=45.0):
+    c = bpy.data.collections.get(COLL)
+    if c is None:
+        return
+    print("printability, +Y up, %.0f deg limit:" % limit)
+    for o in sorted(c.objects, key=lambda o: o.name):
+        if o.type == 'MESH' and not o.name.startswith("PROXY_") \
+                and not o.name.startswith("eye_rod_"):
+            printability(o.name, up=up, limit=limit)
+
+
 SMOOTH_ANGLE = 35.0
 
 
@@ -1507,6 +1620,10 @@ def build(save=False):
     made = []
     for sx in (1, -1):
         made.append(_solidify(eyeball(hm, coll, sx)))
+    for sx in (1, -1):
+        made.append(_solidify(eye_stem(hm, coll, sx)))
+    for sx in (1, -1):
+        made.append(eye_axle(hm, coll, sx))
     made.append(_solidify(gimbal(hm, coll)))
     made.append(_solidify(frame(hm, coll)))
     made.append(shaft(hm, coll))
@@ -1541,6 +1658,7 @@ _DIRS = [Vector(d).normalized() for d in ((0.9137, 0.3184, 0.2513),
                                           (0.1877, -0.3391, 0.9219))]
 
 MOVING = ("eye_gimbal", "eye_dome_R", "eye_dome_L", "eye_lid_R", "eye_lid_L",
+          "eye_stem_R", "eye_stem_L", "eye_axle_R", "eye_axle_L",
           "eye_pan_bar", "eye_rod_pan", "eye_rod_tilt", "eye_rod_lid_R",
           "eye_rod_lid_L")
 
@@ -1556,6 +1674,10 @@ ALLOWED = {
     ("eye_lid_R", "eye_rod_lid_R"), ("eye_lid_L", "eye_rod_lid_L"),
     ("eye_frame", "eye_peg_R"), ("eye_frame", "eye_peg_L"),
     ("eye_lid_R", "eye_dome_R"), ("eye_lid_L", "eye_dome_L"),
+    ("eye_dome_R", "eye_stem_R"), ("eye_dome_L", "eye_stem_L"),
+    ("eye_dome_R", "eye_axle_R"), ("eye_dome_L", "eye_axle_L"),
+    ("eye_gimbal", "eye_axle_R"), ("eye_gimbal", "eye_axle_L"),
+    ("eye_stem_R", "eye_pan_bar"), ("eye_stem_L", "eye_pan_bar"),
 }
 
 

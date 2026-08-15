@@ -674,3 +674,47 @@ Two further things that only showed up once it was being checked:
 already flagged smooth and they still rendered faceted, because from Blender
 4.1 the flag alone is not what does it — and smoothing everything flat would
 round the corners off the brackets as well as the balls.
+
+## The eyeball is three parts now — 15 Aug
+
+**It could not be one.** The pan lever reaches 4 mm BEHIND the dome's back
+face, so the ball cannot be printed sitting on it; the bearing boss hangs
+16 mm BELOW the ball, so it cannot sit on that either; and those two point at
+right angles, so no orientation solves both. The old docstring claimed it
+printed flat-back-down and had been wrong since it was written.
+
+`printability()` is what settled it, and it is worth keeping for the next
+part that looks fine and is not: give it a build direction and it reports the
+downward-facing area steeper than 45°, and **how far above the bed that area
+starts** — because a face that overhangs while sitting on the first layer is
+a chamfer, and the same face 10 mm up is a support.
+
+| part | prints | overhang past 45° |
+| --- | --- | --- |
+| `eye_dome_R/L` | back face down | 470 mm², all of it the cavity's own roof |
+| `eye_stem_R/L` | spigot face down | 68 mm², highest 1.6 mm up |
+| `eye_axle_R/L` | standing on end | **none** |
+| `eye_shaft`, `eye_peg_R/L` | standing on end | **none** |
+| `eye_pan_bar` | flat | 50 mm² |
+| `eye_lid_R/L` | back down | 274 mm² |
+| `eye_gimbal` | flat in its own plane | 1248 mm² |
+| `eye_frame` | flat on its arch | 1340 mm² |
+
+The stem's shape is chosen for that column, not for looks: printed spigot-face
+down, its first layer is the full Ø22.8 disc and **every layer above it is
+smaller than the one below**, so it cannot overhang at all.
+
+The frame and the gimbal are the two still carrying real numbers, and both
+for the same reason — their bearing bores run horizontal in the orientation
+the rest of the part wants. Teardropping those bores is the fix and it has
+not been done.
+
+**Assembly, in order:** glue the axle into the dome's bottom bore (10 mm of
+it is buried in the plug); glue the stem into the dome's back opening — the
+torque path is servo → wire → lever → stem → *that glue joint* → dome → axle,
+so it wants to be a good one; stick the 5050 to the stem's front face; drop
+the axle into the cradle's bore; pin the pan bar to the stem's lever with a
+2 mm rod.
+
+**Still not measured: the 5050.** It is `LISTING` at 8 × 3 × 8 and it now has
+a pad it has to fit on. Coupon it before trusting the stem's face.
