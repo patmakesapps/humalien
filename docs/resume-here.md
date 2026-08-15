@@ -277,8 +277,12 @@ confirm:
 | `coupon_mg90s` | `servo_tab_pitch = 28.0` — **listing-grade, not dimensioned in any drawing** | every servo pocket in the eye mechanism |
 | `coupon_vl53l1x` | the slot fit measured off a LumaBot holder | `forehead_casing` |
 
-`coupon_mg90s` is the valuable one. That 28.0 is the weakest number in the
+`coupon_mg90s` is the valuable one. That 28.0 was the weakest number in the
 whole CAD file.
+
+**Settled 15 Aug: the servos fit the coupon.** `servo_tab_pitch = 28.0` is
+confirmed against real MG90S hardware, so it is now a measured number rather
+than a listing guess, and servo pockets can be cut against it.
 
 Then, none of which needs the shell:
 
