@@ -322,8 +322,17 @@ LID = dict(
     crank_r   = 14.0,       # long enough that the pushrod leaves well clear
                             # of the tilt tube it would otherwise cross
     crank_t   = 3.0,
-    pin_x0    = 15.0,       # the crank's pin, stepped outboard of the tube
-    pin_x1    = 17.6,
+    # The pin sits at the SAME x as its servo's shaft, and that is not
+    # tidiness. Both joints are hinges about X - the lid turns about the tilt
+    # axis, the horn about the servo's shaft - so a straight rigid rod can
+    # only connect them if it lies in a plane perpendicular to X. Offset
+    # along their own axis, the two hinges cannot take a straight rod at all:
+    # it arrives at the boss on the skew and binds. It was stepped out to
+    # 16.3 to dodge the gimbal's tilt tube, back when the crank was shorter
+    # and the rod passed close to the axis; at crank_r 14 the rod never gets
+    # nearer than 12 mm to the axis and the tube's radius is 4.5.
+    pin_x0    = 11.3,
+    pin_x1    = 14.3,
     crank_a   = 250.0,      # where the crank points with the lid shut -
                             # straight down, which is both clear of the pan
                             # bar behind it and square to its own pushrod
@@ -607,7 +616,7 @@ def gimbal(hm, coll):
     # pan bar's dipped middle is at 147..151 - so the two met at every tilt
     # angle, and so did the tilt pushrod.
     bm = _p()
-    hm["_box"](bm, (10.0, 6.0, 10.0), (0.0, 156.0, cz0 - 4.0))
+    hm["_box"](bm, (10.0, 6.0, 10.0), (TILT_X, 156.0, cz0 - 4.0))
     ob = _union(hm, coll, "eye_gimbal", prims)
 
     cut = bmesh.new()
@@ -622,7 +631,7 @@ def gimbal(hm, coll):
                (0.0, ty, tz), 'X', segs=32)
     # the tilt link pin
     hm["_cyl"](cut, P["link_d"], 30.0,
-               (0.0, 156.0, P["cradle_z0"] - 6.0), 'X', segs=24)
+               (TILT_X, 156.0, P["cradle_z0"] - 6.0), 'X', segs=24)
     hm["_apply"](coll, ob, cut, "_CUT_gimbal", 'DIFFERENCE')
     return ob
 
@@ -822,15 +831,13 @@ def eyelid(hm, coll, sx):
     px = sx * (LID["pin_x0"] + LID["pin_x1"]) / 2.0
     ca, sa = math.cos(a), math.sin(a)
     add = _a()
-    _rbox(add, (LID["crank_x1"] - LID["crank_x0"], LID["crank_r"] - 1.0,
-                LID["crank_t"]),
-          (kx, cy + ca * (LID["crank_r"] - 1.0) / 2.0 - ca * 2.0,
-           cz + sa * (LID["crank_r"] - 1.0) / 2.0 - sa * 2.0),
-          Matrix.Rotation(a, 4, 'X'))
-    add = _a()
-    _rbox(add, (LID["pin_x1"] - LID["crank_x0"], 5.0, LID["crank_t"]),
-          (sx * (LID["pin_x1"] + LID["crank_x0"]) / 2.0,
-           cy + ca * (LID["crank_r"] - 1.5), cz + sa * (LID["crank_r"] - 1.5)),
+    # Long enough to run 2 mm PAST the pin boss rather than up to it. Ending
+    # at r=11 with the boss starting at r=11 is a coplanar butt, not an
+    # intersection, and the lid came out as two shells the moment the
+    # dog-leg that used to bridge them was removed.
+    arm = LID["crank_r"] + 4.0
+    _rbox(add, (LID["crank_x1"] - LID["crank_x0"], arm, LID["crank_t"]),
+          (kx, cy + ca * (arm / 2.0 - 2.0), cz + sa * (arm / 2.0 - 2.0)),
           Matrix.Rotation(a, 4, 'X'))
     # 0.4 shorter than the tab it sits on, so its end caps land strictly
     # inside the tab's faces. Made the same length, the two are coplanar and
@@ -931,6 +938,8 @@ SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
 
 SERVO_Y = 126.0     # all four shafts in one plane, so one plate carries them
 PAN_LUG = 6.0       # how far the pan bar's drive pin hangs below the dip
+TILT_X  = -4.0      # the tilt lug and its servo share this, and they have
+                    # to: both ends of that pushrod are hinges about X
 
 # All four servos are on the FIXED plate, and that settles a contradiction
 # this file used to carry. The header said pan and both lids "ride on the
@@ -963,14 +972,15 @@ PAN_LUG = 6.0       # how far the pan bar's drive pin hangs below the dip
 # y 147..151. Both of those span the full width, so a rod cannot go round
 # them - it goes under. That is what fixes the servo heights, not packing.
 SERVOS = {
-    "pan":   dict(loc=(24.0, SERVO_Y, 163.0), axis=None,  horn=11.0,
+    "pan":   dict(loc=(24.0, SERVO_Y, P["z"] - P["pin_drop"] - 12.0 - PAN_LUG),
+                  axis=None,  horn=13.5,
                   drive=(24.0, P["y"] - P["lever_r"],
                          P["z"] - P["pin_drop"] - 12.0 - PAN_LUG)),
-    "tilt":  dict(loc=(-4.0, SERVO_Y, 145.0), axis='X',   horn=13.6,
-                  drive=(0.0, 156.0, P["cradle_z0"] - 6.0)),
-    "lid_R": dict(loc=(12.8, SERVO_Y, 206.0), axis='-X',  horn=15.0,
+    "tilt":  dict(loc=(TILT_X, SERVO_Y, 145.0), axis='X',   horn=13.6,
+                  drive=(TILT_X, 156.0, P["cradle_z0"] - 6.0)),
+    "lid_R": dict(loc=(12.8, SERVO_Y, 212.0), axis='-X',  horn=17.0,
                   drive=None),
-    "lid_L": dict(loc=(-12.8, SERVO_Y, 206.0), axis='X',  horn=15.0,
+    "lid_L": dict(loc=(-12.8, SERVO_Y, 212.0), axis='X',  horn=17.0,
                   drive=None),
 }
 
@@ -1038,6 +1048,39 @@ def horn_pin(name, angle_deg):
     return o + Vector((0.0, -r * math.cos(a), r * math.sin(a)))
 
 
+def _rod_targets():
+    return [o for o in bpy.data.objects
+            if o.type == 'MESH'
+            and (o.name.startswith("eye_") or o.name in
+                 ("HEAD_FACE", "HEAD_CRANIUM", "FIT_forehead_casing"))
+            and not o.name.startswith("eye_rod_")]
+
+
+def _rod_clearance(name, plist=None, step=4.0):
+    """Smallest gap between one pushrod and everything else, joints aside."""
+    if not _ROD_L:
+        _rods()
+    worst = 1e9
+    for pz in (plist or poses(coarse=True)):
+        pose(*pz)
+        far = _drive_points(*pz)[name]
+        ang, _e = solve_horn(name, far, _ROD_L[name])
+        near = horn_pin(name, ang)
+        n = max(6, int((far - near).length / step))
+        for i in range(n + 1):
+            q = near.lerp(far, i / float(n))
+            if (q - far).length < 4.5 or (q - near).length < 4.5:
+                continue
+            for o in _rod_targets():
+                hit, loc, nrm, _i = o.closest_point_on_mesh(
+                    o.matrix_world.inverted() @ q)
+                if hit:
+                    worst = min(worst, ((o.matrix_world @ loc) - q).length
+                                - ROD_D / 2.0)
+    pose()
+    return worst
+
+
 def phase_horns(verbose=False):
     """Set each servo's neutral horn angle, and it is not a free choice.
 
@@ -1063,21 +1106,32 @@ def phase_horns(verbose=False):
             score = abs(d1 - d0)
             if score > bscore:
                 best, bscore = float(a0), score
+        # Two solutions, 180 apart. They transmit identically and cover the
+        # same range - and they sweep the pushrod through completely
+        # different places. Picking on range alone put the eyelid horns
+        # pointing DOWN, which swung both rods through the gimbal's cradle
+        # and the pan bar on the way back to the servo. So: require the
+        # range, then choose on clearance.
         cands = [best, (best + 180.0) % 360.0]
-        pick, pspan = cands[0], -1.0
+        need = (P["pan_max"] if name == "pan" else
+                P["tilt_max"] if name == "tilt" else LID["park"])
+        want = (-need, need) if name in ("pan", "tilt") else (0.0, need)
+        scored = []
         for c in cands:
             s["horn0"] = c
             _ROD_L.clear()
             _rods()
-            span = 0.0
             rows = reach(verbose=False, hstep=3.0, dstep=1.0)[name]
-            for _t, lo_d, hi_d in rows:
-                span += 0.0 if lo_d is None else (hi_d - lo_d)
-            if span > pspan:
-                pick, pspan = c, span
+            covers = all(lo is not None and lo <= want[0] + 1.0
+                         and hi >= want[1] - 1.0 for _t, lo, hi in rows)
+            span = sum(0.0 if lo is None else hi - lo for _t, lo, hi in rows)
+            scored.append((covers, _rod_clearance(name), span, c))
+        scored.sort(key=lambda r: (r[0], round(r[1], 2), r[2]))
+        covers, clr, span, pick = scored[-1]
         s["horn0"] = pick
         if verbose:
-            print("  %-6s horn neutral %+6.1f deg" % (name, pick))
+            print("  %-6s horn neutral %+6.1f deg, rod clears by %.2f mm%s"
+                  % (name, pick, clr, "" if covers else "  (RANGE SHORT)"))
     _ROD_L.clear()
     _rods()
 
@@ -1592,6 +1646,56 @@ def check(sweep=True, verbose=False):
 
 # ---------------------------------------------------------------------------
 ROD_D = 2.5
+
+
+def skew(verbose=True):
+    """Does each pushrod actually lie in the plane its two hinges turn in?
+
+    Pat spotted this one on screen before any test did. Every joint in this
+    linkage is a hinge, not a ball: the eyelid turns about the tilt axis, the
+    servo horn turns about its own shaft, and both of those axes run along X.
+    A straight rigid rod can only join two such hinges if it lies in a plane
+    perpendicular to X. Offset them along their shared axis and the rod
+    arrives at the pin boss on the skew - it looks like it is stabbing
+    through the crank, and it would bind.
+
+    The pan rod is the exception and is meant to be: its two hinges are
+    VERTICAL - the eye levers hang their pins downward and the pan servo's
+    shaft is vertical - so its plane is horizontal and its own out-of-plane
+    axis is z, not x.
+    """
+    if "horn0" not in SERVOS["pan"]:
+        phase_horns()
+    if not _ROD_L:
+        _rods()
+    out = {}
+    for name in ("pan", "tilt", "lid_R", "lid_L"):
+        axis = 2 if SERVOS[name]["axis"] is None else 0    # z for pan, else x
+        worst, still = 0.0, 0.0
+        for pz in poses():
+            far = _drive_points(*pz)[name]
+            ang, _e = solve_horn(name, far, _ROD_L[name])
+            near = horn_pin(name, ang)
+            d = abs((far - near)[axis])
+            worst = max(worst, d)
+            if pz[0] == 0.0 and pz[1] == 0.0:
+                still = max(still, d)
+        out[name] = (worst, still, "z" if axis == 2 else "x")
+    if verbose:
+        print("pushrod skew - how far each rod leaves its hinges' plane:")
+        for name, (d, still, ax) in out.items():
+            if still > 0.4:
+                verdict = ("BUILT WRONG - the two hinges are offset along "
+                           "their own axis, move one to match the other")
+            elif d > 0.4:
+                verdict = ("inherent: %.2f at rest, %.2f at full tilt - needs "
+                           "a wire link with a Z-bend, not a rigid rod"
+                           % (still, d))
+            else:
+                verdict = "OK, planar at every pose"
+            print("  %-6s %5.2f mm out of plane (along %s)  %s"
+                  % (name, d, ax, verdict))
+    return out
 
 
 def clearances(step=4.0, verbose=True):
