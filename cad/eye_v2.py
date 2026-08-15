@@ -1330,6 +1330,30 @@ def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
         ob = hm["_link"](coll, "eye_rod_%s" % name,
                          hm["_mesh"]("eye_rod_%s" % name, bm))
         ob.color = (0.2, 0.75, 0.95, 1.0)
+
+        # The horn: the white plastic arm that comes in the bag with the
+        # servo and clips onto its output shaft. Not drawn at all until now,
+        # which made every one of these pictures show a wire running to a
+        # bare servo body with nothing joining the two. It is not a printed
+        # part and it is not optional - it is what turns shaft rotation into
+        # a push on the wire.
+        for o in list(coll.objects):
+            if o.name == "PROXY_horn_" + name:
+                bpy.data.objects.remove(o, do_unlink=True)
+        axis = Vector((0.0, 0.0, 1.0)) if SERVOS[name]["axis"] is None \
+            else Vector((1.0, 0.0, 0.0))
+        o0 = Vector(SERVOS[name]["loc"])
+        arm = near - o0
+        bm = bmesh.new()
+        hm["_cyl"](bm, 8.0, 4.0, tuple(o0 + axis * 1.0), 'Z',
+                   direction=tuple(axis), segs=24)          # hub on the shaft
+        hm["_cyl"](bm, 5.0, arm.length, tuple(o0 + arm / 2.0 + axis * 1.0),
+                   'Z', direction=tuple(arm.normalized()), segs=16)
+        hm["_cyl"](bm, 6.0, 2.6, tuple(near + axis * 1.0), 'Z',
+                   direction=tuple(axis), segs=20)          # the pin hole boss
+        hb = hm["_link"](coll, "PROXY_horn_%s" % name,
+                         hm["_mesh"]("PROXY_horn_%s" % name, bm))
+        hb.color = (0.94, 0.94, 0.92, 1.0)
     return pts
 
 
