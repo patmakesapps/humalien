@@ -628,6 +628,47 @@ SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
              shaft_d=5.5, shaft_up=4.5, shaft_off=6.0)
 
 
+# Where the four servos actually go. Found by search rather than by eye:
+# every candidate was tested for containment in MOUNT_ZONE, against the other
+# three servos, against the mechanism, and against every part already in the
+# head. The first hand-placed layout failed on all three counts - tilt had a
+# vertical shaft when it drives an X-axis lever, pan and tilt overlapped, and
+# the right lid servo went through `tray_rail_R`.
+#
+# All four shafts land in the y=126 plane, so ONE plate can carry them.
+#
+# The shaft axis is not a free choice: it has to be parallel to the axis the
+# servo drives, or the linkage stops being planar. Pan moves a bar along X so
+# its shaft is vertical; tilt and both lids drive levers pivoting about X so
+# their shafts run along X.
+#
+# lid_L sits 10 mm higher than lid_R and its body faces the other way. Not
+# elegant, and not arbitrary - it is what clears tilt below it and the tray
+# rail above it. Symmetry loses to packing in a bay this tight.
+SERVOS = [
+    ("pan",   (20.0, 126.0, 205.0), None),   # shaft vertical
+    ("tilt",  (-8.0, 126.0, 178.0), 'X'),
+    ("lid_R", (28.0, 126.0, 222.0), 'X'),
+    ("lid_L", (-28.0, 126.0, 232.0), '-X'),  # mirrored, body faces inboard
+]
+
+
+def place_servos(hm, coll):
+    """Drop the four MG90S proxies where SERVOS says, so every later part is
+    drawn against a servo that is really there rather than a remembered one."""
+    import math as _m
+    rots = {None: None,
+            'X': Matrix.Rotation(_m.radians(90), 4, 'Y'),
+            '-X': Matrix.Rotation(_m.radians(-90), 4, 'Y')}
+    out = []
+    for name, loc, axis in SERVOS:
+        for o in list(coll.objects):
+            if o.name == "PROXY_servo_" + name:
+                bpy.data.objects.remove(o, do_unlink=True)
+        out.append(servo_proxy(hm, coll, "PROXY_servo_" + name, loc, rots[axis]))
+    return out
+
+
 def servo_proxy(hm, coll, name, loc, rot=None):
     """A solid MG90S at `loc`, output shaft up (+Z) unless rotated.
 
