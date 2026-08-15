@@ -132,6 +132,30 @@ def print_clean(ob):
     """
     before = _health(ob)
 
+    # Already a closed solid? Then leave it completely alone.
+    #
+    # This is not an optimisation, it is the whole safety rule. Run
+    # unconditionally, this function DESTROYED both head halves: they went in
+    # at 0 open / 0 non-manifold and came out at 212/12434 and 362/8340.
+    #
+    # The culprit is `dissolve_degenerate`, not the weld - worth knowing,
+    # because the weld is the one that looks dangerous. Tested at 0, 1e-6,
+    # 1e-5 and 1e-4 on both halves, remove_doubles alone merges at most 27
+    # vertices and 2 faces and leaves the volume identical to three decimal
+    # places. dissolve_degenerate is what tears a 99k-vertex sculpt apart: it
+    # collapses edges that are legitimately that short and every collapse
+    # takes the surrounding fan with it.
+    #
+    # The repairs below are for parts built from overlapping primitives,
+    # which is every small part in this project and none of the sculpted
+    # ones.
+    #
+    # A couple of zero-area faces are not worth risking a 99k mesh over: they
+    # contribute nothing to any slice plane. Only open boundaries and
+    # non-manifold edges justify touching the geometry at all.
+    if before[0] == 0 and before[1] == 0:
+        return before, before
+
     bm = bmesh.new()
     bm.from_mesh(ob.data)
     bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=WELD)
