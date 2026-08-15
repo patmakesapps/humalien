@@ -558,4 +558,108 @@ def check():
                  min(p.z for p in out), max(p.z for p in out),
                  "OK, sub-nozzle" if worst < 0.4 else "FAIL"))
         ok = ok and worst < 0.4
+
+    # ---- and against every other part in the head --------------------------
+    # This is the check the first version of check() did not have, and its
+    # absence was caught by looking at the screen rather than by any test:
+    # every part can sit correctly inside the head and still pass straight
+    # through the part next to it. Containment and collision are different
+    # questions.
+    from mathutils.bvhtree import BVHTree
+
+    def _tree(o):
+        b = _bm.new()
+        b.from_mesh(o.data)
+        _bm.ops.transform(b, verts=b.verts[:], matrix=o.matrix_world)
+        t = BVHTree.FromBMesh(b)
+        b.free()
+        return t
+
+    # PROXY_eyeball/iris are the placeholders these domes REPLACE, so they
+    # share the same space by definition. CHECK_ is a measuring rule.
+    SKIP = ("_", "PR_", "PRBED", "PRTITLE", "PRLABEL", "CUT_", "REF",
+            "PROXY_", "CHECK_", "SnapEye", "EyeMech", "Assembly", "Base",
+            "Component", "ServoSizing")
+    SKIP_EXACT = {"HEAD_SKIN", "HEAD_SOLID", "MOUNT_ZONE", "HEAD_CYBORG",
+                  "HEAD_CRANIUM_scriptbuild", "HEAD_REF",
+                  "forehead_casing_asprinted_13aug"}
+    mine = [o for o in coll.objects if o.type == 'MESH']
+    tm = {o.name: _tree(o) for o in mine}
+    others = [o for o in bpy.data.objects
+              if o.type == 'MESH' and o not in mine
+              and not o.name.startswith(SKIP) and o.name not in SKIP_EXACT]
+    print("")
+    print("collisions with the rest of the head (%d parts checked):" % len(others))
+    clash = 0
+    for o in others:
+        t = _tree(o)
+        for e in mine:
+            pairs = tm[e.name].overlap(t)
+            if not pairs:
+                continue
+            clash += 1
+            b = _bm.new()
+            b.from_mesh(e.data)
+            _bm.ops.transform(b, verts=b.verts[:], matrix=e.matrix_world)
+            b.faces.ensure_lookup_table()
+            cs = [b.faces[i].calc_center_median() for i, _j in pairs]
+            print("  %-14s THROUGH %-22s %4d faces at x %6.1f..%6.1f "
+                  "y %6.1f..%6.1f z %6.1f..%6.1f"
+                  % (e.name, o.name, len(pairs),
+                     min(c.x for c in cs), max(c.x for c in cs),
+                     min(c.y for c in cs), max(c.y for c in cs),
+                     min(c.z for c in cs), max(c.z for c in cs)))
+            b.free()
+    if not clash:
+        print("  none")
+    ok = ok and not clash
     return ok
+
+
+# ---------------------------------------------------------------------------
+# a real MG90S, so servo room is measured rather than hoped for
+# ---------------------------------------------------------------------------
+# Body and total height come from the datasheet and agree with what
+# eye_mech.P has carried all along - 22.5 x 12 x 22.7, 35.5 total. The tab
+# pitch is 28.0 and it is the one number here that is PROVEN: coupon_mg90s
+# was printed and the real servos fitted it, 15 Aug.
+SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
+             tab_pitch=28.0, tab_l=32.2, tab_t=2.5, tab_up=16.0,
+             shaft_d=5.5, shaft_up=4.5, shaft_off=6.0)
+
+
+def servo_proxy(hm, coll, name, loc, rot=None):
+    """A solid MG90S at `loc`, output shaft up (+Z) unless rotated.
+
+    Origin is the CENTRE OF THE OUTPUT SHAFT at the top face of the body,
+    because that is the point a linkage is designed around - not the centre
+    of the box, which is where a proxy placed by eye ends up and why it then
+    disagrees with the horn by 6 mm.
+    """
+    s = SERVO
+    dx, dy, dz = 0.0, 0.0, 0.0
+    prims = []
+
+    def _p():
+        prims.append(bmesh.new())
+        return prims[-1]
+
+    # body, hanging below the shaft top
+    bm = _p()
+    hm["_box"](bm, (s["l"], s["w"], s["h"]),
+               (dx - s["shaft_off"], dy, dz - s["h"] / 2.0))
+    # mounting tabs
+    bm = _p()
+    hm["_box"](bm, (s["tab_l"], s["w"], s["tab_t"]),
+               (dx - s["shaft_off"], dy, dz - s["h"] + s["tab_up"]))
+    # output shaft boss
+    bm = _p()
+    hm["_cyl"](bm, s["shaft_d"] * 2.2, 4.0, (dx, dy, dz - 2.0), 'Z')
+    bm = _p()
+    hm["_cyl"](bm, s["shaft_d"], s["shaft_up"], (dx, dy, dz + s["shaft_up"] / 2.0), 'Z')
+    ob = _union(hm, coll, name, prims)
+    if rot is not None:
+        ob.data.transform(rot)
+    ob.data.transform(Matrix.Translation(Vector(loc)))
+    ob.color = (0.9, 0.2, 0.2, 1.0)
+    return ob
