@@ -765,7 +765,16 @@ def pca9685_mount(loc=(0, 0, 0)):
     interchangeable with Adafruit's until a coupon says otherwise."""
     b = BOARDS["pca9685"]
     t = P["plate_t"]
-    boss_d = 7.0
+    # Ø5, not Ø7. At Ø7 each standoff reached 3.5 mm inboard of a hole that
+    # is only 3.175 mm in from the board edge, so it ran under the servo
+    # header field and the pin tails fouled the boss's inner edge - found on
+    # the real board, 15 Aug. The hole POSITIONS were confirmed good at the
+    # same time, so only the diameter was ever wrong. Ø5 buys 1 mm of
+    # clearance all round and still leaves 1.4 mm of wall around an M2
+    # clearance hole; at the ends of the 3.2 mm slot it is 0.9 mm, which is
+    # two perimeters at 0.4 and carries no load - the screw clamps the board
+    # down onto the boss, it does not hang off it.
+    boss_d = 5.0
     boss_h = b["under"]
     margin = 8.0
     W = b["w"] + 2 * margin

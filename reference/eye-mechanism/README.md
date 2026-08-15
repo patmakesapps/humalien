@@ -25,11 +25,33 @@ The download contains five plates, and two of them are for the wrong servo:
 
 | Plate | Contents | Print? |
 | --- | --- | --- |
-| 01 | `SG90 - A` | No |
-| 02 | `SG90 - B` | No |
-| 03 | `MG90s - A` | **Yes** |
-| 04 | `MG90s - B` | **Yes** |
-| 05 | `ServoSizingPlate` | **Yes** |
+| 01 | `SG90 - A` | No — wrong servo |
+| 02 | `SG90 - B` | No — wrong servo |
+| 03 | `MG90s -A` | **Yes, if the gauge says A** |
+| 04 | `MG90s - B` | **Yes, if the gauge says B** |
+| 05 | `ServoSizingPlate` | **Yes, first** |
+
+**Print ONE of 03 and 04, not both.** This file used to say both, and that is
+wrong: it is 4.8 h and 126 g spent on parts that cannot be used. Every plate
+holds **19 objects — a complete mechanism each**. The four are the two-by-two
+of servo type against servo fit:
+
+|  | A fit | B fit |
+| --- | --- | --- |
+| SG90 | plate 01 | plate 02 |
+| MG90s | **plate 03** | plate 04 |
+
+Read out of `Metadata/model_settings.config` by mapping each plate's
+`object_id` list back to its `source_file`. Plate 03 draws its fit-critical
+parts from `AA`/`AB`/`AC`/`AD`, plate 04 from `BA`/`BB`/`BC`/`BD`. Plates 01
+and 03 differ only in `AG`+`AH` versus `CA`+`CB`, which is the servo-type
+difference and nothing else. Both plate previews show two eyeball
+hemispheres, which is the quick visual confirmation that one plate is one
+whole mechanism.
+
+**Settled 15 Aug: this build is `A`.** The gauge printed, the MG90S spline
+went into bore A snug and would not enter B at all. So **plate 03 is the one
+to print**, and plate 04 is not needed.
 
 Confirmed 15 Aug by reading `Metadata/model_settings.config` out of the `.3mf`,
 which carries the plate names directly: `SG90 - A`, `SG90 - B`, `MG90s -A`,
