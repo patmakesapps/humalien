@@ -718,3 +718,53 @@ the axle into the cradle's bore; pin the pan bar to the stem's lever with a
 
 **Still not measured: the 5050.** It is `LISTING` at 8 × 3 × 8 and it now has
 a pad it has to fit on. Coupon it before trusting the stem's face.
+
+## The eye plate — ready to print, 15 Aug
+
+`cad/eye_plate.py`. **11 STL files, 14 pieces, 172 × 152 mm on a 256 bed.**
+
+    exec(open(r"C:\Humalien\cad\eye_plate.py").read())
+    build(); verify(); export()      # -> exports/eye/
+
+It is deliberately **not** part of `export_plate`. That file reads a part's
+plate number back from the x position of its `PR_` copy on a grid shared with
+`print_layout`, and the `print ready` collection carries a hand arrangement
+nothing rebuilds. The eye plate lives in its own collection, far off to one
+side, with its own prefix, so `census()` cannot see it. What it does borrow is
+`print_clean()`.
+
+| file | pieces | mm |
+| --- | --- | --- |
+| `eye_frame_x1` | 1 | 104 × 30 × 21.5 |
+| `eye_gimbal_x1` | 1 | 75 × 42.5 × 13.5 |
+| `eye_pan_bar_x1` | 1 | 74 × 20.5 × 4 |
+| `eye_dome_r_x1`, `eye_dome_l_x1` | 2 | 32 × 32 × 22.6 |
+| `eye_lid_r_x1`, `eye_lid_l_x1` | 2 | 35.6 × 32.4 × 23.4 |
+| `eye_stem_r_x2` | 2 | 22.8 × 22.8 × 7 |
+| `eye_axle_r_x2` | 2 | Ø10 × 26 |
+| `eye_shaft_x1` | 1 | Ø5 × 29.2 |
+| `eye_peg_r_x2` | 2 | Ø5 × 17.8 |
+
+**`chirality()` is what decides which parts share a file**, and it had to be
+written because nothing this project already measures can answer the question:
+volume, bounding box and the vertex-to-centroid fingerprint are *all identical
+between a part and its mirror image* — reflection preserves every one of them.
+It tags each vertex with its signed x offset as well and asks whether negating
+x reproduces the same set. Stems, axles, pegs and the shaft come back
+symmetric; the eyelids are genuinely handed.
+
+The domes get two files anyway. Every feature on them is revolved about the
+eye axis or lies on it, so they are almost certainly symmetric, and
+`chirality()` calls them handed because it compares meshes rather than shapes
+and a UV sphere is not tessellated symmetrically. One wasted print is cheaper
+than being wrong about it.
+
+**Verified from the files, not from Blender**: all 11 read back as one
+connected shell, every edge shared exactly twice, zero degenerate triangles.
+
+Two notes for the bed:
+
+- **The eyelids sit on a curved edge.** Their footprint is a crescent and the
+  contact patch is small — give them a brim.
+- **Packed to 190 mm wide on purpose.** At the full bed it came out 251 of 256
+  and left nowhere for a skirt; there was depth to spare, so it was spent.

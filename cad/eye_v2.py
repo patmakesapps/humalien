@@ -429,6 +429,54 @@ def _rbox(bm, dims, loc, rot=None):
     return bm
 
 
+def _teardrop(bm, d, length, loc, axis='Z', up=(0.0, 1.0, 0.0), apex=1.35):
+    """A roof over a horizontal bore, so it prints without the top drooping.
+
+    The bore itself is untouched - this is added ABOVE it - so a bearing bore
+    stays a bearing bore. Printed lying down, a round hole has no material to
+    start its own ceiling on and the top two or three layers sag into it; on
+    a O5 bore that is a couple of tenths of interference exactly where a
+    hanging part bears.
+
+    `apex` is where the peak sits, as a multiple of the bore's radius. 1.41
+    is the textbook tangent teardrop; anything over about 1.15 self-supports,
+    and the lower figures are there because these bores sit in thin bosses
+    and a full teardrop would break straight out through the wall.
+    """
+    ax = {'X': Vector((1.0, 0.0, 0.0)), 'Y': Vector((0.0, 1.0, 0.0)),
+          'Z': Vector((0.0, 0.0, 1.0))}[axis]
+    u = Vector(up)
+    u = (u - ax * u.dot(ax))
+    if u.length < 1e-6:
+        return bm                       # bore runs along the build axis
+    u.normalize()
+    v = ax.cross(u).normalized()
+    c = Vector(loc)
+    r = d / 2.0
+    tmp = bmesh.new()
+    a = c - ax * length / 2.0
+    b = c + ax * length / 2.0
+    tri = [v * r, -v * r, u * (r * apex)]
+    lo = [tmp.verts.new(a + t) for t in tri]
+    hi = [tmp.verts.new(b + t) for t in tri]
+    tmp.faces.new(lo)
+    tmp.faces.new(list(reversed(hi)))
+    for i in range(3):
+        j = (i + 1) % 3
+        tmp.faces.new((lo[i], lo[j], hi[j], hi[i]))
+    bmesh.ops.recalc_face_normals(tmp, faces=tmp.faces[:])
+    return _merge(bm, tmp)
+
+
+def _merge(bm, tmp):
+    me = bpy.data.meshes.new("_t")
+    tmp.to_mesh(me)
+    tmp.free()
+    bm.from_mesh(me)
+    bpy.data.meshes.remove(me)
+    return bm
+
+
 def _prims():
     """A list you append primitives to, and the maker that appends them."""
     out = []
@@ -586,6 +634,15 @@ def eyeball(hm, coll, sx):
     hm["_cyl"](bore, P["axle_d"] + P["axle_fit"], 16.0,
                (cx, cy, P["axle_z1"] - 8.0 + 1.0), 'Z', segs=48)
     hm["_apply"](coll, ob, bore, "_CUT_axlebore_%s" % side, 'DIFFERENCE')
+    # roofed, because the dome prints back-face down and this bore is
+    # horizontal in that orientation. Shallow - the plug round it is only
+    # O14. Its OWN boolean: merged into the bore's cutter it is two
+    # overlapping solids in one mesh, which is the trap this file keeps
+    # walking into, and it left the dome with 7 open and 6 non-manifold.
+    roof = bmesh.new()
+    _teardrop(roof, P["axle_d"] + P["axle_fit"], 16.0,
+              (cx, cy, P["axle_z1"] - 8.0 + 1.0), 'Z', apex=1.22)
+    hm["_apply"](coll, ob, roof, "_CUT_axleroof_%s" % side, 'DIFFERENCE')
 
     # The two cuts are opposite ways round, and getting that backwards is
     # what a first attempt did: it hollowed the iris out from the INSIDE and
@@ -746,7 +803,8 @@ def gimbal(hm, coll):
     hm["_box"](bm, (10.0, 6.0, 10.0), (TILT_X, 156.0, cz0 - 4.0))
     ob = _union(hm, coll, "eye_gimbal", prims)
 
-    cut = bmesh.new()
+    cuts, _c = _prims()
+    cut = _c()
     # the two pan bores
     for sx in (-1, 1):
         hm["_cyl"](cut, P["pan_d"] + P["pan_fit"],
@@ -754,12 +812,27 @@ def gimbal(hm, coll):
                    (sx * P["pitch"] / 2.0, ty,
                     (P["pan_z1"] + 2.0 + P["pan_z0"]) / 2.0), 'Z', segs=32)
     # the shaft bore, straight through both tubes
+    cut = _c()
     hm["_cyl"](cut, P["shaft_d"] + P["shaft_fit"], 2 * P["tube_x1"] + 4.0,
                (0.0, ty, tz), 'X', segs=32)
+    # Roofs over all three, because the gimbal prints lying in its own plane
+    # and every one of its bores therefore runs horizontal. The pan bores get
+    # a shallower peak than the textbook 1.41r: their housing is only O13
+    # round a O10.35 bore, and a full teardrop would come out through it.
+    cut = _c()
+    _teardrop(cut, P["shaft_d"] + P["shaft_fit"], 2 * P["tube_x1"] + 4.0,
+              (0.0, ty, tz), 'X', apex=1.35)
+    for sx in (-1, 1):
+        cut = _c()
+        _teardrop(cut, P["pan_d"] + P["pan_fit"],
+                  P["pan_z1"] + 2.0 - P["pan_z0"],
+                  (sx * P["pitch"] / 2.0, ty,
+                   (P["pan_z1"] + 2.0 + P["pan_z0"]) / 2.0), 'Z', apex=1.15)
     # the tilt link pin
+    cut = _c()
     hm["_cyl"](cut, P["link_d"], 30.0,
                (TILT_X, 156.0, P["cradle_z0"] - 6.0), 'X', segs=24)
-    hm["_apply"](coll, ob, cut, "_CUT_gimbal", 'DIFFERENCE')
+    _cut_each(hm, coll, ob, cuts, "_CUT_gimbal")
     return ob
 
 
@@ -824,6 +897,9 @@ def frame(hm, coll):
     cut = _c()
     hm["_cyl"](cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
                (0.0, ty, tz), 'X', segs=32)
+    cut = _c()
+    _teardrop(cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
+              (0.0, ty, tz), 'X', apex=1.40)
     for sx in (-1, 1):
         cut = _c()
         # The peg socket is open outboard on purpose. The pad bore's centre
@@ -982,6 +1058,9 @@ def eyelid(hm, coll, sx):
     cut = _c()
     hm["_cyl"](cut, P["tube_od"] + LID["hub_fit"], 17.0 - 4.0,
                (sx * (4.0 + 17.0) / 2.0, cy, cz), 'X', segs=32)
+    cut = _c()
+    _teardrop(cut, P["tube_od"] + LID["hub_fit"], 17.0 - 4.0,
+              (sx * (4.0 + 17.0) / 2.0, cy, cz), 'X', apex=1.30)
     cut = _c()
     hm["_cyl"](cut, P["link_d"], 20.0,
                (px, cy + ca * LID["crank_r"], cz + sa * LID["crank_r"]),
