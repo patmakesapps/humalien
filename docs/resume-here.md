@@ -66,8 +66,9 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
-3. **The eye mechanism is now a bespoke design.** Cogley's ε3.2 is reference
-   only — it will not be printed. See below.
+3. **The eye mechanism is drawn, checked through its whole range, and has
+   one open decision** — a 2 mm scallop in `forehead_casing`, which is on
+   plate 5 and unprinted. See below. Cogley's ε3.2 is reference only.
 
 ## The six plates
 
@@ -297,55 +298,23 @@ The build needs at minimum 4 × M3 × 10 for the two hub joins, M3 for the six
 shell mounts, M3 for the speaker posts, and M2/M2.5 for the boards. This is
 the most likely thing to stop an assembly day dead.
 
-## The eye mechanism — the real open question
+## The eye bay, measured — superseded 15 Aug
 
-**The reason it was blocked is stale.** `head_mounts.eye_plate` is kept but
-uncalled, and its docstring says there are only 59 mm of clear width at the eye
-line because "everything outboard of |x|=29.5 is ear hub". That was measured
-against the one-piece hub. Splitting it changed the answer:
+This section used to argue about whether the eye mechanism would fit and
+where its bearings could go. It is all settled now; the answers, and the
+measurements they came from, are under **The eye mechanism** below.
 
-```
-              x              y              z
-ear_hub_R  39.5 .. 60.1  53.0 .. 127.5  163.7 .. 238.1
-ear_spine  29.5 .. 39.5  87.0 .. 103.0  163.5 .. 244.5
-old hub    29.5 .. 65.5  59.0 .. 131.0
-```
+Two things from it are still worth carrying:
 
-Nothing in the ear assembly reaches y ≥ 128 any more. Clear width at the eye
-line z=209, inside `MOUNT_ZONE`:
-
-| y | inside the zone |
-| --- | --- |
-| 125 | 74.0 mm |
-| 131 | **120.4 mm** |
-| 134 | 118.0 mm |
-
-Against the **~100 mm** the mechanism and its rings need. Both causes of the
-original collision are gone: the inboard hub mass, and the old 330° arm which
-sat at y=126.2, z=186 — exactly where the plate's side screw at z=188 went, and
-which is where those 79 intersecting vertices came from.
-
-**But the space was never the only problem.** Still genuinely unknown, and not
-resolvable by measuring the file:
-
-- **Cogley's ε3.2 hole pattern has never been taken.** That is why the plate
-  carried a slotted 20 mm grid rather than holes. It stays unknown until the
-  reference mechanism is assembled. The brief's rule stands: *do not start
-  cutting geometry that depends on those answers before they exist.*
-- **`eye_pitch` is SETTLED at 62** — see the section above. It was never a
-  decision, only an unrecorded fact: `head_style.S["eye"]["pitch"]` is 62 and
-  the sockets were cut on it.
-- **Licence.** Cogley's ε3.2 is CC BY-NC-SA. Measurements are facts and carry
-  no licence; geometry does. Nothing of his may end up in this repo.
-
-Two practical notes for whoever draws it:
-
-- At y=131 a temple fixing is only **3 mm** forward of the ear port's edge (the
-  Ø66 bore spans y 62..128). Moving the plate to y=133–134 buys clearance and
-  costs about 2 mm of width.
-- The old plate's slots came back as skewed slivers because each was three
-  overlapping solids in one batched cutter. That is the nested-cutter trap this
-  file has now hit three times. Cut slots disjoint, or one at a time.
+- **The temple pad bore is at x = ±49.79**, not 57.79. 57.79 is the inner
+  wall face, which is what a probe walking outward until it hits something
+  finds. A frame built on it put 107 vertices outside the skin. The pad runs
+  **y 133..146** and its bore is Ø5.2 at **z 212.4..217.6** over that whole
+  length — re-measured 15 Aug, because the earlier y-extents were a guess.
+- **Cut slots disjoint, or one at a time.** The old eye plate's slots came
+  back as skewed slivers because each was three overlapping solids in one
+  batched cutter. That is the nested-cutter trap, and the eye mechanism has
+  now hit it a fourth time.
 
 ## The speaker, and what it retired — 15 Aug
 
@@ -417,85 +386,155 @@ head *is*. And the openings have to be clustered before they are measured,
 or the ear ports get averaged in with the eyes and the answer comes out as
 92.6 mm.
 
-## The eye mechanism — bespoke, and started 15 Aug
+## The eye mechanism — complete and moving, 15 Aug
 
 **Cogley's ε3.2 is reference only. It will not be printed.** Two reasons: it
 is **CC BY-NC-SA**, so none of his geometry can ship here and nothing built on
 it can be commercial; and every one of his plates needs support material,
 which nothing else in this project does.
 
-`cad/eye_v2.py` — `build()` makes the `EYE_v2` collection, `check()` proves it.
+`cad/eye_v2.py` — `build()` makes the `EYE_v2` collection, `check()` proves it,
+`reach()` says what each servo can actually deliver, `pose()` puts it anywhere
+in its range.
 
 **Four servos**, against his six: pan and tilt each linked across both eyes,
-plus one lid per eye so they can wink independently. What that gives up is
-per-eye pan, which buys convergence — real, but subtle, and it doubles the
-linkage count.
+plus one lid per eye so they can wink independently.
 
-### Built and verified
+### Ten parts, all healthy
 
 | part | | |
 | --- | --- | --- |
-| `eye_dome_R`/`_L` | 2144 v | Ø32 dome, hollow for the 5050 pixel, pole sockets, pan lever |
-| `eye_gimbal` | 692 v | tilt frame, both yokes, trunnions at ±48.5 |
-| `eye_frame_R`/`_L` | 273 v | temple brackets, spigot into the Ø5.2 pad bore |
+| `eye_dome_R`/`_L` | 2038 v | Ø32 dome, hollow for the 5050 pixel, pan journal underneath, lever and link pin |
+| `eye_gimbal` | 840 v | cradle, both pan journals, both tilt tubes, tilt lever |
+| `eye_frame` | 284 v | one part now: an arch across both temples, and the mast down to the shaft |
+| `eye_shaft` | 64 v | Ø5 × 29, the tilt axis — separate, so the gimbal can be assembled at all |
+| `eye_peg_R`/`_L` | 128 v | Ø5 into the temple pad bore, locating the frame and the two head halves |
+| `eye_lid_R`/`_L` | 1057 v | spherical band, hub on the gimbal tube, dog-leg crank |
+| `eye_pan_bar` | 188 v | links both eye levers, dipped in the middle |
 
-All five: one shell, watertight, zero weld debt, inside the head.
+All ten: one shell, watertight, zero open edges, zero non-manifold, zero weld
+debt, and inside the head at every pose. **One clash remains and it is a
+decision rather than a fault** — see below.
 
-### Still to build
+Ranges, and every one of them is what the linkage can really deliver rather
+than what it was asked for: pan **±30°**, tilt **±16°**, each lid **52°**.
 
-Pan link, lid shells and lid arms, servo mounts. **None of it changes the
-head**, which is why the head halves went on the printer first.
+### The check now sweeps the range, and that is the whole point
 
-### The decisions, so they are not re-litigated
+`check()` used to test the mechanism standing still. Two of the three faults
+that mattered were invisible that way, and both appeared the moment it started
+posing:
 
-**A gimbal, not a ball in a socket.** Two pushrods pulling on one free body
-fight each other, and slop in one shows up as error in the other.
+- a yoke arm over the top of the eye swings **into `FIT_forehead_casing`** at
+  full tilt — 6 mm in, and no length of arm avoids it;
+- the pan bar's ends translate 5.5 mm sideways at full pan, straight into
+  where both eyelid pushrods run.
 
-**The eyeballs are domes.** Only the front is ever visible through a Ø41
-socket. A sphere would have to split into hemispheres, and with a vertical pan
-axis the split plane contains both poles — so the seam lands across the iris
-*and* the pivots land on the seam. A dome cut 7 mm behind centre is one piece,
-prints flat-back-down leaning 13°, and seams where nothing sees it.
+Containment, collision-with-the-head, collision-with-each-other and
+collision-through-the-range are four questions. It used to answer two.
 
-**The pan servo rides on the gimbal**, with the two lid servos. On the fixed
-frame its pushrod would chase a lever tilting away from it and pan would
-become a function of tilt. Only the tilt servo is on the frame.
+### What changed, and why
 
-**The mechanism needs no new holes in the head.** The frame spigots into the
-temple dowel pads that are already in both printed halves.
+**Each eye now hangs on ONE journal, underneath.** A yoke gripping both poles
+needs an arm at radius ≥ 20 above the tilt axis, and the forehead casing is
+solid across the full width from z=225 — which is exactly the top of the ball.
+To clear it at every tilt an arm at radius 20.4 would have to end by y=154.7,
+and the pole it has to reach is at y=160. So the top of the eye is left empty
+and the dome runs on a Ø10 × 9 journal in the cradle below it.
 
-### Numbers that were measured, and one that was wrong twice
+**Tilt is ±16, not ±20**, and the cheek is what sets it. That journal hangs
+26 mm below the tilt axis; a point that far below swings forward by
+sin(tilt)×26, and the cheek's inner wall is at **y=172.7** — asked of
+`HEAD_FACE`, not of `MOUNT_ZONE`, which has been 3–6 mm optimistic every time.
+The price is slop: 0.3 mm of clearance over 9 mm of journal is about 2° of
+wobble, and it is the loosest thing in the mechanism.
 
-- Eyeball centres **x = ±31, y = 160, z = 209**; Ø41 sockets raked 25° out,
-  10° down.
-- The bay is ~116 mm wide and 30 mm deep at full width (y 130..160), then
-  narrows to a **73 mm corridor** behind y=125 where the ear hubs pinch in.
-  The servos live in that corridor.
-- **Tilt bearings at |x| = 48.5.** On the tilt axis `MOUNT_ZONE` runs out
-  between 50 and 52 and the eyeballs reach 47 — a **three-millimetre window**.
-  Thin for a beam, ample for a bearing on a 97 mm span, and the tightest thing
-  in the design. **If the printed gimbal binds, look here first.**
-- **The temple pad bore is at x = 49.79**, not 57.79. 57.79 is the inner wall
-  face, which is what a probe walking outward until it hits something finds.
-  A frame built on it put 107 vertices outside the skin.
+**The tilt bearings moved to the corridor between the eyes.** 48.5 was
+measured against the eyeball and never against the eyelid, which is a shell
+*over* the ball and reaches x=48.8. The outboard slot on the tilt axis is
+3.86 mm wide and has to hold a boss, a journal and their running clearance.
+The corridor between the two lids is 26.4 mm.
 
-### Three faults the checker caught that inspection would not
+**One shaft, three concentric members** — frame shaft, gimbal tube, lid hub,
+all on the tilt axis. Not a trick: a lid has to stay concentric with the ball,
+and the ball's centre is on the tilt axis, so they were always the same line.
+Riding the lid on the gimbal also makes it tilt with the eye for free.
 
-Worth knowing because they are the shapes of mistake this geometry invites:
+**All four servos are on the fixed frame.** The file used to say pan and both
+lids rode on the gimbal, and then place all four in the y=126 plane — 34 mm
+behind the tilt axis, where riding on the gimbal would swing them ±11.7 mm
+every time the eyes looked up. The cost is cross-coupling, which is linear,
+repeatable and hysteresis-free, so it is mixed out in software. `reach()`
+prints how much of each servo's travel goes on it.
 
-- The gimbal built as **7 disconnected shells** because one stub axle stopped
-  **0.4 mm** short of its arm. Every shell individually healthy.
-- The frame's Ø11 bearing bosses reached 5.5 mm forward of the tilt axis into
-  a skull that is narrowing there. They are D-shaped now, taking their
-  material backwards where there is room.
-- Merging primitives into one bmesh and self-unioning afterwards leaves
-  non-manifold edges — EXACT will not resolve a dozen coincident faces in one
-  pass. Each part is now unioned **one primitive at a time**, which is what
-  `head_mounts` does and for the same reason.
+**The frame is one part, at y 147.5..151.5,** and it has nowhere else to go.
+Behind it the temple pad boss is solid from x=41.8 outward over z 206..223 —
+measured — so a frame further back cannot reach the pad bore at all; the bore
+is only open through the pad itself. In front of it the eyeballs start: panned
+30°, a dome swings its back rim to y=146.7. Four millimetres, and the arch
+fills them.
 
-`check()` tests containment against **HEAD_SOLID, not MOUNT_ZONE** — the zone
-has the eye openings subtracted, and the eyeball is supposed to sit in one, so
-checking a dome against the zone reports the entire visible eye as a fault.
+### The one thing left, and it needs a decision
+
+**`forehead_casing` has to give up about 2 mm.** The eyelid is a shell over
+the ball with 0.35 of running clearance and 1.2 of wall, so its outer surface
+is 17.55 from the eye centre against the ball's 16. The ball's top is z=225.
+The casing's underside is z=225 and it is **solid from x=−47 to +47** —
+checked by ray, not assumed. Wherever the lid crosses the top of the eye it
+stands 1.7 mm proud of the ball, and that is where the casing is.
+
+Thinning the lid does not fix it — at 0.9 of wall and 0.25 of gap it is still
+1.15 mm proud, and 0.9 mm is not a lid. Parking it differently does not either;
+the band has to pass over the top to get anywhere.
+
+So: a scallop 18 mm wide and 3 mm deep in the bottom rim of the casing over
+each eye. `casing_relief()` prints the arithmetic and does nothing;
+`casing_relief(apply=True)` cuts it. **The part is on plate 5 and unprinted,
+so this is a decision rather than a problem** — but plate 5 has to be
+re-exported afterwards, and `check()` will keep saying FAIL until it is done.
+
+### Two things the renders showed that no number would have
+
+**The eyeball does not fill its socket.** A Ø32 ball in a Ø41 opening raked
+25° out and 10° down leaves a crescent you can see the mechanism through,
+worst at the lower-outboard corner. That is what `eye_bezel_R/L` were for, and
+the brief retired them because the openings became "smooth Ø41 circles". They
+did; the ball still does not fill them. Bezel, bigger ball, or smaller
+opening — and none of the three is drawn.
+
+**The dome's print orientation is unresolved**, and the claim that it prints
+flat-back-down is wrong — it has been wrong since the file was written.
+Back-face-down puts the pan lever 4 mm below the bed and lays the Ø10 journal
+boss on its side as a cantilever. Neither is printable as drawn. The likely
+answer is to split the lever and the boss off as a part that presses into the
+dome, but that has not been drawn either.
+
+### The traps, because this geometry invites them
+
+- **The nested-cutter trap, hit a fourth time.** Two overlapping solids merged
+  into one cutter bmesh are not a solid, and a boolean against them does not
+  give the union of what they cut. The frame's peg socket came back with 155
+  non-manifold edges from a Ø5.2 bore and the slot mouth that opens it,
+  merged. Everything is now cut and unioned **one primitive at a time**.
+- **Coplanar and near-tangent booleans are the same fault.** A butt joint is
+  not an intersection, so the union leaves a second shell — the peg came out
+  as three. And a face landing 0.0 mm from a cylinder's surface leaves a hole:
+  the frame lost one 4.8 × 0.5 mm face because the mast's centreline passed
+  2.2 mm above the tilt axis instead of through it.
+- **`MOUNT_ZONE` is not the shell's interior.** It read 3–6 mm wider than
+  `HEAD_FACE` at the cheek and again at the temple, both times in the
+  direction that hides a clash. Ask the shell.
+- **A horn out of phase reads as a linkage that does not fit.** The tilt servo
+  could deliver −5.5..+18 of a range needing ±16, and the fault was that its
+  horn pointed straight down its own pushrod, where it transmits nothing.
+  `phase_horns()` now sets each neutral to the across-the-rod position, and
+  tries both of the two solutions.
+- **Asking a rigid linkage to hit a pose is the wrong question.** The old
+  check fixed (tilt, pan) and looked for a horn angle that made the rod
+  exactly the right length, then reported FAIL when it could not find one. A
+  horn and a rod are one degree of freedom: for a given tilt the driven angle
+  is a *function* of the horn angle. `reach()` sweeps the horn and reports the
+  envelope instead.
 
 ## Still open
 
@@ -519,10 +558,12 @@ checking a dome against the zone reports the entire visible eye as a fault.
   the fit before any bracket depends on it.
 
 - Six old ear screw holes: **closed**, no longer open.
-- The eyeballs are not modelled. `PROXY_eyeball_R/L` only, Ø32.
-- `eye_bezel_R/L` may be vestigial — the brief says the ring-bezel debt died
-  when the glow moved inside the eyeball and the eye openings became smooth
-  Ø41 circles. Worth checking before printing them again.
+- The eyeballs ARE modelled now — `eye_dome_R/L` in `EYE_v2`. `PROXY_eyeball_R/L` are the placeholders they replace and are kept only as a measuring rule.
+- **`eye_bezel_R/L` are not vestigial after all.** The brief retired them
+  when the eye openings became smooth Ø41 circles, and the openings did —
+  but a Ø32 ball raked 25° out does not fill one, and the renders show a
+  crescent you can see the gimbal through. Bezel, bigger ball or smaller
+  opening; none of the three is drawn.
 - `print_layout.OUT_DIR` still points at `C:\humalien\humalien\print\v1`, a path
   from an older repo layout. Running `print_layout.build()` silently creates
   that folder instead of writing to `exports/`, and it writes every part flat

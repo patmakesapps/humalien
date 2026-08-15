@@ -4,10 +4,12 @@ Run inside Blender:
 
     exec(open(r"C:\\Humalien\\cad\\eye_v2.py").read())
     build()          # -> the EYE_v2 collection
-    check()          # fit against the head, printability, clearances
+    check()          # fit, printability, clearance - through the WHOLE range
+    reach()          # what each servo can actually deliver, tilt by tilt
+    pose(tilt=-16, pan=30, lid=0)   # put it somewhere and look at it
 
-Replaces Will Cogley's ε3.2, which is now reference only. Two reasons, and
-the licence is the one that actually matters: ε3.2 is **CC BY-NC-SA**, so
+Replaces Will Cogley's e3.2, which is now reference only. Two reasons, and
+the licence is the one that actually matters: e3.2 is **CC BY-NC-SA**, so
 none of his geometry could ever ship in this repo and nothing built on it
 could ever be commercial. The second is that every one of his plates needs
 support material, and nothing else in this project does.
@@ -16,94 +18,129 @@ WHAT IT DOES
 ------------
 Four MG90S, against Cogley's six:
 
-| servo | drives                  | on            |
-| ----- | ----------------------- | ------------- |
-| pan   | both eyes, linked, ±30° | the gimbal    |
-| tilt  | both eyes, linked, ±20° | the frame     |
-| lid R | right eyelid            | the gimbal    |
-| lid L | left eyelid             | the gimbal    |
+| servo | drives                  |
+| ----- | ----------------------- |
+| pan   | both eyes, linked, +-30 |
+| tilt  | both eyes, linked, +-16 |
+| lid R | right eyelid, 52 deg    |
+| lid L | left eyelid, 52 deg     |
 
 The two he spends that this does not are per-eye pan, which buys convergence
 - eyes crossing to focus close. Real, but subtle, and it doubles the linkage
 count. The simplicity is spent on making blink crisp instead.
 
-THE THREE DECISIONS THAT SHAPE EVERYTHING
------------------------------------------
+All four are on the FIXED frame, which settles a contradiction this file used
+to carry: it said pan and both lids "ride on the gimbal", and then placed all
+four servos in the y=126 plane, 34 mm behind the tilt axis, where riding on
+the gimbal would swing them +-11.7 mm every time the eyes looked up. What
+that costs is cross-coupling - tilt moves the far end of every pushrod - and
+that is a linear, repeatable, hysteresis-free error on a machine with a Pi
+and sixteen PWM channels. It is mixed out in software. `reach()` prints how
+much of each servo's travel goes on it.
+
+THE FIVE DECISIONS THAT SHAPE EVERYTHING
+----------------------------------------
 **A gimbal, not a ball in a socket.** A ball floating in a spherical seat
 needs two pushrods pulling on one free body, and they fight each other -
 every bit of slop in one shows up as error in the other. A gimbal makes each
-axis a defined pivot: the eye rotates about a vertical axle in a yoke, and
-the yoke rotates about a horizontal axle in the frame. Nothing is
-overconstrained and nothing needs a ball joint.
+axis a defined pivot and nothing is overconstrained.
 
-**The eyeballs are domes, not spheres.** Only the front of the eye is ever
-visible through a Ø41 socket, so the back of a sphere is material that has to
-be printed, split and seamed for nothing. Worse: a sphere splits into
-hemispheres, and with a vertical pan axis the split plane contains both
-poles - so the seam lands across the iris and the pivots land on the seam.
-A dome cut BACK_CUT behind centre solves all of it at once: one piece, prints
-flat-back-down, and the seam is behind the equator where nothing sees it.
+**The eyeballs are domes, not spheres.** Only the front is ever visible
+through a O41 socket, so the back of a sphere is material printed, split and
+seamed for nothing - and a sphere's split plane contains both pan poles, so
+the seam lands across the iris. A dome cut BACK_CUT behind centre is one
+piece, prints flat-back-down, and seams where nothing sees it.
 
-Cut 7 mm behind centre on a Ø32 ball the first layer is r=14.4 against a full
-16, so the wall leans 13° off vertical - well inside what prints unsupported
-- and the dome still covers 218°, enough that the rim stays hidden through
-the full ±30° of pan.
+**Each eye hangs on ONE journal, underneath.** This is the change that
+unlocked everything else, and it was forced by a part that is already
+printed. A yoke gripping the ball at both poles needs an arm over the top,
+at radius >= 20 from the tilt axis - and `FIT_forehead_casing` is solid
+across the full width from z=225 up, which is exactly the top of the ball.
+At 20 of tilt that arm swings to y=168.4, six millimetres inside the
+casing. There is no length of arm that avoids it: to stay clear at every
+tilt angle an arm at radius 20.4 has to end by y=154.7, and the pole it has
+to reach is at y=160. So the top of the eye is left empty and the dome runs
+on a single O10 x 9 journal in the cradle below it, with its pan lever at
+eye-centre height where the linkage wants it.
 
-**The pan servo rides on the gimbal.** Put it on the fixed frame and its
-pushrod has to reach a lever that is tilting away from it, which needs a
-joint free in two axes at both ends and turns pan into a function of tilt.
-Mounted on the gimbal the linkage is planar and pan and tilt are independent.
-It costs the tilt servo the mass of three servos, but they sit close to the
-tilt axis, which runs through the eye centres, so most of it is balanced. The
-lid servos ride there for the same reason - a lid on the fixed frame would
-change its gap to the eye by 5.6 mm across ±20° of tilt.
+That journal is also what sets the tilt range at +-16 rather than +-20: it
+hangs 26 mm below the tilt axis, a point that far below swings forward by
+sin(tilt) x 26, and the cheek's inner wall is at y=172.7. Slop is the price
+- 0.3 mm of running clearance over 9 mm of journal is about 2 degrees of
+wobble in the eye, and it is the loosest thing in the mechanism.
+
+**The tilt bearings are in the corridor between the eyes, not outboard.**
+48.5 was measured against the eyeball and never against the eyelid. A lid is
+a shell OVER the ball, outer O35.6, so it reaches x=48.8 - through the
+bearing. The outboard slot on the tilt axis is 3.86 mm wide (ball at 47.0,
+MOUNT_ZONE out at 50.86) and it has to hold a boss AND a journal AND their
+running clearance. The corridor between the two lids is 26.4 mm and holds
+all of it comfortably.
+
+**One shaft, three concentric members.** The frame carries a O5 shaft along
+the tilt axis; the gimbal's two tubes turn on it; each eyelid's hub turns on
+the OUTSIDE of the tube next to it. Frame, gimbal and lid all share one
+axis, which is not a trick - the lid has to stay concentric with the ball,
+and the ball's centre is on the tilt axis, so they were always the same
+line. Riding the lid on the gimbal also makes it tilt with the eye for free,
+which is what a real lid does.
 
 WHAT IT HAS TO HIT
 ------------------
 Measured from the head, not assumed - see `docs/resume-here.md`:
 
-- eyeball centres at **x = ±31, y = 160, z = 209** (`eye_pitch` is 62)
-- Ø41 sockets, raked 25° out and 10° down
-- the bay is ~116 mm wide and 30 mm deep at full width (y 130..160), then
-  narrows to a 73 mm corridor behind y=125 where the ear hubs pinch in. The
-  servos live in that corridor.
-- **no supports, anywhere.** Every part prints flat.
+- eyeball centres at **x = +-31, y = 160, z = 209** (`eye_pitch` is 62)
+- O41 sockets, raked 25 out and 10 down. The ball does NOT fill them.
+- `FIT_forehead_casing` is solid over x -47..47 from **z=225** up, at
+  y 162..167. The top of the eyeball is z=225. See `casing_relief()`.
+- the bay is generous below and forward of the eyes - the zone reaches
+  y=178 at x=31, z=186 - and pinches to a 74 mm corridor behind y=126,
+  where the servos live.
+- **no supports, anywhere.** Print orientations are in each part's docstring.
 
-WHERE THIS STANDS, AND THE ONE THING THAT IS WRONG
---------------------------------------------------
-Domes, gimbal and frames are clean against the head: one shell each,
-watertight, inside the skin, zero collisions with anything already in there.
-`linkage()` and `eyelid()` below are written and produce clean parts.
+THE LANES
+---------
+Nothing here dodges anything. The parts are stacked in depth, and where two
+of them have to share a depth they are separated in height instead:
 
-**But the tilt bearings are in the wrong place and cannot stay at 48.5.**
+    y 153..176   domes and eyelids            (the moving spheres)
+    y 152..167   the gimbal cradle and tubes  (astride the eye centres)
+    y 147..151   the pan bar,   z 181..195    (behind the whole gimbal)
+    y 147..151   the frame's arch, z 226..234 (same depth, 30 mm higher)
+    y 120..132   the four servos              (in the 74 mm corridor)
 
-`check()` was extended to test the eye parts against EACH OTHER, which it had
-never done - it only ever compared them to the rest of the head. Containment,
-collision-with-the-head and collision-with-each-other are three questions and
-it was answering two. With the third in, four parts interpenetrate, and one
-of them is fatal rather than fixable:
+The frame's arch is where it is because it has nowhere else to go. Behind it
+the temple pad boss is solid from x=41.8 outward over z 206..223, so a frame
+at y 138..142 cannot reach the pad bore at all - the bore is only open
+through the pad itself. In front of it the eyeballs start: panned 30 degrees,
+a dome swings its back rim to y=146.7. Four millimetres, and the arch fills
+them.
 
-    eye_frame_R  INTO  eye_lid_R
+The one thing that crosses a lane is the frame's mast, which reaches the tilt
+axis at x=0 from the arch behind it. It goes over the pan bar - whose swept
+top is z=200 - and comes down to the shaft in the corridor between the eyes,
+where no eyeball ever is.
 
-The eyelid is a shell OVER the ball, outer Ø35.6, so it reaches x=48.8 -
-further out than the eyeball's 47 and straight through the bearing at 48.5.
-The "three-millimetre window" that justified 48.5 was measured against the
-ball and never against the lid. There is no outboard position that clears
-both.
+WHAT IS STILL OPEN
+------------------
+**The forehead casing has to give 2.2 mm.** `check()` will FAIL on it until
+somebody decides. It is the only clash left and it is not fixable in the
+mechanism - see `casing_relief()` for the arithmetic. The part is on plate 5
+and unprinted, so this is a decision rather than a problem.
 
-The bearings have to move to the corridor between the eyes, which is clear at
-|x| <= 14 at every depth from y=140 to 160. That is a 24 mm bearing span
-instead of 97, which is worse but real.
+**The eyeball does not fill its socket.** A O32 ball in a O41 opening raked
+25 out and 10 down leaves a crescent you can see the mechanism through -
+worst at the lower-outboard corner. That is what `eye_bezel_R/L` were for,
+and the brief retired them on the grounds that the openings became "smooth
+O41 circles". They did; the ball still does not fill them. Bezel, bigger
+ball, or smaller opening - the renders make the choice obvious and none of
+the three is drawn yet.
 
-**That move was attempted by patching this file and it regressed** - the
-gimbal came out spanning x +/-52, the frame picked up open edges, and the
-clash count went UP. It was reverted. The corridor is still the right answer;
-it needs `gimbal()` and `frame()` rewritten around it rather than edited,
-because almost every dimension in both is expressed relative to a bearing
-that is about to move 36 mm.
-
-Do that before drawing the servo plate or the lid arms - both hang off the
-gimbal, and the gimbal is what changes.
+**The dome's print orientation is unresolved**, and the claim that it prints
+flat-back-down is wrong. Back-face-down puts the pan lever 4 mm below the
+bed and lays the O10 journal boss on its side as a cantilever. Neither is
+printable as drawn. The likely answer is to split the lever and boss off as
+a separate part that presses into the dome, but that has not been drawn.
 """
 
 import bpy
@@ -116,7 +153,7 @@ COLL = "EYE_v2"
 
 P = dict(
     pitch     = 62.0,       # eyeball centre to centre - matches the sockets
-    y         = 160.0,      # eyeball centre
+    y         = 160.0,      # eyeball centre, and the tilt axis
     z         = 209.0,
     ball      = 32.0,       # eyeball diameter
     socket    = 41.0,       # the head's opening, for clearance checks only
@@ -128,79 +165,170 @@ P = dict(
                             # to hide the pixel yet thin enough to glow
 
     pan_max   = 30.0,       # degrees each way
-    tilt_max  = 20.0,
+    tilt_max  = 16.0,       # not 20, and the cheek is what sets it: a
+                            # point Dz below the tilt axis swings forward
+                            # by sin(tilt)*Dz, the pan journal housing sits
+                            # 27 mm below it, and MOUNT_ZONE runs out at
+                            # y=172.7 where the cheek's inner wall is -
+                            # asked of HEAD_FACE, not of MOUNT_ZONE, which
+                            # has been 3-6 mm optimistic every time
 
-    # Yoke: stub axles top and bottom into blind sockets in the dome's back
-    # face. Snap-fit, no fastener - the arms flex apart to take the eye.
-    # Ø3.4, not Ø4. The forehead casing's underside is at z=225 and the top of
-    # the eyeball is at z=225 - the same height - so the pan axle at the top
-    # pole grazes its corner. A Ø4 axle centred on y=160 spans 158..162 and
-    # the casing starts at exactly 162. Ø3.4 clears by 0.3. The real fault is
-    # that the casing sits level with the top of the eye, but it is mounted,
-    # printed and on plate 5, so the axle gives way instead.
-    pin_d     = 3.4,
-    pin_len   = 3.6,
-    pin_fit   = 0.25,       # per side; the socket is pin_d + 2*fit
-    yoke_t    = 4.0,        # arm thickness
-    yoke_gap  = 0.6,        # running clearance, dome back face to yoke arm
+    # --- the pan bearing: one journal, underneath ------------------------
+    # The dome has no top pivot at all; see the header. The boss is as long
+    # as the space between the bottom of the ball (z=193) and how far the
+    # cradle can hang without swinging out through the cheek at full tilt.
+    # A point Dz below the axis moves 0.342*Dz forward at 20 deg, and the
+    # zone at x=31 runs out at y=178, so the cradle floor cannot go below
+    # z=178 however much a longer journal would be liked.
+    pan_d     = 10.0,       # boss on the dome
+    pan_fit   = 0.30,       # diametral running clearance in the cradle
+    pan_z0    = 183.0,      # bore floor
+    pan_z1    = 192.0,      # cradle top; the dome's underside is z=193
+    pan_hub   = 13.0,       # journal housing OD - round, not a block, because
+                            # a block's outboard-front corner is what swings
 
-    # Pan lever: a post off the dome's back face, offset from the pan axis.
-    # 11 mm of arm gives +/-5.5 mm of link travel for +/-30 deg, which an
-    # MG90S horn covers comfortably without running near its own end stops.
+    # Pan lever: a post off the dome's back face, offset from the pan axis,
+    # with the link pin hanging BELOW it so the pan bar can sit clear of the
+    # lever's own body. 11 mm of arm gives +-5.5 mm of travel for +-30 deg.
     lever_r   = 11.0,
     lever_t   = 3.0,
+    pin_drop  = 16.0,       # how far the link pin hangs below the eye line
+    link_d    = 2.6,
     link_t    = 3.0,
-    link_d    = 2.6,        # link pin holes
 
-    # Tilt bearings. MEASURED, not chosen: on the tilt axis MOUNT_ZONE runs
-    # out between |x|=50 and 52, and the eyeballs reach |x|=47, so 48.5 is
-    # the middle of a three-millimetre window. See gimbal().
-    casing_y  = 162.0,      # FIT_forehead_casing starts here - measured
-    tilt_x    = 48.5,
-    trunnion  = 5.0,
-    boss_wall = 3.0,
-    plate_t   = 4.0,
+    # --- the tilt bearing: one shaft, two tubes, lids on the outside -----
+    shaft_d   = 5.0,
+    shaft_x   = 14.6,       # the shaft runs +-this; the balls start at 15.0
+    shaft_fit = 0.4,        # diametral, tube bore over the shaft
+    tube_od   = 9.0,
+    tube_x0   = 3.0,        # tube inboard end - the mast is inside this
+    tube_x1   = 14.8,       # tube outboard end - the ball starts at 15.0
+    mast_hx   = 2.4,        # frame mast half-width
+    web_x0    = 3.2,        # gimbal web, tube down to cradle
+    web_x1    = 6.8,
+
+    # --- the gimbal cradle ----------------------------------------------
+    cradle_y0 = 154.0,
+    cradle_y1 = 166.0,
+    cradle_z0 = 180.0,
+    cradle_z1 = 190.0,
+    bar_hx    = 23.0,       # cross bar half-width; the journals take over
+
+    # --- the frame -------------------------------------------------------
+    # The arch sits at y 145.5..149.5, in the four millimetres between the
+    # front of the temple pad and the back of the eyeballs, and that is the
+    # only place it fits. Behind it, the pad boss is solid from x=41.8
+    # outward over z 206..223 - measured, by listing surface crossings - so
+    # a frame at y 138..142 cannot reach the pad bore at all; the bore is
+    # only open through the pad itself. In front of it the eyeballs start:
+    # a dome panned 30 degrees swings its back rim to y=146.7.
+    #
+    # And it is high, z 224..232, because an eyelid parked open reaches back
+    # to y=149.7 at z=223.2 as it passes over the top of the eye.
+    arch_y0   = 147.5,
+    arch_y1   = 151.5,
+    arch_z0   = 226.0,      # the bar itself rides high, over the eyeballs -
+    arch_z1   = 234.0,      # and at 224 it was what limited how far the
+                            # eyelids could open, because a lid parked past
+                            # 41 degrees swings its trailing edge back to
+                            # y=151 and up to z=224.4 as it clears the top
+                            # of the eye. Two millimetres of bar bought
+                            # fifteen degrees of eyelid.
+    arch_z_lo = 214.0,      # ...and a web in the middle brings it down to
+                            # the mast, in the corridor where no eyeball is
+    arch_web  = 12.0,       # half-width of that web
+    arch_hx   = 52.0,
+    plate_hx  = 3.0,        # temple plate, x 45.3..51.3
+    mast_y1   = 164.0,      # the mast leans forward and down 29 degrees
+    mast_z    = 216.0,      # its centre where it leaves the web. Chosen
+                            # so the mast's centreline passes through the
+                            # tilt axis: at 218 it passed 2.2 mm above,
+                            # which put the O5.2 shaft bore tangent to
+                            # the mast's own underside and left a
+                            # 4.8 x 0.5 mm hole in the part
+    boss_d    = 10.0,       # the shaft boss on the mast. 9.0 left the
+                            # leaning mast's lower corner sitting almost
+                            # exactly on the boss's surface, and the
+                            # union came back with one 4.8 x 0.5 mm face
+                            # missing - a near-tangent boolean, which is
+                            # the same fault as a coplanar one
 
     # The temple dowel pads, already in both printed head halves. MEASURED
     # off HEAD_CRANIUM by listing surface crossings along +X at z=215:
     #     y=134   solid 41.79..47.19 | VOID 47.19..52.39 | solid 52.39..61.07
-    #     y=130   solid 57.79..61.88          (just the 4 mm wall)
-    # The void is the Ø5.2 pin bore, so its centre is 49.79 - NOT 57.79, which
-    # is only the inner wall face. An earlier probe that walked outward until
-    # it hit something found the wall and called it the pad, and the frame
-    # built on that number put 107 vertices outside the skin.
-    # The pad's cranium-side depth is about 4 mm, y 131..135, so a spigot into
-    # it gets 4 mm of engagement and no more.
+    # The void is the O5.2 pin bore, so its centre is 49.79 - NOT 57.79,
+    # which is only the inner wall face. An earlier probe that walked
+    # outward until it hit something found the wall and called it the pad,
+    # and the frame built on that number put 107 vertices outside the skin.
+    # MEASURED again, 15 Aug, because the earlier figures were a guess at
+    # the ends: the pad runs y 133..145, not 131..147, and its bore is a
+    # O5.2 hole at x 47.19..52.39, z 212.4..217.6 over that whole length.
     pad_x     = 49.79,
     pad_z     = 215.0,
-    # The pad runs y 131..147 - measured on BOTH halves by listing crossings
-    # along +X at z=215 - and ends by y=148. So the frame cannot sit against
-    # it at the parting plane: y=135 is the middle of solid plastic, which is
-    # where the first version put a Ø14 disc and got 78 face pairs through
-    # HEAD_CRANIUM. It mounts on the FACE side, past the end of the pad.
-    pad_face  = 148.0,
-    # Ø7, not Ø14. Past the end of the pad the only thing left is the 4 mm
-    # wall, which at y=150, z=215 stands at x 52.67..56.89 - so a Ø14 disc
-    # centred on the bore at 49.79 reaches 56.79 and is inside it. Ø7 stops
-    # at 53.3 and clears.
-    # Ø5. The face half's inner wall was mapped ray by ray and it closes in
-    # as you go forward: x 53.7 at y=147, 52.7 at 150, 51.5 at 153, 50.5 at
-    # 156, and 49.0 by y=162. Ø7 on the bore at 49.79 reaches 53.29 and is
-    # through the wall at y=150. Ø5 stops at 52.29 and clears it by 0.3.
-    pad_d     = 5.0,
-    arm_x     = 47.5,       # arm centre - 49.0 is the wall at y=162
-    arm_t     = 3.0,
-    # And the spigot goes all the way THROUGH the pad rather than a few mm
-    # into it, so it is the head's own temple locating pin as well as the
-    # frame's fixing. Ø5 is what head_split drew that bore for. This means
-    # the eye frame goes in before the halves close, which it had to anyway.
-    spigot    = 4.9,
-    spigot_y0 = 130.0,      # back end, in the cranium half
-    spigot_y1 = 148.0,      # front end, at the frame
+    pad_bore  = 5.2,
+    pad_face  = 147.0,      # the pad ends here; the frame sits in front
+    plate_y1  = 151.3,
+    # The peg is a SEPARATE part, and that is a printing decision rather
+    # than a mechanical one. The frame prints flat on its arch, which puts
+    # +y upwards - and a spigot reaching back to y=130 would then point
+    # straight down into the bed. A peg pressed in afterwards also does the
+    # head's own job: those pad bores exist to locate the two halves on a
+    # pin, and one peg now does both.
+    peg_fwd   = 4.4,        # forward of the pad the wall closes to x=52.2,
+                            # so the section that passes through the frame
+                            # has to be thinner than the one in the bore
+    peg_d     = 5.0,        # a shade under the O5.2 pad bore; the press
+                            # fit comes from print tolerance, not from
+                            # modelling 0.05 mm of interference and then
+                            # having every collision test report it
+    peg_y0    = 134.0,
+    peg_head  = 6.5,
 
-    m3_free   = 3.4,
+    casing_y  = 162.0,      # FIT_forehead_casing starts here - measured
+    casing_z  = 225.0,      # and is solid from here up, full width
+
     m2_free   = 2.2,
-    m2_pilot  = 1.7,
+)
+
+# The eyelid. It lives in the 4.5 mm annulus between the O32 ball and the
+# O41 socket. Angles are measured from straight ahead, positive upwards.
+#
+# CLOSED + SPAN + PARK is capped at 114 degrees and that is not taste. Past
+# it the lid's trailing edge swings back far enough to reach the pan bar:
+# the rearmost point of a band that ends at angle t is y = 160 + 17.8*cos t,
+# and the bar's front face at full pan is y=151.97.
+LID = dict(
+    gap       = 0.35,       # running clearance over the ball
+    shell     = 1.2,        # 32.7 inner, 35.1 outer, in a O41 socket
+    closed    = -26.0,      # lower edge when shut, below straight ahead
+    span      = 90.0,
+    park      = 52.0,       # how far it swings up to open. Parked, the lid's
+                            # lower edge sits 35 degrees above straight
+                            # ahead - clear of the iris, and low enough on
+                            # the ball to still read as an eyelid rather
+                            # than as nothing at all.
+    # Trimmed at |x| = 43, and this is the socket's doing rather than the
+    # mechanism's. The annulus between ball and skin was mapped all round
+    # the eye: 4.1 mm straight ahead, 2.3 at 20 deg inboard, and ZERO by
+    # 40 deg outboard, where the 25 deg of outward rake lays the skin down
+    # almost tangent to the ball. The dome itself already stands 0.21 mm
+    # proud out there. A shell over it stands proud by its own thickness,
+    # and no thickness of lid avoids that - only not being there does.
+    trim_x    = 43.0,
+    hub_od    = 13.0,
+    hub_fit   = 0.6,        # diametral, over the gimbal tube
+    hub_x0    = 7.4,
+    hub_x1    = 14.8,
+    crank_r   = 14.0,       # long enough that the pushrod leaves well clear
+                            # of the tilt tube it would otherwise cross
+    crank_t   = 3.0,
+    pin_x0    = 15.0,       # the crank's pin, stepped outboard of the tube
+    pin_x1    = 17.6,
+    crank_a   = 250.0,      # where the crank points with the lid shut -
+                            # straight down, which is both clear of the pan
+                            # bar behind it and square to its own pushrod
+    crank_x0  = 11.3,
+    crank_x1  = 14.3,
 )
 
 
@@ -224,233 +352,52 @@ def _sphere(bm, d, loc, segs=48):
     return bm
 
 
-def eyeball(hm, coll, sx):
-    """One eye: a Ø32 dome, hollow, with pan axle sockets and a lever.
+def _rbox(bm, dims, loc, rot=None):
+    """A box that can be rotated. `_box` is axis-aligned only, and the first
+    eyelid crank was built with it - so the "arm" came out as a 12 mm box
+    lying along +y whatever angle it was asked for, and the link pin was
+    then bored 5 mm outside it, in mid-air."""
+    tmp = bmesh.new()
+    bmesh.ops.create_cube(tmp, size=1.0)
+    bmesh.ops.scale(tmp, vec=dims, verts=tmp.verts[:])
+    if rot is not None:
+        bmesh.ops.transform(tmp, verts=tmp.verts[:], matrix=rot)
+    bmesh.ops.transform(tmp, verts=tmp.verts[:], matrix=Matrix.Translation(loc))
+    me = bpy.data.meshes.new("_t")
+    tmp.to_mesh(me)
+    tmp.free()
+    bm.from_mesh(me)
+    bpy.data.meshes.remove(me)
+    return bm
 
-    Prints flat-back-down. The back face is at y = centre - back_cut, so the
-    first layer is a disc of r = sqrt(r^2 - back_cut^2) and the wall leans
-    outward by atan(back_cut / (r - that)) - 13 degrees at back_cut 7.
+
+def _prims():
+    """A list you append primitives to, and the maker that appends them."""
+    out = []
+
+    def add():
+        out.append(bmesh.new())
+        return out[-1]
+    return out, add
+
+
+def _cut_each(hm, coll, ob, prims, name, op='DIFFERENCE'):
+    """One boolean per primitive, never a pile of them in one cutter mesh.
+
+    This is the nested-cutter trap, and this file has now hit it four times.
+    Two overlapping solids merged into a single cutter bmesh are not a
+    solid - they are two shells sharing a volume - and the boolean against
+    them does not give the union of what they cut. The frame's peg socket
+    came back with 155 non-manifold edges from exactly this, a O5.2 bore and
+    the slot mouth that opens it, merged.
     """
-    side = "R" if sx > 0 else "L"
-    cx, cy, cz = sx * P["pitch"] / 2.0, P["y"], P["z"]
-    r = P["ball"] / 2.0
-
-    bm = bmesh.new()
-    _sphere(bm, P["ball"], (cx, cy, cz))
-    ob = hm["_link"](coll, "eye_dome_%s" % side,
-                     hm["_mesh"]("eye_dome_%s" % side, bm))
-
-    # cut the back off, and hollow it for the 5050 pixel
-    cut = bmesh.new()
-    hm["_box"](cut, (80.0, 40.0, 80.0), (cx, cy - P["back_cut"] - 20.0, cz))
-    hm["_apply"](coll, ob, cut, "_CUT_eye_back_%s" % side, 'DIFFERENCE')
-
-    hollow = bmesh.new()
-    _sphere(hollow, P["ball"] - 2 * P["shell"], (cx, cy, cz))
-    hm["_box"](hollow, (80.0, 40.0, 80.0), (cx, cy - P["back_cut"] - 20.0, cz))
-    hm["_apply"](coll, ob, hollow, "_CUT_eye_hollow_%s" % side, 'DIFFERENCE')
-
-    # Pan axle sockets, blind, at the POLES, drilled along Z.
-    #
-    # Along Z and not along Y, and the first draft of this file got it wrong
-    # in a way worth recording: sockets on the back face pointing backwards
-    # give an axle along Y, and an eye on a Y axle does not pan, it ROLLS.
-    # The pan axis is vertical by definition, so the axle has to run through
-    # the top and bottom of the ball.
-    #
-    # The dome is hollow to 2.4 mm, so there is no meat at the poles to drill
-    # into. These two plugs put it there without filling the cavity the 5050
-    # pixel needs - they occupy only the outer 6 mm at each pole.
-    add = bmesh.new()
-    for sz in (-1, 1):
-        # Kept INSIDE the sphere. A Ø12 boss centred at the pole sticks out
-        # of a Ø32 ball above z = r - sqrt(r^2 - 6^2), and that 1.2 mm of
-        # proud plastic was touching the forehead casing, whose underside is
-        # at exactly z=225 - the same height as the top of the eyeball.
-        hm["_cyl"](add, P["pin_d"] + 2 * P["yoke_t"], 8.0,
-                   (cx, cy, cz + sz * (r - 6.0)), 'Z')
-    # The pan lever points BACKWARD along -y, not sideways.
-    #
-    # Sideways was wrong and not just untidy. Linked pan needs both levers
-    # offset the SAME way, so with a sideways lever one eye's lever ends up
-    # outboard - at x=42 for the right eye - and HEAD_FACE has wall there
-    # from x=44.5 at y=144. It went straight through the skull.
-    #
-    # Backward is symmetric and behind everything: the pin lands at
-    # (cx, y - lever_r, z), rotating the eye about its vertical axis still
-    # sweeps that pin in +/-x, and a bar along X still drives both eyes
-    # together. Same linkage, no part of it outboard of the eyeball.
-    hm["_box"](add, (P["lever_t"] * 2, P["lever_r"] - P["back_cut"] + 2.0,
-                     P["lever_t"] * 2),
-               # Overlapping the dome's back face, not butted against it.
-               # Butted, the lever's front face landed exactly on y=153 - the
-               # back plane - and a coincident face is not an intersection,
-               # so the lever unioned as a SECOND SHELL and the eyeball came
-               # out in two pieces. It reaches 2 mm into the dome now.
-               (cx, cy - (P["lever_r"] + P["back_cut"] - 2.0) / 2.0, cz))
-    # And a rib across the back opening to actually anchor it.
-    #
-    # The lever alone was a FREE-FLOATING SHELL, and reaching further into
-    # the dome would never have fixed it: the dome is hollow, so its back is
-    # an annulus from r=11.7 to r=16, and the lever sits on the axis at
-    # r<4.2 - straight through the hole in the middle, touching nothing.
-    # Pushing it deeper just pushes it further into the cavity.
-    #
-    # The rib spans to r=14, which is past the inner surface at this depth
-    # (12.2 at y=154), so it lands in shell material on both sides. It also
-    # leaves the opening clear above and below for the pixel and its wires.
-    hm["_box"](add, (28.0, 3.0, P["lever_t"] * 2),
-               (cx, cy - P["back_cut"] + 1.5, cz))
-    lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
-    hm["boolean"](ob, lob, 'UNION')
-    bpy.data.objects.remove(lob, do_unlink=True)
-
-    cut2 = bmesh.new()
-    for sz in (-1, 1):
-        # blind, drilled inward from each pole along the pan axis
-        depth = P["pin_len"] + 0.6
-        hm["_cyl"](cut2, P["pin_d"] + 2 * P["pin_fit"], depth,
-                   (cx, cy, cz + sz * (r - depth / 2.0 + 0.01)), 'Z', segs=24)
-    hm["_cyl"](cut2, P["link_d"], 20.0,
-               (cx, cy - P["lever_r"], cz), 'Z', segs=24)
-    hm["_apply"](coll, ob, cut2, "_CUT_eye_holes_%s" % side, 'DIFFERENCE')
+    for i, bm in enumerate(prims):
+        hm["_apply"](coll, ob, bm, "%s_%d" % (name, i), op)
     return ob
 
 
-def gimbal(hm, coll):
-    """The tilt frame: everything that rotates about the horizontal axis.
-
-    Carries both yokes, and later the pan servo, the pan link and the two lid
-    brackets. It pivots on trunnions at |x| = TILT_X.
-
-    TILT_X is 48.5 and it is measured, not chosen. On the tilt axis
-    (y=160, z=209) `MOUNT_ZONE` runs out somewhere between |x|=50 and 52, and
-    the eyeballs reach |x|=47, so the bearings have a three-millimetre window
-    to live in. That is thin for a beam and ample for a bearing, and putting
-    them there rather than in the middle buys a 97 mm bearing span carrying a
-    62 mm wide gimbal - the pair cannot yaw. Central bearings were the
-    alternative and would have been a 20 mm span on the same load.
-    """
-    ty, tz = P["y"], P["z"]
-    # The cross bar sits BELOW the eye line, not behind it. Behind, it fouled
-    # two things at once: the socket boss, which comes inboard to x=44.5 by
-    # y=144, and the pan link, which has to live at y=149 where the lever
-    # pins are. Below the eyes both problems disappear - the wall there is at
-    # x 52.8 and the link is nowhere near.
-    bar_y = ty - 8.0
-    bar_z = tz - 20.0
-    prims = []
-
-    def _p():
-        prims.append(bmesh.new())
-        return prims[-1]
-
-    bm = _p()
-    # the cross bar, and the trunnions on the tilt axis
-    hm["_box"](bm, (2 * P["tilt_x"], 6.0, 8.0), (0.0, bar_y, bar_z))
-    for sx in (-1, 1):
-        bm = _p()
-        # Wide enough to REACH the trunnion. At 8 wide it stopped 0.5 mm
-        # short of it and the trunnion came out as a free cylinder - the bar
-        # cannot do the job itself because it sits at y 147..153 and the
-        # trunnion is on the tilt axis at y=160, so they never touch.
-        hm["_box"](bm, (9.0, 6.0, abs(tz - bar_z) + 4.0),
-                   (sx * (P["tilt_x"] - 4.5), bar_y, (tz + bar_z) / 2.0))
-        bm = _p()
-        hm["_box"](bm, (3.0, ty - bar_y + 3.0, 8.0),
-                   (sx * P["tilt_x"], (bar_y + ty) / 2.0 + 1.5, tz))
-        # The trunnion is 3 mm long, and that is the whole window. Between the
-        # eyeball at |x|=47 and the edge of MOUNT_ZONE at 50 there are three
-        # millimetres, so the bearing is short by necessity rather than
-        # choice. It carries a light gimbal on a 97 mm span, which is what
-        # makes 3 mm of engagement enough - the pair cannot yaw, so the
-        # trunnions see almost pure radial load.
-        hm["_cyl"](bm, P["trunnion"], 3.0,
-                   (sx * P["tilt_x"], ty, tz), 'X')
-    # a yoke at each eye: two arms reaching forward to the ball's poles
-    r = P["ball"] / 2.0
-    for sx in (-1, 1):
-        cx = sx * P["pitch"] / 2.0
-        for sz in (-1, 1):
-            bm = _p()
-            zarm = tz + sz * (r + P["yoke_gap"] + P["yoke_t"] / 2.0)
-            # Arm: from the bar forward to the pole, over the top of the
-            # ball - and STOPPING at casing_y. FIT_forehead_casing occupies
-            # y 162..167 and z 225..283, and the top of the eyeball is at
-            # z=225, so there is no room above the ball where the casing is.
-            # The arm only has to reach the pole at y=160 anyway; the first
-            # version ran to y=166 and put 37 faces through the casing.
-            a_y0, a_y1 = bar_y - 3.0, P["casing_y"] - 1.0
-            hm["_box"](bm, (P["yoke_t"] * 2, a_y1 - a_y0, P["yoke_t"]),
-                       (cx, (a_y0 + a_y1) / 2.0, zarm))
-            # the post joining that arm back down to the bar
-            hm["_box"](bm, (P["yoke_t"] * 2, 6.0, abs(zarm - bar_z)),
-                       (cx, bar_y, (zarm + bar_z) / 2.0))
-            # The stub axle, pointing inward along the pan axis. It has to
-            # span from the arm's underside all the way into the ball's pole
-            # socket - the first version stopped 0.4 mm short of the arm and
-            # came out as a free-floating cylinder, which is how the gimbal
-            # first built as SEVEN shells rather than one.
-            a_in = zarm - sz * P["yoke_t"] / 2.0          # arm's inner face
-            a_out = tz + sz * (r - P["pin_len"])          # into the socket
-            hm["_cyl"](bm, P["pin_d"], abs(a_in - a_out),
-                       (cx, ty, (a_in + a_out) / 2.0), 'Z')
-    return _union(hm, coll, "eye_gimbal", prims)
-
-
-def frame(hm, coll, sx):
-    """The fixed bulkhead. Bolts to the temple dowel pads, carries the gimbal.
-
-    The pads are already in both printed head halves - Ø16, straddling the
-    y=135 parting plane at z=215, and measured at |x| = 57.8. They exist to
-    locate the two halves on a Ø5 pin, and they are the only substantial
-    material anywhere near the eye bay: the shell on its own is 4 mm and has
-    nothing to fix into. Using them means **the head needs no new holes**,
-    which is what let the head halves go on the printer before this part
-    existed.
-    """
-    ty, tz = P["y"], P["z"]
-    side = "R" if sx > 0 else "L"
-    prims = []
-
-    def _p():
-        prims.append(bmesh.new())
-        return prims[-1]
-
-    if True:
-        # face against the end of the pad
-        bm = _p()
-        hm["_cyl"](bm, P["pad_d"], P["plate_t"],
-                   (sx * P["pad_x"], P["pad_face"] + P["plate_t"] / 2.0,
-                    P["pad_z"]), 'Y')
-        # the spigot: through the whole pad, so it is the locating pin too
-        bm = _p()
-        span = P["spigot_y1"] - P["spigot_y0"]
-        hm["_cyl"](bm, P["spigot"], span,
-                   (sx * P["pad_x"], (P["spigot_y0"] + P["spigot_y1"]) / 2.0,
-                    P["pad_z"]), 'Y')
-        # arm forward to the bearing, stopping short of the forehead casing
-        bm = _p()
-        hm["_box"](bm, (P["arm_t"], P["casing_y"] - P["pad_face"], 16.0),
-                   (sx * P["arm_x"], (P["pad_face"] + P["casing_y"]) / 2.0,
-                    (tz + P["pad_z"]) / 2.0))
-        bm = _p()
-        hm["_box"](bm, (abs(P["pad_x"] - P["arm_x"]) + P["arm_t"], P["plate_t"], 12.0),
-                   (sx * (P["pad_x"] + P["arm_x"]) / 2.0,
-                    P["pad_face"] + P["plate_t"] / 2.0, P["pad_z"]))
-        bm = _p()
-        hm["_box"](bm, (3.0, 11.0, 12.0), (sx * P["tilt_x"], ty - 4.5, tz))
-    # Two brackets, not one part. They never meet - anything spanning between
-    # them would have to cross the eye bay at the height of the eyeballs - so
-    # a single object would always have reported two shells, and "2 shells"
-    # is a fault everywhere else in this project. Naming them separately says
-    # what is true.
-    ob = _union(hm, coll, "eye_frame_%s" % side, prims)
-    cut = bmesh.new()
-    hm["_cyl"](cut, P["trunnion"] + 0.5, 20.0, (sx * P["tilt_x"], ty, tz),
-               'X', segs=24)
-    hm["_apply"](coll, ob, cut, "_CUT_frame_%s" % side, 'DIFFERENCE')
-    return ob
+def _add_each(hm, coll, ob, prims, name):
+    return _cut_each(hm, coll, ob, prims, name, 'UNION')
 
 
 def _union(hm, coll, name, prims):
@@ -475,20 +422,12 @@ def _solidify(ob):
     """Weld, then self-union, so a part built from overlapping primitives is
     ONE solid rather than a pile of shells sharing a volume.
 
-    `gimbal()` and `frame()` merge boxes and cylinders into a single bmesh
-    with no boolean between them, which is fast to write and produces exactly
-    the defect `ear_spine` had: 17 closed shells occupying the same space,
-    every one of them individually healthy. A slicer will union it correctly
-    but it should not have to guess, and nothing downstream can tell the
-    difference between that and a part that has genuinely fallen apart.
-
     Rolled back if it moves the bounding box, because EXACT has destroyed
     parts in this file before.
     """
-    import bmesh as _b
-    bm = _b.new()
+    bm = bmesh.new()
     bm.from_mesh(ob.data)
-    _b.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
     bm.to_mesh(ob.data)
     bm.free()
     box = [Vector((min(v.co[i] for v in ob.data.vertices) for i in range(3))),
@@ -520,15 +459,813 @@ def _solidify(ob):
         print("    %s: self-union moved it - rolled back" % ob.name)
     else:
         bpy.data.meshes.remove(keep)
-    import bmesh as _c
-    bm = _c.new()
+    bm = bmesh.new()
     bm.from_mesh(ob.data)
-    _c.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
     bm.to_mesh(ob.data)
     bm.free()
     return ob
 
 
+# ---------------------------------------------------------------------------
+# the parts
+# ---------------------------------------------------------------------------
+def eyeball(hm, coll, sx):
+    """One eye: a O32 dome, hollow, on a single journal underneath.
+
+    Prints flat-back-down: the back face is at y = centre - back_cut, so the
+    first layer is a disc of r = sqrt(r^2 - back_cut^2) and the wall leans
+    outward by 13 degrees at back_cut 7. The pan boss then points sideways
+    in the print, which is why it is a plain cylinder with no shoulder.
+    """
+    side = "R" if sx > 0 else "L"
+    cx, cy, cz = sx * P["pitch"] / 2.0, P["y"], P["z"]
+    r = P["ball"] / 2.0
+
+    bm = bmesh.new()
+    _sphere(bm, P["ball"], (cx, cy, cz))
+    ob = hm["_link"](coll, "eye_dome_%s" % side,
+                     hm["_mesh"]("eye_dome_%s" % side, bm))
+
+    # cut the back off, and hollow it for the 5050 pixel
+    cut = bmesh.new()
+    hm["_box"](cut, (80.0, 40.0, 80.0), (cx, cy - P["back_cut"] - 20.0, cz))
+    hm["_apply"](coll, ob, cut, "_CUT_eye_back_%s" % side, 'DIFFERENCE')
+
+    hollow = bmesh.new()
+    _sphere(hollow, P["ball"] - 2 * P["shell"], (cx, cy, cz))
+    hm["_box"](hollow, (80.0, 40.0, 80.0), (cx, cy - P["back_cut"] - 20.0, cz))
+    hm["_apply"](coll, ob, hollow, "_CUT_eye_hollow_%s" % side, 'DIFFERENCE')
+
+    add = bmesh.new()
+    # Meat at the bottom pole to hang the journal off. The dome is hollow to
+    # 2.4 mm, so there is nothing to grow a O10 boss from; this plug fills
+    # the bottom of the cavity only, up to z=203, and the 5050 sits at
+    # z 205..213 above it.
+    hm["_cyl"](add, 14.0, 10.0, (cx, cy, cz - 11.0), 'Z')
+    # and the journal itself, reaching down through the cradle
+    hm["_cyl"](add, P["pan_d"], 194.0 - (P["pan_z0"] + 0.2),
+               (cx, cy, (194.0 + P["pan_z0"] + 0.2) / 2.0), 'Z')
+
+    # The pan lever points BACKWARD along -y, not sideways.
+    #
+    # Sideways was wrong and not just untidy. Linked pan needs both levers
+    # offset the SAME way, so with a sideways lever one eye's lever ends up
+    # outboard - at x=42 for the right eye - and HEAD_FACE has wall there
+    # from x=44.5 at y=144. It went straight through the skull.
+    hm["_box"](add, (P["lever_t"] * 2, P["lever_r"] - P["back_cut"] + 2.0,
+                     P["lever_t"] * 2),
+               # Overlapping the dome's back face, not butted against it.
+               # Butted, the lever's front face landed exactly on y=153 - the
+               # back plane - and a coincident face is not an intersection,
+               # so the lever unioned as a SECOND SHELL and the eyeball came
+               # out in two pieces. It reaches 2 mm into the dome now.
+               (cx, cy - (P["lever_r"] + P["back_cut"] - 2.0) / 2.0, cz))
+    # And a rib across the back opening to actually anchor it.
+    #
+    # The lever alone was a FREE-FLOATING SHELL, and reaching further into
+    # the dome would never have fixed it: the dome is hollow, so its back is
+    # an annulus from r=11.7 to r=16, and the lever sits on the axis at
+    # r<4.2 - straight through the hole in the middle, touching nothing.
+    hm["_box"](add, (28.0, 3.0, P["lever_t"] * 2),
+               (cx, cy - P["back_cut"] + 1.5, cz))
+    # The link pin hangs BELOW the lever. The pan bar is a bar across both
+    # eyes at the lever pins, and at eye-centre height its body would run
+    # straight through the levers' own bodies - they are 6 mm deep in y and
+    # the bar is 4. Dropping the pin puts the bar under them.
+    #
+    # A shouldered post, not one cylinder: the shoulder is what the bar
+    # hangs on, and the O2.5 spigot below it is what goes through the bar's
+    # O2.6 hole. Built as one O5.2 post, the post itself was 2.6 mm fatter
+    # than the hole it was supposed to enter.
+    drop_top = cz - 1.0
+    drop_bot = cz - P["pin_drop"] + 3.5
+    hm["_cyl"](add, P["link_d"] + 2.6, drop_top - drop_bot,
+               (cx, cy - P["lever_r"], (drop_top + drop_bot) / 2.0), 'Z')
+    hm["_cyl"](add, P["link_d"] - 0.1, 8.0,
+               (cx, cy - P["lever_r"], drop_bot - 4.0 + 0.5), 'Z', segs=24)
+    lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
+    hm["boolean"](ob, lob, 'UNION')
+    bpy.data.objects.remove(lob, do_unlink=True)
+    return ob
+
+
+def gimbal(hm, coll):
+    """Everything that rotates about the tilt axis: cradle, tubes, yoke.
+
+    Turns on the frame's O5 shaft through two tubes at |x| 3.0..14.8, and
+    carries the two eyelids on the OUTSIDE of those same tubes.
+
+    Nothing in it reaches above the tilt axis, which is deliberate - the
+    frame's mast has to come in over the top to reach x=0, so the two parts
+    own opposite sides of the corridor and can never meet.
+
+    Prints flat with +y upward: the whole part lives in a 14 mm slab either
+    side of y=160, so it lies down on the bed. Both bearing axes end up
+    horizontal in that orientation, which is why the tube bore and the pan
+    bores are all sized with a diametral running clearance rather than a
+    tight one.
+    """
+    ty, tz = P["y"], P["z"]
+    prims, _p = _prims()
+
+    cy0, cy1 = P["cradle_y0"], P["cradle_y1"]
+    cz0, cz1 = P["cradle_z0"], P["cradle_z1"]
+
+    # the cross bar between the two journals
+    bm = _p()
+    hm["_box"](bm, (2 * P["bar_hx"], cy1 - cy0, cz1 - cz0),
+               (0.0, (cy0 + cy1) / 2.0, (cz0 + cz1) / 2.0))
+    # a journal housing under each eye. ROUND, not a block: at 20 deg of
+    # tilt a point Dz below the axis swings 0.342*Dz forward, so the
+    # outboard-front corner of a box reaches y=178.5 at x=39 where the zone
+    # runs out at 173.5. A cylinder has no corner there and clears.
+    for sx in (-1, 1):
+        cx = sx * P["pitch"] / 2.0
+        bm = _p()
+        hm["_cyl"](bm, P["pan_hub"], P["pan_z1"] - (P["pan_z0"] - 2.0),
+                   (cx, ty, (P["pan_z1"] + P["pan_z0"] - 2.0) / 2.0), 'Z')
+        # tie it to the cross bar
+        bm = _p()
+        hm["_box"](bm, (abs(cx) - P["bar_hx"] + 2.0, cy1 - cy0, cz1 - cz0),
+                   (sx * (abs(cx) + P["bar_hx"] - 2.0) / 2.0,
+                    (cy0 + cy1) / 2.0, (cz0 + cz1) / 2.0))
+        # web from the cross bar up to the tube
+        bm = _p()
+        hm["_box"](bm, (P["web_x1"] - P["web_x0"], cy1 - cy0 - 2.0,
+                        tz - cz0),
+                   (sx * (P["web_x0"] + P["web_x1"]) / 2.0,
+                    (cy0 + cy1) / 2.0, (tz + cz0) / 2.0))
+        # the tube: the gimbal's own journal on the shaft, and the eyelid's
+        # journal on its outside
+        bm = _p()
+        hm["_cyl"](bm, P["tube_od"], P["tube_x1"] - P["tube_x0"],
+                   (sx * (P["tube_x0"] + P["tube_x1"]) / 2.0, ty, tz), 'X')
+
+    # The tilt lever: a lug hanging BELOW the cross bar on the centreline.
+    # Off the back of it, where it started, it sat at y 150.5..155.5 and the
+    # pan bar's dipped middle is at 147..151 - so the two met at every tilt
+    # angle, and so did the tilt pushrod.
+    bm = _p()
+    hm["_box"](bm, (10.0, 6.0, 10.0), (0.0, 156.0, cz0 - 4.0))
+    ob = _union(hm, coll, "eye_gimbal", prims)
+
+    cut = bmesh.new()
+    # the two pan bores
+    for sx in (-1, 1):
+        hm["_cyl"](cut, P["pan_d"] + P["pan_fit"],
+                   P["pan_z1"] + 2.0 - P["pan_z0"],
+                   (sx * P["pitch"] / 2.0, ty,
+                    (P["pan_z1"] + 2.0 + P["pan_z0"]) / 2.0), 'Z', segs=32)
+    # the shaft bore, straight through both tubes
+    hm["_cyl"](cut, P["shaft_d"] + P["shaft_fit"], 2 * P["tube_x1"] + 4.0,
+               (0.0, ty, tz), 'X', segs=32)
+    # the tilt link pin
+    hm["_cyl"](cut, P["link_d"], 30.0,
+               (0.0, 156.0, P["cradle_z0"] - 6.0), 'X', segs=24)
+    hm["_apply"](coll, ob, cut, "_CUT_gimbal", 'DIFFERENCE')
+    return ob
+
+
+def frame(hm, coll):
+    """The fixed bulkhead. One part, spanning both temple pads.
+
+    It was two parts before, because "anything spanning between them would
+    have to cross the eye bay at the height of the eyeballs". That is true
+    at y=160 and false at y=140 - the domes are cut off at y=153 and the
+    eyelids cannot reach further back than y=152.8, so behind the pan bar
+    the bay is empty all the way across. The arch lives there.
+
+    Prints flat on the arch, +y upward. Everything else stands off that
+    plane in the +y direction: the pad plates 9 mm, the mast 22 mm, and the
+    mast leans only 19 degrees off vertical on its way down to the shaft
+    boss. There is nothing on the -y side at all, which is why the temple
+    pegs are separate parts.
+    """
+    ty, tz = P["y"], P["z"]
+    prims, _p = _prims()
+
+    ay0, ay1 = P["arch_y0"], P["arch_y1"]
+    az0, az1 = P["arch_z0"], P["arch_z1"]
+
+    # The bar rides high, at z 224..232, and it has to: an eyeball panned 30
+    # degrees swings its back rim out to |x|=44.6 at this depth, and reaches
+    # z=219.8 doing it. Everything between |x|=15 and 47 is eyeball here.
+    bm = _p()
+    hm["_box"](bm, (2 * P["arch_hx"], ay1 - ay0, az1 - az0),
+               (0.0, (ay0 + ay1) / 2.0, (az0 + az1) / 2.0))
+    # ...and in the corridor between the eyes, where there is no eyeball, a
+    # web brings it back down to where the mast can leave at a shallow
+    # angle. This is what the frame gets for printing flat: the whole x-z
+    # outline is the part's footprint, so shaping it costs nothing.
+    bm = _p()
+    hm["_box"](bm, (2 * P["arch_web"], ay1 - ay0 - 1.0, az1 - 2.0 - P["arch_z_lo"]),
+               (0.0, (ay0 + ay1) / 2.0, (az1 - 2.0 + P["arch_z_lo"]) / 2.0))
+    for sx in (-1, 1):
+        # The temple plate: a tongue hanging off the bar down to the pad
+        # bore, x 44..51.5 - outboard of the 42.6 that a panned eyeball
+        # reaches, inboard of the 52.6 where the face half's wall is.
+        bm = _p()
+        hm["_box"](bm, (2 * P["plate_hx"], ay1 - ay0 - 1.0, az0 + 2.0 - (P["pad_z"] - 6.0)),
+                   (sx * (P["pad_x"] - 1.5), (ay0 + ay1) / 2.0,
+                    (az0 + 2.0 + P["pad_z"] - 6.0) / 2.0))
+    # The mast, leaning forward and down from the web to the shaft. It has
+    # to cross the whole bay in depth, from behind the eyes to the tilt axis
+    # between them, and it is the one part of the frame that is not flat -
+    # so its angle is the print's business: 29 degrees off vertical when the
+    # part lies on its arch.
+    dz = P["mast_z"] - tz
+    dy = P["mast_y1"] - P["arch_y0"]
+    bm = _p()
+    _rbox(bm, (2 * P["mast_hx"], math.hypot(dy, dz) + 2.0, 8.0),
+          (0.0, (P["arch_y0"] + P["mast_y1"]) / 2.0, (P["mast_z"] + tz) / 2.0),
+          Matrix.Rotation(math.atan2(-dz, dy), 4, 'X'))
+    bm = _p()
+    hm["_cyl"](bm, P["boss_d"], 2 * P["mast_hx"], (0.0, ty, tz), 'X')
+    ob = _union(hm, coll, "eye_frame", prims)
+
+    cuts, _c = _prims()
+    cut = _c()
+    hm["_cyl"](cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
+               (0.0, ty, tz), 'X', segs=32)
+    for sx in (-1, 1):
+        cut = _c()
+        # The peg socket is open outboard on purpose. The pad bore's centre
+        # is 49.79 and the face half's inner wall is 2.9 mm outboard of it,
+        # so there is no room for a wall on that side - the head's own wall
+        # closes the slot instead.
+        hm["_cyl"](cut, P["peg_fwd"] + 0.2, P["plate_y1"] - P["arch_y0"] + 4.0,
+                   (sx * P["pad_x"], (P["plate_y1"] + P["arch_y0"]) / 2.0,
+                    P["pad_z"]), 'Y', segs=24)
+        # The mouth is 4.2 across against a 5.2 bore, so the peg snaps in
+        # and stays. Cut the mouth the full 5.2 and its faces are tangent to
+        # the bore, which is a coplanar-surface boolean by another name - it
+        # left the frame with 15 open and 9 non-manifold edges.
+        cut = _c()
+        hm["_box"](cut, (6.0, P["plate_y1"] - P["arch_y0"] + 4.0, 3.6),
+                   (sx * (P["pad_x"] + 3.0),
+                    (P["plate_y1"] + P["arch_y0"]) / 2.0, P["pad_z"]))
+    _cut_each(hm, coll, ob, cuts, "_CUT_frame")
+    return ob
+
+
+def shaft(hm, coll):
+    """The tilt shaft. A separate part, and it has to be.
+
+    The gimbal has two coaxial bores with a gap between them and the frame's
+    mast sits in that gap, so the gimbal can never be threaded onto a shaft
+    that is already there. Assemble gimbal into frame, line the bores up,
+    push the shaft through. It prints standing on end, which is the only
+    orientation in this whole mechanism that gives a truly round journal.
+    """
+    bm = bmesh.new()
+    hm["_cyl"](bm, P["shaft_d"], 2 * P["shaft_x"], (0.0, P["y"], P["z"]), 'X',
+               segs=32)
+    ob = hm["_link"](coll, "eye_shaft", hm["_mesh"]("eye_shaft", bm))
+    ob.color = (0.75, 0.75, 0.78, 1.0)
+    return ob
+
+
+def peg(hm, coll, sx):
+    """Temple peg: locates the frame, and the two head halves, on one pin."""
+    side = "R" if sx > 0 else "L"
+    prims, _p = _prims()
+    # Each section overlaps the next by 1 mm. Butted exactly, the union
+    # found no intersection and the peg came out as three shells.
+    bm = _p()
+    hm["_cyl"](bm, P["peg_d"], P["pad_face"] - P["peg_y0"],
+               (sx * P["pad_x"], (P["pad_face"] + P["peg_y0"]) / 2.0,
+                P["pad_z"]), 'Y', segs=32)
+    # No head on it, and that is the wall's doing rather than a choice. The
+    # face half closes to x=52.2 by y=151.5, and the bore's centre is 49.79
+    # - so there are 2.4 mm to play with and a flange needs more. The frame
+    # is retained by its socket instead, which is a snap: the mouth is
+    # 3.6 across on a 4.6 bore, so the peg goes in and stays.
+    bm = _p()
+    hm["_cyl"](bm, P["peg_fwd"], P["plate_y1"] + 0.5 - (P["pad_face"] - 1.0),
+               (sx * P["pad_x"], (P["plate_y1"] + 0.5 + P["pad_face"] - 1.0) / 2.0,
+                P["pad_z"]), 'Y', segs=32)
+    ob = _union(hm, coll, "eye_peg_%s" % side, prims)
+    ob.color = (0.75, 0.75, 0.78, 1.0)
+    return ob
+
+
+def eyelid(hm, coll, sx):
+    """One upper eyelid: a spherical shell on a hub round the gimbal's tube.
+
+    Built SHUT and posed open, so one mesh serves both and `check()` can ask
+    the same question at every angle in between.
+
+    It pivots on the tilt axis because it has to: a shell that stays 0.4 mm
+    off a ball has to turn about that ball's centre, and the ball's centre
+    is on the tilt axis. Riding it on the gimbal's tube rather than on the
+    frame means it tilts with the eye and does not have to be told to - a
+    lid on the fixed frame would change its gap to the eye by 5.6 mm across
+    +-20 degrees of tilt.
+
+    The hub is a plain bore, not a snap. It cannot fall off: inboard it
+    meets the gimbal's web, and outboard the shell itself would have to go
+    eccentric to the ball it wraps, which the ball will not allow. Slide it
+    on before the eyeball goes in.
+    """
+    side = "R" if sx > 0 else "L"
+    cx, cy, cz = sx * P["pitch"] / 2.0, P["y"], P["z"]
+    ri = P["ball"] / 2.0 + LID["gap"]
+    ro = ri + LID["shell"]
+
+    bm = bmesh.new()
+    _sphere(bm, ro * 2, (cx, cy, cz), segs=64)
+    ob = hm["_link"](coll, "eye_lid_%s" % side, hm["_mesh"]("eye_lid_%s" % side, bm))
+    cut = bmesh.new()
+    _sphere(cut, ri * 2, (cx, cy, cz), segs=64)
+    hm["_apply"](coll, ob, cut, "_CUT_lid_in_%s" % side, 'DIFFERENCE')
+
+    # Trim to a band. Angles run from straight ahead, positive upward, and
+    # both cutting planes contain the X axis - so the band is a zone about
+    # the tilt axis and covers the eye evenly whatever the socket's rake.
+    t0 = math.radians(LID["closed"])
+    t1 = math.radians(LID["closed"] + LID["span"])
+    for k, n in enumerate((Vector((0.0, math.sin(t0), -math.cos(t0))),
+                           Vector((0.0, -math.sin(t1), math.cos(t1))))):
+        cut = bmesh.new()
+        # At the ORIGIN in the mesh, because matrix_world below is what
+        # places it. Built at (cx, cy, cz) as well, it got the eye centre
+        # applied twice and landed half a head away, so both plane cuts
+        # silently did nothing and the "band" came out a full sphere shell.
+        hm["_box"](cut, (80.0, 80.0, 80.0), (0.0, 0.0, 0.0))
+        me = bpy.data.meshes.new("_t")
+        cut.to_mesh(me)
+        cut.free()
+        tmp = bpy.data.objects.new("_CUT_lid_%d_%s" % (k, side), me)
+        coll.objects.link(tmp)
+        tmp.matrix_world = (Matrix.Translation(Vector((cx, cy, cz)) + n * 40.0)
+                            @ Vector((0, 0, 1)).rotation_difference(n).to_matrix().to_4x4())
+        hm["boolean"](ob, tmp, 'DIFFERENCE')
+        bpy.data.objects.remove(tmp, do_unlink=True)
+
+    adds, _a = _prims()
+    # the hub, on the gimbal tube
+    add = _a()
+    hm["_cyl"](add, LID["hub_od"], LID["hub_x1"] - LID["hub_x0"],
+               (sx * (LID["hub_x0"] + LID["hub_x1"]) / 2.0, cy, cz), 'X',
+               segs=32)
+    # The crank, and it is a dog-leg rather than a straight arm.
+    #
+    # Its root has to be on the hub, at |x| under 14.8, and its pin has to
+    # be outboard of the gimbal's tube, which ends at 14.8 - otherwise the
+    # pushrod coming back from the pin runs straight through the tube. So
+    # the arm starts inboard, and steps out to |x| 15..17.5 once it is far
+    # enough from the axis to be clear of the eyeball, whose surface at
+    # x=17.5 is only 8.6 mm from the tilt axis.
+    a = math.radians(LID["crank_a"])
+    kx = sx * (LID["crank_x0"] + LID["crank_x1"]) / 2.0
+    px = sx * (LID["pin_x0"] + LID["pin_x1"]) / 2.0
+    ca, sa = math.cos(a), math.sin(a)
+    add = _a()
+    _rbox(add, (LID["crank_x1"] - LID["crank_x0"], LID["crank_r"] - 1.0,
+                LID["crank_t"]),
+          (kx, cy + ca * (LID["crank_r"] - 1.0) / 2.0 - ca * 2.0,
+           cz + sa * (LID["crank_r"] - 1.0) / 2.0 - sa * 2.0),
+          Matrix.Rotation(a, 4, 'X'))
+    add = _a()
+    _rbox(add, (LID["pin_x1"] - LID["crank_x0"], 5.0, LID["crank_t"]),
+          (sx * (LID["pin_x1"] + LID["crank_x0"]) / 2.0,
+           cy + ca * (LID["crank_r"] - 1.5), cz + sa * (LID["crank_r"] - 1.5)),
+          Matrix.Rotation(a, 4, 'X'))
+    # 0.4 shorter than the tab it sits on, so its end caps land strictly
+    # inside the tab's faces. Made the same length, the two are coplanar and
+    # the union leaves the crank ringed with non-manifold edges.
+    add = _a()
+    hm["_cyl"](add, LID["crank_t"] + 3.0, LID["pin_x1"] - LID["pin_x0"] - 0.4,
+               (px, cy + ca * LID["crank_r"], cz + sa * LID["crank_r"]),
+               'X', segs=24)
+    _add_each(hm, coll, ob, adds, "_LIDADD_%s" % side)
+
+    cuts, _c = _prims()
+    # The bore runs out to x=17, past the hub's own end at 14.8. Stopped
+    # exactly on it, the bore's end cap was coplanar with the hub's and the
+    # lid came out with 113 non-manifold edges.
+    cut = _c()
+    hm["_cyl"](cut, P["tube_od"] + LID["hub_fit"], 17.0 - 4.0,
+               (sx * (4.0 + 17.0) / 2.0, cy, cz), 'X', segs=32)
+    cut = _c()
+    hm["_cyl"](cut, P["link_d"], 20.0,
+               (px, cy + ca * LID["crank_r"], cz + sa * LID["crank_r"]),
+               'X', segs=24)
+    # and the outboard trim - see LID['trim_x']
+    cut = _c()
+    hm["_box"](cut, (40.0, 90.0, 90.0), (sx * (LID["trim_x"] + 20.0), cy, cz))
+    _cut_each(hm, coll, ob, cuts, "_CUT_lid_%s" % side)
+    ob.color = (0.85, 0.65, 0.4, 1.0)
+    return ob
+
+
+def pan_bar(hm, coll):
+    """The bar that makes both eyes pan together.
+
+    Each dome's lever hangs a vertical pin 11 mm behind its pan axis and 8
+    below the eye line. One bar joins both pins, so shoving it along X
+    swings both levers. +-30 degrees needs +-5.5 mm of travel.
+
+    It sits at y 147..151, behind the whole gimbal - the cradle starts at
+    154 - which is the reason it does not have to dodge anything.
+    """
+    ty, tz = P["y"], P["z"]
+    py = ty - P["lever_r"]
+    pz = tz - P["pin_drop"]
+    dip = 12.0               # deep enough that both eyelid pushrods clear
+                            # it at 16 degrees of down-tilt, when the bar
+                            # swings up and back toward them
+    prims, _p = _prims()
+    # The two ends, carrying the eye pins and the servo pin
+    for sx in (-1, 1):
+        bm = _p()
+        hm["_box"](bm, (P["pitch"] / 2.0 + 6.0 - 28.0, 4.0, P["link_t"] + 2.0),
+                   (sx * (P["pitch"] / 2.0 + 6.0 + 28.0) / 2.0, py, pz))
+    # ...and a middle that drops 8 mm out of the way.
+    #
+    # Straight across, the bar sat at z 190.5..195.5 right where both eyelid
+    # pushrods have to come back from their cranks, and it took them out at
+    # every tilt angle. It cannot go lower as a whole - the eye levers hang
+    # off it - and it cannot go higher without meeting the gimbal. So the
+    # middle, which is only a beam joining two pins, gets out of the way.
+    bm = _p()
+    hm["_box"](bm, (60.0, 4.0, P["link_t"] + 2.0), (0.0, py, pz - dip))
+    for sx in (-1, 1):
+        bm = _p()
+        hm["_box"](bm, (5.0, 4.0, dip + P["link_t"] + 2.0),
+                   (sx * 28.5, py, pz - dip / 2.0))
+    bar = _union(hm, coll, "eye_pan_bar", prims)
+    cut = bmesh.new()
+    for sx in (-1, 1):
+        hm["_cyl"](cut, P["link_d"], 20.0,
+                   (sx * P["pitch"] / 2.0, py, pz), 'Z', segs=24)
+    hm["_cyl"](cut, P["link_d"], 20.0,
+               (SERVOS["pan"]["drive"][0], py, pz - dip), 'Z', segs=24)
+    hm["_apply"](coll, bar, cut, "_CUT_pan_bar", 'DIFFERENCE')
+    return bar
+
+
+# ---------------------------------------------------------------------------
+# the servos, and the linkage that reaches them
+# ---------------------------------------------------------------------------
+# Body and total height come from the datasheet and agree with what
+# eye_mech.P has carried all along - 22.5 x 12 x 22.7, 35.5 total. The tab
+# pitch is 28.0 and it is the one number here that is PROVEN: coupon_mg90s
+# was printed and the real servos fitted it, 15 Aug.
+SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
+             tab_pitch=28.0, tab_l=32.2, tab_t=2.5, tab_up=16.0,
+             shaft_d=5.5, shaft_up=4.5, shaft_off=6.0)
+
+SERVO_Y = 126.0     # all four shafts in one plane, so one plate carries them
+
+# All four servos are on the FIXED plate, and that settles a contradiction
+# this file used to carry. The header said pan and both lids "ride on the
+# gimbal"; the servo placement put all four at y=126, which is 34 mm behind
+# the tilt axis - a servo there would swing +-11.7 mm every time the eyes
+# looked up or down, and the gimbal would have to be a structure 45 mm deep
+# to hold it.
+#
+# What riding on the frame costs is cross-coupling: tilt moves the far end
+# of every pushrod, so pan and lid angles change slightly with tilt. That is
+# a linear, repeatable, hysteresis-free error on a machine with a Pi and
+# sixteen PWM channels, so it is mixed out in software. It is not worth a
+# gimbal three times the size.
+#
+# `horn` is the crank radius on the servo. `drive` is the point on the
+# mechanism it pulls, in the neutral pose. `axis` is the shaft direction:
+# pan's is vertical because it moves a bar along X; the other three drive
+# levers that pivot about X, so their shafts run along X and their horns
+# sweep the y-z plane the motion happens in.
+#
+# The two lid servos are mirror images at the same height, which they were
+# not: lid_L used to sit 36 mm lower, and it could only deliver 38.5 of the
+# 50 degrees the lid needs once the eyes were tilted up. There was no reason
+# for the asymmetry - with the shafts at +-12.8 and both bodies pointing
+# outboard they never touch - it was left over from a layout whose shafts
+# were at +-28.
+#
+# Stacked in z rather than spread in x, because the pushrods have to get
+# past the frame's arch at y 138..142, z 214..222 and past the pan bar at
+# y 147..151. Both of those span the full width, so a rod cannot go round
+# them - it goes under. That is what fixes the servo heights, not packing.
+SERVOS = {
+    "pan":   dict(loc=(24.0, SERVO_Y, 163.0), axis=None,  horn=11.0,
+                  drive=(24.0, P["y"] - P["lever_r"], P["z"] - P["pin_drop"] - 8.0)),
+    "tilt":  dict(loc=(-4.0, SERVO_Y, 145.0), axis='X',   horn=13.6,
+                  drive=(0.0, 156.0, P["cradle_z0"] - 6.0)),
+    "lid_R": dict(loc=(12.8, SERVO_Y, 206.0), axis='-X',  horn=15.0,
+                  drive=None),
+    "lid_L": dict(loc=(-12.8, SERVO_Y, 206.0), axis='X',  horn=15.0,
+                  drive=None),
+}
+
+
+def _lid_pin(sx, opened=0.0):
+    """Where a lid's crank pin sits, for a lid `opened` degrees off shut."""
+    a = math.radians(LID["crank_a"] + opened)
+    return Vector((sx * (LID["pin_x0"] + LID["pin_x1"]) / 2.0,
+                   P["y"] + math.cos(a) * LID["crank_r"],
+                   P["z"] + math.sin(a) * LID["crank_r"]))
+
+
+def servo_proxy(hm, coll, name, loc, rot=None):
+    """A solid MG90S at `loc`, output shaft up (+Z) unless rotated.
+
+    Origin is the CENTRE OF THE OUTPUT SHAFT at the top face of the body,
+    because that is the point a linkage is designed around - not the centre
+    of the box, which is where a proxy placed by eye ends up and why it then
+    disagrees with the horn by 6 mm.
+    """
+    s = SERVO
+    prims, _p = _prims()
+    bm = _p()
+    hm["_box"](bm, (s["l"], s["w"], s["h"]), (-s["shaft_off"], 0.0, -s["h"] / 2.0))
+    bm = _p()
+    hm["_box"](bm, (s["tab_l"], s["w"], s["tab_t"]),
+               (-s["shaft_off"], 0.0, -s["h"] + s["tab_up"]))
+    bm = _p()
+    hm["_cyl"](bm, s["shaft_d"] * 2.2, 4.0, (0.0, 0.0, -2.0), 'Z')
+    bm = _p()
+    hm["_cyl"](bm, s["shaft_d"], s["shaft_up"], (0.0, 0.0, s["shaft_up"] / 2.0), 'Z')
+    ob = _union(hm, coll, name, prims)
+    if rot is not None:
+        ob.data.transform(rot)
+    ob.data.transform(Matrix.Translation(Vector(loc)))
+    ob.color = (0.9, 0.2, 0.2, 1.0)
+    return ob
+
+
+def place_servos(hm, coll):
+    """Drop the four MG90S proxies where SERVOS says, so every later part is
+    drawn against a servo that is really there rather than a remembered one."""
+    rots = {None: None,
+            'X': Matrix.Rotation(math.radians(90), 4, 'Y'),
+            '-X': Matrix.Rotation(math.radians(-90), 4, 'Y')}
+    out = []
+    for name, s in SERVOS.items():
+        for o in list(coll.objects):
+            if o.name == "PROXY_servo_" + name:
+                bpy.data.objects.remove(o, do_unlink=True)
+        out.append(servo_proxy(hm, coll, "PROXY_servo_" + name, s["loc"],
+                               rots[s["axis"]]))
+    return out
+
+
+def horn_pin(name, angle_deg):
+    """Where a servo's horn pin is, at `angle_deg` off its neutral."""
+    s = SERVOS[name]
+    o = Vector(s["loc"])
+    a = math.radians(angle_deg + s.get("horn0", 0.0))
+    r = s["horn"]
+    if s["axis"] is None:                 # vertical shaft, horn sweeps x-y
+        return o + Vector((r * math.sin(a), -r * math.cos(a), 0.0))
+    # shaft along X, horn sweeps y-z
+    return o + Vector((0.0, -r * math.cos(a), r * math.sin(a)))
+
+
+def phase_horns(verbose=False):
+    """Set each servo's neutral horn angle, and it is not a free choice.
+
+    A horn pushing a pushrod transmits nothing when the arm points along the
+    rod and everything when it points across it, so the neutral position has
+    to be the across-it one. Left at zero, the tilt servo's horn pointed
+    straight back down its own rod: it could deliver -5.5..+18 degrees of a
+    range that needs +-20, and it read as a linkage that did not fit when it
+    was only a linkage that was out of phase.
+
+    There are always two perpendicular solutions, 180 apart. Both transmit
+    the same; they put the horn on opposite sides. So both are tried and the
+    one with the wider envelope is kept, which also quietly picks the one
+    that is not trying to swing the horn into the servo's own body.
+    """
+    for name, s in SERVOS.items():
+        drive = _dof_point(name, 0.0, 0.0)
+        best, bscore = 0.0, -1.0
+        for a0 in range(0, 360, 1):
+            s["horn0"] = float(a0)
+            d1 = (horn_pin(name, 0.5) - drive).length
+            d0 = (horn_pin(name, -0.5) - drive).length
+            score = abs(d1 - d0)
+            if score > bscore:
+                best, bscore = float(a0), score
+        cands = [best, (best + 180.0) % 360.0]
+        pick, pspan = cands[0], -1.0
+        for c in cands:
+            s["horn0"] = c
+            _ROD_L.clear()
+            _rods()
+            span = 0.0
+            rows = reach(verbose=False, hstep=3.0, dstep=1.0)[name]
+            for _t, lo_d, hi_d in rows:
+                span += 0.0 if lo_d is None else (hi_d - lo_d)
+            if span > pspan:
+                pick, pspan = c, span
+        s["horn0"] = pick
+        if verbose:
+            print("  %-6s horn neutral %+6.1f deg" % (name, pick))
+    _ROD_L.clear()
+    _rods()
+
+
+def solve_horn(name, target, length, lo=-90.0, hi=90.0):
+    """The horn angle that puts the pin `length` from `target`.
+
+    Returns (angle, error). Used for DRAWING a rod in a given pose; a small
+    residual error just means the rod is shown a fraction long or short.
+    It is NOT the test of whether the linkage works - see `reach()`.
+    """
+    best, berr = None, 1e9
+    a = lo
+    while a <= hi:
+        err = abs((horn_pin(name, a) - Vector(target)).length - length)
+        if err < berr:
+            best, berr = a, err
+        a += 0.25
+    return best, berr
+
+
+def _dof_point(name, tilt, dof):
+    """Where `name`'s drive pin sits, for a given tilt and its own DOF."""
+    if name == "pan":
+        return _drive_points(tilt, dof, 0.0, 0.0)["pan"]
+    if name == "tilt":
+        return _drive_points(dof, 0.0, 0.0, 0.0)["tilt"]
+    if name == "lid_R":
+        return _drive_points(tilt, 0.0, dof, 0.0)["lid_R"]
+    return _drive_points(tilt, 0.0, 0.0, dof)["lid_L"]
+
+
+def reach(horn_limit=70.0, verbose=True, hstep=1.0, dstep=0.5):
+    """What each servo can actually deliver, tilt by tilt.
+
+    This replaces a check that asked the wrong question. The old one fixed a
+    pose and looked for a horn angle that made the rod exactly the right
+    length, and reported FAIL when it could not find one - but a rigid rod
+    plus a horn is a one-degree-of-freedom linkage, so for a given tilt the
+    driven angle is a FUNCTION of the horn angle, not something you get to
+    specify. "Cannot reach tilt -20 with pan 0" was never a fault; it was
+    the cross-coupling being measured and misread.
+
+    The real question is whether the range that IS reachable covers what the
+    eye needs, at every tilt. So: sweep the horn, solve for the driven
+    angle, report the envelope. What the numbers show is how much of each
+    servo's travel the Pi has to spend cancelling tilt.
+    """
+    if not _ROD_L:
+        _rods()
+    out = {}
+    for name, lim in (("pan", P["pan_max"]), ("tilt", P["tilt_max"]),
+                      ("lid_R", LID["park"]), ("lid_L", LID["park"])):
+        L = _ROD_L[name]
+        rows = []
+        for tilt in ((0.0,) if name == "tilt" else (-P["tilt_max"], 0.0,
+                                                    P["tilt_max"])):
+            lo_d, hi_d = None, None
+            a = -horn_limit
+            while a <= horn_limit:
+                pin = horn_pin(name, a)
+                best, berr = None, 1e9
+                d = (-lim - 20.0) if name != "tilt" else -lim - 10.0
+                top = (lim + 20.0) if name != "tilt" else lim + 10.0
+                if name in ("lid_R", "lid_L"):
+                    d, top = -15.0, lim + 25.0
+                while d <= top:
+                    err = abs((_dof_point(name, tilt, d) - pin).length - L)
+                    if err < berr:
+                        best, berr = d, err
+                    d += dstep
+                if berr < 0.05 + dstep * 0.15:
+                    lo_d = best if lo_d is None else min(lo_d, best)
+                    hi_d = best if hi_d is None else max(hi_d, best)
+                a += hstep
+            rows.append((tilt, lo_d, hi_d))
+        out[name] = rows
+    if verbose:
+        print("linkage envelope - what the servo can actually deliver:")
+        for name, rows in out.items():
+            need = (P["pan_max"] if name == "pan" else
+                    P["tilt_max"] if name == "tilt" else LID["park"])
+            want = (-need, need) if name in ("pan", "tilt") else (0.0, need)
+            allok = True
+            for tilt, lo_d, hi_d in rows:
+                got = "unreachable" if lo_d is None else \
+                    "%+7.1f..%+7.1f" % (lo_d, hi_d)
+                good = (lo_d is not None and lo_d <= want[0] + 0.6
+                        and hi_d >= want[1] - 0.6)
+                allok = allok and good
+                print("  %-6s at tilt %+5.1f : %s  (needs %+.0f..%+.0f)  %s"
+                      % (name, tilt, got, want[0], want[1],
+                         "OK" if good else "SHORT"))
+            if not allok:
+                print("        ^ %s cannot cover its range at every tilt"
+                      % name)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# posing - one place that knows how the mechanism moves
+# ---------------------------------------------------------------------------
+def _tilt_m(deg):
+    c = Vector((0.0, P["y"], P["z"]))
+    return (Matrix.Translation(c) @ Matrix.Rotation(math.radians(deg), 4, 'X')
+            @ Matrix.Translation(-c))
+
+
+def _pan_m(sx, deg):
+    c = Vector((sx * P["pitch"] / 2.0, P["y"], 0.0))
+    return (Matrix.Translation(c) @ Matrix.Rotation(math.radians(deg), 4, 'Z')
+            @ Matrix.Translation(-c))
+
+
+def pose(tilt=0.0, pan=0.0, lid_R=None, lid_L=None, lid=None, rods=True):
+    """Put the mechanism somewhere. Angles in degrees.
+
+    `lid` is how far open each eyelid is, 0 = shut, LID['park'] = open; pass
+    lid_R and lid_L separately to wink. The order of these arguments matters
+    and used to be wrong: `poses()` hands over (tilt, pan, lidR, lidL) and
+    the third slot was `lid`, so every swept pose silently set both lids to
+    the right lid's angle and the two wink poses tested nothing.
+    """
+    lid_R = LID["park"] if lid_R is None else lid_R
+    lid_L = LID["park"] if lid_L is None else lid_L
+    if lid is not None:
+        lid_R = lid_L = lid
+    T = _tilt_m(tilt)
+    g = bpy.data.objects.get("eye_gimbal")
+    if g:
+        g.matrix_world = T
+    for sx, side, la in ((1, "R", lid_R), (-1, "L", lid_L)):
+        d = bpy.data.objects.get("eye_dome_%s" % side)
+        if d:
+            d.matrix_world = T @ _pan_m(sx, pan)
+        l = bpy.data.objects.get("eye_lid_%s" % side)
+        if l:
+            l.matrix_world = T @ _tilt_m(la)
+    bar = bpy.data.objects.get("eye_pan_bar")
+    if bar:
+        a = math.radians(pan)
+        bar.matrix_world = T @ Matrix.Translation(Vector((
+            P["lever_r"] * math.sin(a),
+            P["lever_r"] * (1.0 - math.cos(a)), 0.0)))
+    if rods:
+        _rods(tilt, pan, lid_R, lid_L)
+    return dict(tilt=tilt, pan=pan, lid_R=lid_R, lid_L=lid_L)
+
+
+def _drive_points(tilt, pan, lid_R, lid_L):
+    """Where each servo's far end is, in this pose."""
+    T = _tilt_m(tilt)
+    a = math.radians(pan)
+    panpt = (T @ Matrix.Translation(Vector((P["lever_r"] * math.sin(a),
+                                            P["lever_r"] * (1 - math.cos(a)),
+                                            0.0)))) @ Vector(SERVOS["pan"]["drive"])
+    return {
+        "pan": panpt,
+        "tilt": T @ Vector(SERVOS["tilt"]["drive"]),
+        "lid_R": T @ _tilt_m(lid_R) @ _lid_pin(1),
+        "lid_L": T @ _tilt_m(lid_L) @ _lid_pin(-1),
+    }
+
+
+_ROD_L = {}
+
+
+def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
+    """Redraw the four pushrods for the current pose, solving each servo.
+
+    The rods are wire links with a Z-bend at each end, not printed parts.
+    They are drawn because a rod that fouls the gimbal at one end of its
+    travel is exactly the kind of fault that only shows up in a pose.
+    """
+    hm = _hm()
+    coll = bpy.data.collections.get(COLL)
+    if coll is None:
+        return
+    lid_R = LID["park"] if lid_R is None else lid_R
+    lid_L = LID["park"] if lid_L is None else lid_L
+    if not _ROD_L:
+        base = _drive_points(0.0, 0.0, 0.0, 0.0)
+        for k, v in base.items():
+            _ROD_L[k] = (horn_pin(k, 0.0) - v).length
+    pts = _drive_points(tilt, pan, lid_R, lid_L)
+    for name, far in pts.items():
+        for o in list(coll.objects):
+            if o.name == "eye_rod_" + name:
+                bpy.data.objects.remove(o, do_unlink=True)
+        ang, err = solve_horn(name, far, _ROD_L[name])
+        near = horn_pin(name, ang)
+        v = far - near
+        bm = bmesh.new()
+        hm["_cyl"](bm, 2.5, v.length, tuple((near + far) / 2.0), 'Z',
+                   direction=tuple(v.normalized()), segs=16)
+        ob = hm["_link"](coll, "eye_rod_%s" % name,
+                         hm["_mesh"]("eye_rod_%s" % name, bm))
+        ob.color = (0.2, 0.75, 0.95, 1.0)
+    return pts
+
+
+# ---------------------------------------------------------------------------
 def build(save=False):
     hm = _hm()
     old = bpy.data.collections.get(COLL)
@@ -539,14 +1276,24 @@ def build(save=False):
     coll = bpy.data.collections.new(COLL)
     bpy.context.scene.collection.children.link(coll)
     print("eye_v2:")
+    made = []
     for sx in (1, -1):
-        ob = _solidify(eyeball(hm, coll, sx))
-        print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
-    ob = _solidify(gimbal(hm, coll))
-    print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
+        made.append(_solidify(eyeball(hm, coll, sx)))
+    made.append(_solidify(gimbal(hm, coll)))
+    made.append(_solidify(frame(hm, coll)))
+    made.append(shaft(hm, coll))
     for sx in (1, -1):
-        ob = _solidify(frame(hm, coll, sx))
+        made.append(_solidify(peg(hm, coll, sx)))
+    for sx in (1, -1):
+        made.append(_solidify(eyelid(hm, coll, sx)))
+    made.append(_solidify(pan_bar(hm, coll)))
+    for ob in made:
         print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
+    place_servos(hm, coll)
+    _ROD_L.clear()
+    print("  servo horns:")
+    phase_horns(verbose=True)
+    pose()
     if save:
         bpy.ops.wm.save_mainfile()
     return coll
@@ -558,6 +1305,24 @@ def build(save=False):
 _DIRS = [Vector(d).normalized() for d in ((0.9137, 0.3184, 0.2513),
                                           (-0.2711, 0.8455, -0.4602),
                                           (0.1877, -0.3391, 0.9219))]
+
+MOVING = ("eye_gimbal", "eye_dome_R", "eye_dome_L", "eye_lid_R", "eye_lid_L",
+          "eye_pan_bar", "eye_rod_pan", "eye_rod_tilt", "eye_rod_lid_R",
+          "eye_rod_lid_L")
+
+# Pairs that are a bearing, a pin in a hole, or a rod in its own eye - the
+# only ones allowed to share space.
+ALLOWED = {
+    ("eye_gimbal", "eye_dome_R"), ("eye_gimbal", "eye_dome_L"),
+    ("eye_gimbal", "eye_lid_R"), ("eye_gimbal", "eye_lid_L"),
+    ("eye_gimbal", "eye_shaft"), ("eye_frame", "eye_shaft"),
+    ("eye_gimbal", "eye_rod_tilt"),
+    ("eye_dome_R", "eye_pan_bar"), ("eye_dome_L", "eye_pan_bar"),
+    ("eye_pan_bar", "eye_rod_pan"),
+    ("eye_lid_R", "eye_rod_lid_R"), ("eye_lid_L", "eye_rod_lid_L"),
+    ("eye_frame", "eye_peg_R"), ("eye_frame", "eye_peg_L"),
+    ("eye_lid_R", "eye_dome_R"), ("eye_lid_L", "eye_dome_L"),
+}
 
 
 def _inside_test(name):
@@ -585,9 +1350,54 @@ def _inside_test(name):
     return inside
 
 
-def check():
-    """Prove it: watertight, one solid each, inside the head, nothing fouling."""
-    import bmesh as _bm
+def _tree(o):
+    from mathutils.bvhtree import BVHTree
+    b = bmesh.new()
+    b.from_mesh(o.data)
+    bmesh.ops.transform(b, verts=b.verts[:], matrix=o.matrix_world)
+    t = BVHTree.FromBMesh(b)
+    b.free()
+    return t
+
+
+SKIP = ("_", "PR_", "PRBED", "PRTITLE", "PRLABEL", "CUT_", "REF",
+        "PROXY_", "CHECK_", "SnapEye", "EyeMech", "Assembly", "Base",
+        "Component", "ServoSizing")
+SKIP_EXACT = {"HEAD_SKIN", "HEAD_SOLID", "MOUNT_ZONE", "HEAD_CYBORG",
+              "HEAD_CRANIUM_scriptbuild", "HEAD_REF",
+              "forehead_casing_asprinted_13aug"}
+
+
+def poses(coarse=False):
+    """The corners of the envelope, plus the middle of each face."""
+    t = P["tilt_max"]
+    p = P["pan_max"]
+    k = LID["park"]
+    if coarse:
+        return [(0, 0, k, k), (t, 0, k, k), (-t, 0, k, k),
+                (0, p, k, k), (0, -p, k, k), (0, 0, 0, 0)]
+    out = []
+    for ti in (-t, 0, t):
+        for pa in (-p, 0, p):
+            for li in (0, k / 2.0, k):
+                out.append((ti, pa, li, li))
+    out.append((t, p, 0, k))       # one wink, at a corner
+    out.append((-t, -p, k, 0))
+    return out
+
+
+def check(sweep=True, verbose=False):
+    """Prove it: watertight, one solid each, inside the head, nothing fouling
+    - and not only in the pose it happens to be sitting in.
+
+    The sweep is the whole point. Every earlier version of this checker
+    tested the mechanism standing still, and two of the three faults that
+    have mattered were invisible that way: the yoke arm that swings into the
+    forehead casing at -20 of tilt, and the eyelid that reaches through the
+    outboard bearing. Containment, collision-with-the-head,
+    collision-with-each-other and collision-THROUGH-THE-RANGE are four
+    questions, and it used to answer two.
+    """
     hm = _hm()
     coll = bpy.data.collections.get(COLL)
     if coll is None:
@@ -596,14 +1406,16 @@ def check():
     # HEAD_SOLID, not MOUNT_ZONE. The zone has every shell opening
     # subtracted out of it, the eye sockets included - and the eyeball is
     # SUPPOSED to sit in that opening, so checking a dome against the zone
-    # reports the whole visible front of the eye as a fault. The question
-    # that actually matters is whether anything leaves the skin.
-    in_zone = _inside_test("HEAD_SOLID")
+    # reports the whole visible front of the eye as a fault.
+    in_solid = _inside_test("HEAD_SOLID")
     ok = True
+    parts = [o for o in sorted(coll.objects, key=lambda o: o.name)
+             if o.type == 'MESH' and not o.name.startswith("PROXY_")
+             and not o.name.startswith("eye_rod_")]
 
     print("part health:")
-    for ob in sorted(coll.objects, key=lambda o: o.name):
-        bm = _bm.new()
+    for ob in parts:
+        bm = bmesh.new()
         bm.from_mesh(ob.data)
         openE = sum(1 for e in bm.edges if len(e.link_faces) == 1)
         nonm = sum(1 for e in bm.edges if len(e.link_faces) > 2)
@@ -623,7 +1435,7 @@ def check():
                     if o not in seen:
                         st.append(o)
         n0 = len(bm.verts)
-        _bm.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
         debt = n0 - len(bm.verts)
         bm.free()
         bad = []
@@ -638,352 +1450,191 @@ def check():
                  "OK" if not bad else "FAIL: " + "; ".join(bad)))
         ok = ok and not bad
 
+    # ---- can each servo actually drive what it is bolted to? --------------
     print("")
-    print("inside the head (every vertex against HEAD_SOLID):")
-    skin = _inside_test("HEAD_SKIN") or in_zone
-    for ob in sorted(coll.objects, key=lambda o: o.name):
-        out = [ob.matrix_world @ v.co for v in ob.data.vertices
-               if not in_zone(ob.matrix_world @ v.co)]
-        if not out:
-            print("  %-14s all %d vertices inside  OK"
-                  % (ob.name, len(ob.data.vertices)))
-            continue
-        # how far out, and where - a count on its own says nothing about
-        # whether this is a part through the skull or a rounding error
-        solid = bpy.data.objects["HEAD_SOLID"]
-        si = solid.matrix_world.inverted()
-        worst = 0.0
-        for p in out:
-            hit, loc, nrm, _i = solid.closest_point_on_mesh(si @ p)
-            if hit:
-                worst = max(worst, ((si @ p) - loc).length)
-        print("  %-14s %d of %d vertices outside, worst %.2f mm | "
-              "x %6.1f..%6.1f y %6.1f..%6.1f z %6.1f..%6.1f  %s"
-              % (ob.name, len(out), len(ob.data.vertices), worst,
-                 min(p.x for p in out), max(p.x for p in out),
-                 min(p.y for p in out), max(p.y for p in out),
-                 min(p.z for p in out), max(p.z for p in out),
-                 "OK, sub-nozzle" if worst < 0.4 else "FAIL"))
-        ok = ok and worst < 0.4
+    if "horn0" not in SERVOS["pan"]:
+        phase_horns()
+    _ROD_L.clear()
+    reach()
 
-    # ---- and against every other part in the head --------------------------
-    # This is the check the first version of check() did not have, and its
-    # absence was caught by looking at the screen rather than by any test:
-    # every part can sit correctly inside the head and still pass straight
-    # through the part next to it. Containment and collision are different
-    # questions.
-    from mathutils.bvhtree import BVHTree
+    # ---- inside the head, through the range ------------------------------
+    #
+    # Two different questions wear the same test here, and conflating them
+    # would have condemned a perfectly good eyelid.
+    #
+    # For anything that lives INSIDE the head, a vertex outside HEAD_SOLID
+    # is a part through the skull, and it is a fault.
+    #
+    # The domes and the lids are SEEN, through a O41 hole. Standing proud of
+    # the notional skin surface there is not a breach of anything - the hole
+    # is open air - it is a cosmetic fact about how far the eye sticks out
+    # of the face. So it is measured and printed as a number, and what
+    # decides pass or fail for those two is the collision test below,
+    # against the shell that is actually printed.
+    VISIBLE = ("eye_dome_R", "eye_dome_L", "eye_lid_R", "eye_lid_L")
+    print("")
+    print("inside the head (every vertex against HEAD_SOLID, worst pose):")
+    solid = bpy.data.objects["HEAD_SOLID"]
+    si = solid.matrix_world.inverted()
+    for ob in parts:
+        worst, wp, nout = 0.0, None, 0
+        for pz in (poses(coarse=True) if sweep else [(0, 0, LID["park"], LID["park"])]):
+            pose(*pz, rods=False)
+            out = [ob.matrix_world @ v.co for v in ob.data.vertices
+                   if not in_solid(ob.matrix_world @ v.co)]
+            if not out:
+                continue
+            w = 0.0
+            for p in out:
+                hit, loc, nrm, _i = solid.closest_point_on_mesh(si @ p)
+                if hit:
+                    w = max(w, ((si @ p) - loc).length)
+            if w > worst:
+                worst, wp, nout = w, pz, len(out)
+        if worst == 0.0:
+            print("  %-14s inside at every pose  OK" % ob.name)
+        elif ob.name in VISIBLE:
+            print("  %-14s stands %.2f mm proud of the face at %s "
+                  "(%d of %d vertices) - through the socket, not the shell"
+                  % (ob.name, worst, wp, nout, len(ob.data.vertices)))
+        else:
+            print("  %-14s %d of %d vertices outside, worst %.2f mm at %s  %s"
+                  % (ob.name, nout, len(ob.data.vertices), worst, wp,
+                     "OK, sub-nozzle" if worst < 0.4 else "FAIL"))
+            ok = ok and worst < 0.4
+    pose()
 
-    def _tree(o):
-        b = _bm.new()
-        b.from_mesh(o.data)
-        _bm.ops.transform(b, verts=b.verts[:], matrix=o.matrix_world)
-        t = BVHTree.FromBMesh(b)
-        b.free()
-        return t
-
-    # PROXY_eyeball/iris are the placeholders these domes REPLACE, so they
-    # share the same space by definition. CHECK_ is a measuring rule.
-    SKIP = ("_", "PR_", "PRBED", "PRTITLE", "PRLABEL", "CUT_", "REF",
-            "PROXY_", "CHECK_", "SnapEye", "EyeMech", "Assembly", "Base",
-            "Component", "ServoSizing")
-    SKIP_EXACT = {"HEAD_SKIN", "HEAD_SOLID", "MOUNT_ZONE", "HEAD_CYBORG",
-                  "HEAD_CRANIUM_scriptbuild", "HEAD_REF",
-                  "forehead_casing_asprinted_13aug"}
-    mine = [o for o in coll.objects if o.type == 'MESH']
-    tm = {o.name: _tree(o) for o in mine}
-    others = [o for o in bpy.data.objects
-              if o.type == 'MESH' and o not in mine
+    # ---- against the rest of the head, and against each other ------------
+    #
+    # Everything here is looked up BY NAME inside the loop. The pushrods are
+    # deleted and redrawn on every pose, so a list of object references
+    # taken before the loop goes stale the first time the mechanism moves -
+    # "StructRNA of type Object has been removed" - and a list taken after
+    # would quietly count each redrawn rod as a part of the head.
+    mine = set(o.name for o in coll.objects if o.type == 'MESH')
+    others = [o.name for o in bpy.data.objects
+              if o.type == 'MESH' and o.name not in mine
               and not o.name.startswith(SKIP) and o.name not in SKIP_EXACT]
-    print("")
-    print("collisions with the rest of the head (%d parts checked):" % len(others))
-    clash = 0
-    for o in others:
-        t = _tree(o)
-        for e in mine:
-            pairs = tm[e.name].overlap(t)
-            if not pairs:
-                continue
-            clash += 1
-            b = _bm.new()
-            b.from_mesh(e.data)
-            _bm.ops.transform(b, verts=b.verts[:], matrix=e.matrix_world)
-            b.faces.ensure_lookup_table()
-            cs = [b.faces[i].calc_center_median() for i, _j in pairs]
-            print("  %-14s THROUGH %-22s %4d faces at x %6.1f..%6.1f "
-                  "y %6.1f..%6.1f z %6.1f..%6.1f"
-                  % (e.name, o.name, len(pairs),
-                     min(c.x for c in cs), max(c.x for c in cs),
-                     min(c.y for c in cs), max(c.y for c in cs),
-                     min(c.z for c in cs), max(c.z for c in cs)))
-            b.free()
-    if not clash:
-        print("  none")
-    ok = ok and not clash
+    otrees = {n: _tree(bpy.data.objects[n]) for n in others}
+    real = sorted(n for n in mine if not n.startswith("PROXY_"))
+    plist = poses() if sweep else [(0.0, 0.0, LID["park"], LID["park"])]
 
-    # ---- and against EACH OTHER -------------------------------------------
-    # The other half of the gap. These are separate parts that bolt together,
-    # so they are supposed to be separate objects - but they are not supposed
-    # to occupy the same plastic. The only pairs allowed to overlap are the
-    # ones that are a bearing or a pin in a hole, and those are listed.
-    ALLOWED = {("eye_gimbal", "eye_dome_R"), ("eye_gimbal", "eye_dome_L"),
-               ("eye_gimbal", "eye_lid_R"), ("eye_gimbal", "eye_lid_L"),
-               ("eye_dome_R", "eye_pan_bar"), ("eye_dome_L", "eye_pan_bar"),
-               ("eye_pan_bar", "eye_rod_pan"), ("eye_gimbal", "eye_rod_tilt")}
     print("")
-    print("eye parts against each other:")
-    inner = 0
-    real = [o for o in mine if not o.name.startswith("PROXY_")]
-    for i in range(len(real)):
-        for j in range(i + 1, len(real)):
-            a, b = real[i], real[j]
-            if (a.name, b.name) in ALLOWED or (b.name, a.name) in ALLOWED:
-                continue
-            pairs = tm[a.name].overlap(tm[b.name])
+    print("collisions, swept through the range (%d head parts, %d poses):"
+          % (len(others), len(plist)))
+    clashes = {}
+    for pi, pz in enumerate(plist):
+        pose(*pz)
+        here = [n for n in real if bpy.data.objects.get(n) is not None]
+        mt = {n: _tree(bpy.data.objects[n]) for n in here}
+        for e in here:
+            for o in others:
+                pairs = mt[e].overlap(otrees[o])
+                if pairs:
+                    k = (e, o)
+                    if k not in clashes or len(pairs) > clashes[k][0]:
+                        clashes[k] = (len(pairs), pz)
+        for i in range(len(here)):
+            for j in range(i + 1, len(here)):
+                a, b = here[i], here[j]
+                if (a, b) in ALLOWED or (b, a) in ALLOWED:
+                    continue
+                if pi and a not in MOVING and b not in MOVING:
+                    continue
+                pairs = mt[a].overlap(mt[b])
+                if pairs:
+                    k = (a, b)
+                    if k not in clashes or len(pairs) > clashes[k][0]:
+                        clashes[k] = (len(pairs), pz)
+    pose()
+    if not clashes:
+        print("  none, at any pose (bearings and pinned joints excepted)")
+    for (a, b), (n, pz) in sorted(clashes.items(), key=lambda kv: -kv[1][0]):
+        pose(*pz)
+        oa, ob2 = bpy.data.objects.get(a), bpy.data.objects.get(b)
+        where = ""
+        if oa and ob2:
+            pairs = _tree(oa).overlap(_tree(ob2))
             if pairs:
-                inner += 1
-                print("  %-14s INTO %-14s %d faces" % (a.name, b.name, len(pairs)))
-    if not inner:
-        print("  none (bearings and pinned joints excepted)")
-    ok = ok and not inner
+                bm = bmesh.new()
+                bm.from_mesh(oa.data)
+                bmesh.ops.transform(bm, verts=bm.verts[:],
+                                    matrix=oa.matrix_world)
+                bm.faces.ensure_lookup_table()
+                cs = [bm.faces[i].calc_center_median() for i, _j in pairs]
+                where = ("  at x %6.1f..%6.1f y %6.1f..%6.1f z %6.1f..%6.1f"
+                         % (min(c.x for c in cs), max(c.x for c in cs),
+                            min(c.y for c in cs), max(c.y for c in cs),
+                            min(c.z for c in cs), max(c.z for c in cs)))
+                bm.free()
+        print("  %-14s INTO %-22s %4d faces, tilt %+.0f pan %+.0f lid %.0f/%.0f%s"
+              % (a, b, n, pz[0], pz[1], pz[2], pz[3], where))
+    pose()
+    ok = ok and not clashes
+    print("")
+    print("check(): %s" % ("PASS" if ok else "FAIL"))
     return ok
 
 
 # ---------------------------------------------------------------------------
-# a real MG90S, so servo room is measured rather than hoped for
-# ---------------------------------------------------------------------------
-# Body and total height come from the datasheet and agree with what
-# eye_mech.P has carried all along - 22.5 x 12 x 22.7, 35.5 total. The tab
-# pitch is 28.0 and it is the one number here that is PROVEN: coupon_mg90s
-# was printed and the real servos fitted it, 15 Aug.
-SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
-             tab_pitch=28.0, tab_l=32.2, tab_t=2.5, tab_up=16.0,
-             shaft_d=5.5, shaft_up=4.5, shaft_off=6.0)
+def casing_relief(apply=False):
+    """What the forehead casing has to give up so an upper eyelid can exist.
 
+    NOT run by build(). `forehead_casing` is on plate 5 and waiting to
+    print, and this changes it, so it is Pat's call and not the script's.
 
-# Where the four servos actually go. Found by search rather than by eye:
-# every candidate was tested for containment in MOUNT_ZONE, against the other
-# three servos, against the mechanism, and against every part already in the
-# head. The first hand-placed layout failed on all three counts - tilt had a
-# vertical shaft when it drives an X-axis lever, pan and tilt overlapped, and
-# the right lid servo went through `tray_rail_R`.
-#
-# All four shafts land in the y=126 plane, so ONE plate can carry them.
-#
-# The shaft axis is not a free choice: it has to be parallel to the axis the
-# servo drives, or the linkage stops being planar. Pan moves a bar along X so
-# its shaft is vertical; tilt and both lids drive levers pivoting about X so
-# their shafts run along X.
-#
-# lid_L sits 10 mm higher than lid_R and its body faces the other way. Not
-# elegant, and not arbitrary - it is what clears tilt below it and the tray
-# rail above it. Symmetry loses to packing in a bay this tight.
-SERVOS = [
-    ("pan",   (20.0, 126.0, 205.0), None),   # shaft vertical
-    ("tilt",  (-8.0, 126.0, 178.0), 'X'),
-    ("lid_R", (28.0, 126.0, 222.0), 'X'),
-    ("lid_L", (-28.0, 126.0, 232.0), '-X'),  # mirrored, body faces inboard
-]
+    The arithmetic is short and there is no way round it. The eyelid is a
+    shell over the ball with 0.4 of running clearance and 1.4 of wall, so
+    its outer surface is 17.8 from the eye centre against the ball's 16. The
+    ball's top is z=225. The casing's underside is z=225, solid from x=-47
+    to +47. Wherever the lid's band crosses the top of the eye it stands up
+    to 1.69 mm proud of the ball, and that is where the casing is.
 
+    Thinning the lid does not fix it - at 0.9 mm of wall and 0.25 of gap it
+    is still 1.15 mm proud, and 0.9 mm is not a lid. Neither does a lower
+    lid park position: the band has to pass over the top to get anywhere.
 
-def place_servos(hm, coll):
-    """Drop the four MG90S proxies where SERVOS says, so every later part is
-    drawn against a servo that is really there rather than a remembered one."""
-    import math as _m
-    rots = {None: None,
-            'X': Matrix.Rotation(_m.radians(90), 4, 'Y'),
-            '-X': Matrix.Rotation(_m.radians(-90), 4, 'Y')}
-    out = []
-    for name, loc, axis in SERVOS:
-        for o in list(coll.objects):
-            if o.name == "PROXY_servo_" + name:
-                bpy.data.objects.remove(o, do_unlink=True)
-        out.append(servo_proxy(hm, coll, "PROXY_servo_" + name, loc, rots[axis]))
-    return out
-
-
-def servo_proxy(hm, coll, name, loc, rot=None):
-    """A solid MG90S at `loc`, output shaft up (+Z) unless rotated.
-
-    Origin is the CENTRE OF THE OUTPUT SHAFT at the top face of the body,
-    because that is the point a linkage is designed around - not the centre
-    of the box, which is where a proxy placed by eye ends up and why it then
-    disagrees with the horn by 6 mm.
+    So: a 2.2 mm scallop in the bottom edge of the casing, 16 mm wide, over
+    each eye. It is the bottom rim of a panel that runs to z=283 and carries
+    nothing there.
     """
-    s = SERVO
-    dx, dy, dz = 0.0, 0.0, 0.0
-    prims = []
-
-    def _p():
-        prims.append(bmesh.new())
-        return prims[-1]
-
-    # body, hanging below the shaft top
-    bm = _p()
-    hm["_box"](bm, (s["l"], s["w"], s["h"]),
-               (dx - s["shaft_off"], dy, dz - s["h"] / 2.0))
-    # mounting tabs
-    bm = _p()
-    hm["_box"](bm, (s["tab_l"], s["w"], s["tab_t"]),
-               (dx - s["shaft_off"], dy, dz - s["h"] + s["tab_up"]))
-    # output shaft boss
-    bm = _p()
-    hm["_cyl"](bm, s["shaft_d"] * 2.2, 4.0, (dx, dy, dz - 2.0), 'Z')
-    bm = _p()
-    hm["_cyl"](bm, s["shaft_d"], s["shaft_up"], (dx, dy, dz + s["shaft_up"] / 2.0), 'Z')
-    ob = _union(hm, coll, name, prims)
-    if rot is not None:
-        ob.data.transform(rot)
-    ob.data.transform(Matrix.Translation(Vector(loc)))
-    ob.color = (0.9, 0.2, 0.2, 1.0)
-    return ob
-
-
-# ---------------------------------------------------------------------------
-# the linkage - what actually makes the eyes move
-# ---------------------------------------------------------------------------
-LINK = dict(
-    bar_t   = 3.0,          # pan bar section
-    bar_h   = 5.0,
-    rod_d   = 2.5,          # pushrod
-    horn_pan  = 11.0,       # horn radius: 11 x sin(30) = 5.5 mm, which is
-                            # exactly the travel an 11 mm eye lever needs for
-                            # +/-30 deg of pan
-    horn_tilt = 13.6,       # the gimbal's bar sits 20 mm below the tilt axis,
-                            # so +/-20 deg of tilt moves it 6.8 mm; 13.6 x
-                            # sin(30) is that
-)
-
-
-def linkage(hm, coll):
-    """Pan bar, tilt lever and the two pushrods that drive them.
-
-    PAN. Each dome's lever puts a vertical pin 11 mm behind the pan axis, at
-    (+/-31, 149, 209). One bar joins both pins, so shoving it along X swings
-    both levers and both eyes turn together. +/-30 deg needs +/-5.5 mm of bar
-    travel. The pan servo's shaft is vertical, so its horn tip also moves
-    along X - the pushrod between them is a parallel linkage and transmits
-    that travel 1:1 without caring about the 4 mm of z offset between them.
-
-    TILT. The gimbal's cross bar already sits 20 mm below the tilt axis, so it
-    IS the tilt lever - nothing extra to build. A point there swings 6.8 mm
-    along y for +/-20 deg. The tilt servo's shaft runs along X so its horn
-    sweeps the y-z plane, which is the plane that motion happens in.
-    """
-    ty, tz = P["y"], P["z"]
-    pin_y = ty - P["lever_r"]                # 149: where both eye pins sit
-    half = P["pitch"] / 2.0
-
-    # ---- pan bar -----------------------------------------------------------
-    prims = []
-
-    def _p():
-        prims.append(bmesh.new())
-        return prims[-1]
-
-    bm = _p()
-    hm["_box"](bm, (P["pitch"] + 10.0, LINK["bar_t"], LINK["bar_h"]),
-               (0.0, pin_y, tz))
-    bar = _union(hm, coll, "eye_pan_bar", prims)
+    hm = _hm()
+    ob = bpy.data.objects.get("forehead_casing")
+    if ob is None:
+        print("no forehead_casing in the file")
+        return
+    ro = P["ball"] / 2.0 + LID["gap"] + LID["shell"]
+    print("eyelid outer radius %.1f, ball %.1f, so %.2f mm proud of the ball"
+          % (ro, P["ball"] / 2.0, ro - P["ball"] / 2.0))
+    print("casing underside z=%.1f, ball top z=%.1f"
+          % (P["casing_z"], P["z"] + P["ball"] / 2.0))
+    print("relief: z %.1f..%.1f, y %.1f..%.1f, x +-(%.1f..%.1f) each side"
+          % (P["casing_z"] - 0.5, P["casing_z"] + 2.2, P["casing_y"] - 1.0,
+             168.0, P["pitch"] / 2.0 - 8.0, P["pitch"] / 2.0 + 8.0))
+    if not apply:
+        print("dry run - call casing_relief(apply=True) to cut it, and then")
+        print("re-export plate 5 before printing it")
+        return
+    coll = ob.users_collection[0]
     cut = bmesh.new()
-    for sx in (-1, 1):                        # the two eye lever pins
-        hm["_cyl"](cut, P["link_d"], 20.0, (sx * half, pin_y, tz), 'Z', segs=24)
-    # and the pushrod pin, directly above the pan servo so the rod is vertical
-    # in plan and the linkage stays parallel
-    hm["_cyl"](cut, P["link_d"], 20.0, (SERVOS[0][1][0], pin_y, tz), 'Z', segs=24)
-    hm["_apply"](coll, bar, cut, "_CUT_pan_bar", 'DIFFERENCE')
-
-    # ---- pushrods ----------------------------------------------------------
-    rods = []
-    for name, a, b in (
-            ("pan", (SERVOS[0][1][0], SERVOS[0][1][1], SERVOS[0][1][2]),
-             (SERVOS[0][1][0], pin_y, tz)),
-            ("tilt", (SERVOS[1][1][0], SERVOS[1][1][1], SERVOS[1][1][2]),
-             (SERVOS[1][1][0], ty - 8.0, tz - 20.0))):
-        v = Vector(b) - Vector(a)
-        bm = bmesh.new()
-        hm["_cyl"](bm, LINK["rod_d"], v.length,
-                   tuple((Vector(a) + Vector(b)) / 2.0), 'Z',
-                   direction=tuple(v.normalized()))
-        ob = hm["_link"](coll, "eye_rod_%s" % name,
-                         hm["_mesh"]("eye_rod_%s" % name, bm))
-        ob.color = (0.2, 0.7, 0.9, 1.0)
-        rods.append(ob)
-        print("  eye_rod_%-6s %.1f mm, from the servo horn to the %s"
-              % (name, v.length, "pan bar" if name == "pan" else "gimbal"))
-    return [bar] + rods
+    for sx in (-1, 1):
+        hm["_box"](cut, (18.0, 12.0, 3.0),
+                   (sx * P["pitch"] / 2.0, 164.5, P["casing_z"] + 1.0))
+    hm["_apply"](coll, ob, cut, "_CUT_casing_relief", 'DIFFERENCE')
+    print("cut. re-export plate 5.")
 
 
-LID = dict(
-    gap    = 0.4,           # running clearance over the Ø32 ball
-    shell  = 1.4,           # lid wall; 32.8 inner, 35.6 outer, in a Ø41 socket
-    span   = 95.0,          # degrees of arc the shell covers
-    park   = 62.0,          # degrees up from closed when the lid is open
-    pin_d  = 3.4,
-    arm_r  = 12.0,          # lever from the lid axis to its pushrod pin
-)
-
-
-def eyelid(hm, coll, sx, opened=True):
-    """One upper eyelid: a spherical shell that sweeps over the eye.
-
-    It lives in the 4.5 mm annulus between the Ø32 ball and the Ø41 socket -
-    inner Ø32.8, outer Ø35.6, leaving 2.7 mm to the socket wall.
-
-    It pivots about the SAME horizontal axis as tilt, on a trunnion at the
-    ball's inboard pole. Inboard only, and that is forced: the outboard pole
-    of the right eye is at x = 31 + 17.5 = 48.5, which is exactly where the
-    gimbal's own trunnion sits. Inboard puts it at x=13.5, in the clear
-    corridor between the eyes. A single bearing is enough for a shell this
-    light, and it cantilevers over a 17 mm arm rather than a 60 mm one.
-
-    The bracket hangs off the GIMBAL, so the lid tilts with the eye but does
-    not pan with it - which is what a real eyelid does. Your eye darts about
-    behind a lid that stays put.
-
-    `span` stops 30-odd degrees short of the top pole on purpose: that is
-    where the yoke arm reaches the ball, and a lid that parked over it would
-    have to be slotted. Real lids retract to just above the iris anyway.
-    """
-    side = "R" if sx > 0 else "L"
-    cx, cy, cz = sx * P["pitch"] / 2.0, P["y"], P["z"]
-    ri = P["ball"] / 2.0 + LID["gap"]
-    ro = ri + LID["shell"]
-
-    bm = bmesh.new()
-    _sphere(bm, ro * 2, (cx, cy, cz), segs=64)
-    ob = hm["_link"](coll, "eye_lid_%s" % side, hm["_mesh"]("eye_lid_%s" % side, bm))
-    cut = bmesh.new()
-    _sphere(cut, ri * 2, (cx, cy, cz), segs=64)
-    hm["_apply"](coll, ob, cut, "_CUT_lid_in_%s" % side, 'DIFFERENCE')
-
-    # trim to a band: two planes through the eye centre, `span` apart
-    a0 = math.radians(LID["park"] if opened else 0.0)
-    for k, ang in enumerate((a0, a0 + math.radians(LID["span"]))):
-        cut = bmesh.new()
-        n = Vector((0.0, math.sin(ang), math.cos(ang)))
-        if k == 0:
-            n = -n
-        # At the ORIGIN in the mesh, because matrix_world below is what
-        # places it. Built at (cx, cy, cz) as well, it got the eye centre
-        # applied twice and landed half a head away, so both plane cuts
-        # silently did nothing and the "band" came out a full sphere shell.
-        hm["_box"](cut, (60.0, 60.0, 60.0), (0.0, 0.0, 0.0))
-        me = bpy.data.meshes.new("_t")
-        cut.to_mesh(me)
-        cut.free()
-        tmp = bpy.data.objects.new("_CUT_lid_%d_%s" % (k, side), me)
-        coll.objects.link(tmp)
-        tmp.matrix_world = (Matrix.Translation(Vector((cx, cy, cz)) + n * 30.0)
-                            @ Vector((0, 0, 1)).rotation_difference(n).to_matrix().to_4x4())
-        hm["boolean"](ob, tmp, 'DIFFERENCE')
-        bpy.data.objects.remove(tmp, do_unlink=True)
-
-    # trunnion at the inboard pole, plus the arm out to its pushrod pin
-    add = bmesh.new()
-    hm["_cyl"](add, LID["pin_d"] + 4.0, 6.0, (cx - sx * (ro - 1.0), cy, cz), 'X')
-    aob = hm["_link"](coll, "_LIDADD_%s" % side, hm["_mesh"]("_LIDADD_%s" % side, add))
-    hm["boolean"](ob, aob, 'UNION')
-    bpy.data.objects.remove(aob, do_unlink=True)
-    ob.color = (0.85, 0.65, 0.4, 1.0)
-    return ob
+def report():
+    """A short prose summary of where the mechanism stands."""
+    coll = bpy.data.collections.get(COLL)
+    if coll is None:
+        print("nothing built")
+        return
+    print("EYE_v2, %d objects" % len(coll.objects))
+    for o in sorted(coll.objects, key=lambda o: o.name):
+        bb = [o.matrix_world @ Vector(c) for c in o.bound_box]
+        print("  %-20s %5d v  x %6.1f..%6.1f y %6.1f..%6.1f z %6.1f..%6.1f"
+              % (o.name, len(o.data.vertices),
+                 min(p.x for p in bb), max(p.x for p in bb),
+                 min(p.y for p in bb), max(p.y for p in bb),
+                 min(p.z for p in bb), max(p.z for p in bb)))
