@@ -350,6 +350,35 @@ Two practical notes for whoever draws it:
   overlapping solids in one batched cutter. That is the nested-cutter trap this
   file has now hit three times. Cut slots disjoint, or one at a time.
 
+## The speaker, and what it retired — 15 Aug
+
+The speaker is a **Waveshare 8 Ω 5 W, 100 × 45 × 21 mm**, the one bundled with
+the WM8960 Audio HAT. `BOARDS["speaker"]` said 70 × 30 × 16 and was marked
+`conf = "listing"` with *"UNMEASURED … placeholders and nothing is built to
+them yet"* — except two things were: `ear_spine`'s 80 mm height and its 72 mm
+post pitch. The real part is 100 mm long, so it never could have bolted to
+those posts, and its mounting holes are too small for a screw anyway.
+
+**Decision: the speakers are glued on, and `ear_spine` is retired.** The spine
+existed only to carry the speaker on two Ø9 posts. With adhesive it has no
+job.
+
+What that means in practice:
+
+- The speaker goes on the **back face of `ear_hub`**, which is a good glue
+  surface: flat at x=39.5, and the root flares made it lobed rather than a
+  plain Ø65 disc, so it is about 95 mm across at the widest.
+- The hub's two blind M3 threads at z=204±24 are now **unused**. Harmless —
+  they are 6.5 mm deep in an 8 mm plug and break out nowhere.
+- Both spines are already printed, so nothing was wasted. They are still on
+  plate 4 and still in the file, just hidden.
+- Fitting check, since the speaker is much bigger than planned: glued to the
+  spine plane at x=29.5 a 21 mm speaker reaches in to x≈8.5, so the pair sit
+  **~17 mm apart** at the centreline and clear each other. They are at y≈95,
+  well behind the eye bay at y≈131, so they do not fight the eye mechanism.
+  **Watch the top edge** — 100 mm centred on the ear line reaches z≈254 and
+  the Pi tray is at z=256. Glue a few mm low.
+
 ## Still open
 
 - **The SHT41 has no case, and no part in the CAD file at all.** It is in
