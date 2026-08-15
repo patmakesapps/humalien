@@ -109,6 +109,15 @@ SOLID = "HEAD_SOLID"    # closed volume of the head; nothing may leave it
 ZONE = "MOUNT_ZONE"     # where mount geometry is allowed to exist
 ZONE_INSET = 1.5        # mm below the outer skin the zone stops
 ARM_MIN = 6.0           # mm of reach below which an arm is a stub, not a boss
+# The root flare under each ear-hub boss. Ø23 down to Ø13 over 5.0 mm is a
+# 45 degree wall - self-supporting - and it takes the bonded cross-section
+# where the boss meets the Ø65 plug from 21.5 mm2 to 116.3 mm2. 5.0 is under
+# plug_t, so the flare stays inside the plug's own thickness and can never
+# reach the front face, show in the ear port, or foul the NeoPixel ring.
+# Ø23 is set by the 15.75 mm from the 290 degree boss to the z-24 blind
+# thread, not by taste. See cad/ear_hub_repair.py for the measurements.
+ARM_FLARE_D = 23.0
+ARM_FLARE_H = 5.0
 
 M = dict(
     m3_free   = 3.4,      # clearance for an M3
@@ -607,6 +616,40 @@ class Probe:
 # ---------------------------------------------------------------------------
 # parts that are shaped by the shell
 # ---------------------------------------------------------------------------
+def _one_solid(ob, label):
+    """Refuse a part that is really several parts sitting near each other.
+
+    This is the check the ear hub needed and did not have. Open edges and
+    non-manifold edges were both zero while the hub was in four pieces,
+    because four separate closed shells are four perfectly healthy closed
+    shells - the mesh is only wrong when you ask whether it is ONE of them.
+    Cheap, so it runs on every part that gets welded out of primitives.
+    """
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    seen, n = set(), 0
+    for v in bm.verts:
+        if v in seen:
+            continue
+        n += 1
+        stack = [v]
+        while stack:
+            x = stack.pop()
+            if x in seen:
+                continue
+            seen.add(x)
+            for e in x.link_edges:
+                o = e.other_vert(x)
+                if o not in seen:
+                    stack.append(o)
+    bm.free()
+    if n != 1:
+        raise RuntimeError(
+            "%s came out as %d disconnected solids, not one. Something that "
+            "should have welded did not - do NOT export this." % (label, n))
+    return True
+
+
 def ear_hubs(probe, coll, head):
     e = M["ear"]
     fx = e["face_x"]
@@ -690,14 +733,57 @@ def ear_hubs(probe, coll, head):
                   % (a, end - start, ARM_MIN))
             continue
         _cyl(arms, e["arm_d"], end - start, ((start + end) / 2, ay, az), 'X')
+        # A root flare, or the boss snaps off - it did, on both ears, on the
+        # first print. A Ø13 post on a r=36 circle overlaps a Ø65 plug across
+        # a lens 3 mm deep and 21.5 mm2 in section, and the M3 that goes into
+        # that post is tightened along the print's Z axis: a pure interlayer
+        # pull on the thinnest part of the joint. The frustum takes that
+        # section to 116.3 mm2 and turns a re-entrant corner into a 45 degree
+        # ramp. It goes in the SAME bmesh as the arms so it is measured,
+        # clipped and welded by exactly the same steps - a flare that skipped
+        # the clip would be the next thing found sticking out of the head.
+        _cyl(arms, ARM_FLARE_D, ARM_FLARE_H,
+             (start + ARM_FLARE_H / 2, ay, az), 'X', d2=e["arm_d"])
         built.append(a)
     if len(built) < 3:
         print("    WARNING: ear hub has only %d of %d arms - %s"
               % (len(built), len(e["arm_a"]), built))
     arm_ob = _link(coll, "_ARMS", _mesh("_ARMS", arms))
-    boolean(arm_ob, bpy.data.objects[ZONE], 'INTERSECT', solver='EXACT')
+    # Clip against the zone PLUS the port bore over the plug's own thickness,
+    # and the second half of that is not optional.
+    #
+    # MOUNT_ZONE has every shell opening subtracted out of it, the Ø66 ear
+    # port included. Clipping the arms with the bare zone deleted the only
+    # material that welded them to the plug: an arm is Ø13 on a r=36 circle,
+    # so it spans r 29.5..42.5, and its overlap with the Ø65 plug is a lens
+    # at r 29.5..32.5 - every millimetre of it inside r=33, every millimetre
+    # of it inside the port cutter. The three bosses came out as FREE-
+    # FLOATING SOLIDS 0.461 mm clear of the disc, printed as loose pegs
+    # standing on the bed, and that is what came off the printer on 14 Aug.
+    #
+    # The comment that used to be here said the arms "sit at r=36 well
+    # outside the Ø66 bore". True of the axis. False of the body. That one
+    # word is the whole bug.
+    #
+    # Nothing caught it: disconnected shells are each still closed and
+    # manifold, so the health check read 0 open / 0 non-manifold, the volume
+    # was right because no material was missing, and verify() compared a
+    # plate copy against a source that was equally broken. Hence the
+    # connectivity assertion below, which is the check that was missing.
+    #
+    # Restoring the bore over x = plug back..front says exactly what is true:
+    # nothing may stand in the OPEN port, but the plug legitimately fills it,
+    # so across the plug's own 8 mm the bore is allowed again. Everything
+    # outboard of the port still gets clipped normally.
+    keep = bmesh.new()
+    _cyl(keep, e["bore"], e["plug_t"], (fx - e["plug_t"] / 2, e["y"], e["z"]), 'X')
+    keep_ob = _link(coll, "_KEEP", _mesh("_KEEP", keep))
+    boolean(keep_ob, bpy.data.objects[ZONE], 'UNION', solver='EXACT')
+    boolean(arm_ob, keep_ob, 'INTERSECT', solver='EXACT')
+    bpy.data.objects.remove(keep_ob, do_unlink=True)
     boolean(hub, arm_ob, 'UNION')
     bpy.data.objects.remove(arm_ob, do_unlink=True)
+    _one_solid(hub, "ear_hub_R")
 
     # One boolean per overlapping feature. These cutters nest - the Ø22
     # grille sits inside the Ø37.6 ring recess, and the Ø66 bore-clear
@@ -728,14 +814,28 @@ def ear_hubs(probe, coll, head):
     # 1.5 mm of material, so nothing breaks out onto the face that shows in
     # the ear port. The speaker pilots are not here any more - they belong to
     # the spine, which is where the speaker bolts.
+    #
+    # Started 2 mm BEHIND the plug's back face, not on it. Cut flush, the
+    # cutter's back cap was exactly coplanar with the face it had to open
+    # through, and at z+24 the boolean capped it over instead: a sealed
+    # Ø2.6 x 6.5 bubble inside the plug, -34.1 mm3 of inward-facing shell,
+    # and no hole for the screw. The z-24 thread resolved correctly from the
+    # identical cutter, which is how it survived a review. The overshoot
+    # costs nothing - it is cut through air - and the depth into the plug is
+    # still 6.5 mm.
+    blind = 6.5 + 2.0
     for sz in (-1, 1):
-        _cyl(pilots, M["m3_pilot"], 6.5,
-             (fx - e["plug_t"] + 3.25, e["y"], e["z"] + sz * e["join_dz"]),
-             'X', segs=24)
+        _cyl(pilots, M["m3_pilot"], blind,
+             (fx - e["plug_t"] - 2.0 + blind / 2, e["y"],
+              e["z"] + sz * e["join_dz"]), 'X', segs=24)
     stages.append(("pilots", pilots))
 
     for tag, cbm in stages:
         _apply(coll, hub, cbm, "_CUT_hub_%s" % tag, 'DIFFERENCE')
+    # Again after the cuts, not just after the union: the sealed bubble the
+    # flush blind-thread cutter left was created HERE, by a difference, and
+    # it showed up as a second "solid" with an inward-facing shell.
+    _one_solid(hub, "ear_hub_R after cutting")
 
     # ---- the spine, now a part in its own right ----
     # Built on the split plane, not overlapping it: the box's front face IS
