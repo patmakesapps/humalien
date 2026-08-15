@@ -780,11 +780,33 @@ def pca9685_mount(loc=(0, 0, 0)):
     W = b["w"] + 2 * margin
     D = b["d"] + 2 * margin
     ob = plate("pca9685_mount", W, D, t, 3.0, (0, 0, t / 2))
+
+    # Open the plate right out under the board. The standoffs already hold the
+    # board 3.5 mm clear, so pin tails and solder blobs have air under them -
+    # but "enough clearance" is a number that has to stay true after someone
+    # solders a header slightly proud or leaves a tail long. A window under
+    # the whole board footprint means there is nothing to hit at all, which is
+    # worth more than 3.5 mm of measured margin. Soldering is on the BOTTOM
+    # face of this board: headers sit on top, pins pass through, joints are
+    # underneath.
+    ob = cut(ob, [prism("_win", rrect_pts(b["w"] + 1.0, b["d"] + 1.0, 2.0),
+                        t * 3, (0, 0, t / 2))])
+
+    # The window swallows all four mounting holes, so each boss now has to be
+    # carried on a pad that bridges outward to the surviving frame. The pad
+    # hugs the boss - inboard it reaches |x| 25.0 against the boss's own 25.44,
+    # so it adds almost nothing under the board - and runs out to |y| 16.0,
+    # past the window edge at 13.2, where it lands on solid frame. It stops at
+    # |x| 32.5 so it does not eat into the skull fixing slots at |x| 34.1.
+    PAD_X, PAD_Y = (25.0, 32.5), (6.5, 16.0)
     bosses = []
     for sx in (-1, 1):
         for sy in (-1, 1):
             bosses.append(cyl("_b", boss_d, boss_h,
                               (sx * b["hx"] / 2, sy * b["hy"] / 2, t + boss_h / 2)))
+            bosses.append(prism(
+                "_pad", rrect_pts(PAD_X[1] - PAD_X[0], PAD_Y[1] - PAD_Y[0], 1.0),
+                t, (sx * sum(PAD_X) / 2, sy * sum(PAD_Y) / 2, t / 2)))
     ob = fuse(ob, bosses)
     top = t + boss_h
     cuts = []
