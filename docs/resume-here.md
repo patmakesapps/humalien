@@ -627,3 +627,50 @@ plane, the shaft and pegs standing on end.
   That is deliberate - `Humalien_v1.blend` keeps the geometry that was
   inspected and signed off - but it means the coupons and `ear_spine` will
   need cleaning again on every export, which `export_plate.py` does for you.
+
+## The eyes got pupils, and the pixels got somewhere to go — 15 Aug
+
+**Each eyeball now has an iris and a pupil.** `IRIS` in `cad/eye_v2.py`:
+a Ø15 disc recessed 0.4 mm into the front of the ball so it reads as an eye
+with the power off, and a Ø6.5 circle at its centre where the shell is thinned
+from the **inside** to 0.9 mm — two perimeters at 0.4 plus a whisker — so the
+5050 lights that circle and the rest of the ball stays opaque. Nothing is
+drilled through and no second material is needed.
+
+Both are a **sphere clipped by a cylinder**, and that matters. A flat-ended
+cylinder cannot put a controlled step into a ball: sunk far enough to leave a
+0.5 mm step it only reaches r=3.97, so a "Ø15 iris" came out Ø7.9 and the
+depth ran away at the centre. Against a sphere the depth is the same
+everywhere and the cylinder only decides how wide. They also go opposite ways
+round — the iris is *cylinder minus sphere* (take material off the outside),
+the pupil is *sphere intersect cylinder* (thin it from the inside). Getting
+that backwards hollowed the iris out and left a 0.4 mm skin over the whole
+disc, which measured as "iris depth 0.4" and split the dome into two shells.
+
+**The 5050 pixels glue to the rib inside each dome.** The rib across the back
+opening was there to anchor the pan lever; it is 10 mm tall now so it is also
+the pixel's mounting pad, and the pixel sits on its front face square behind
+the pupil. `fit_layout` places the proxy at `eye_y - 2.4` to match.
+
+It used to sit **66 faces inside that rib**, and nothing reported it because
+`check()` skipped every `PROXY_` object wholesale. It does not any more:
+`SKIP_EXCEPT` lets the LED proxies through, because a proxy for something that
+lives inside a printed part still has to fit inside it.
+
+Two further things that only showed up once it was being checked:
+
+- **A proxy that moves needs its collision tree rebuilt every pose.** The
+  pixels are glued inside the eyeballs, so they tilt and pan with them. Built
+  once with the rest of the head, they reported 36 faces of collision at 16°
+  of tilt that were not there — a moving dome tested against a tree of where
+  the pixel used to be.
+- **The pixel is still `LISTING`**: 8 × 3 × 8, unbought and unmeasured, as
+  its own comment in `fit_layout` says. There is now a pad it has to fit, so
+  this is exactly the case the coupons exist for. Measure the real carrier
+  before the rib's 10 mm is trusted.
+
+**Everything shades smooth by angle now.** `smooth_all()` runs at the end of
+`build()`, at 35°. Not plain shade-smooth: every face in these parts was
+already flagged smooth and they still rendered faceted, because from Blender
+4.1 the flag alone is not what does it — and smoothing everything flat would
+round the corners off the brackets as well as the balls.

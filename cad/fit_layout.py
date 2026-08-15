@@ -287,8 +287,12 @@ def build(force=False):
         # the glow: an addressable 5050 pixel INSIDE the eyeball behind a
         # translucent printed iris window on the front pole. Pixel carrier
         # unbought and unmeasured, hence LISTING
+        # 2.4 back, not 4.0: eye_v2's dome carries a rib across its back
+        # opening at y 153..156 that anchors the pan lever, and at 4.0 the
+        # pixel sat 66 faces inside it. It glues to the FRONT face of that
+        # rib, which is also what puts it square behind the pupil.
         box(coll, "PROXY_eye_led_%s_LISTING" % side, (8.0, 3.0, 8.0),
-            (x, ey - 4.0, ez))
+            (x, ey - 2.4, ez))
         cyl(coll, "PROXY_iris_%s" % side, L["iris"]["d"], L["iris"]["t"],
             (x, ey + L["eyeball_dia"] / 2 + L["iris"]["t"] / 2 - 0.8, ez),
             'Y', COL_GLOW, mat_glow)

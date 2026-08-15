@@ -297,6 +297,23 @@ P = dict(
     m2_free   = 2.2,
 )
 
+# The iris and pupil on the front of each eyeball.
+#
+# `dia` is a shallow step cut into the front face, so the eye reads as an eye
+# with the power off. `pupil` is the same shell thinned from the INSIDE to
+# `wall`, so the 5050 pixel lights that circle and the rest of the ball stays
+# opaque - nothing is drilled through, and nothing needs a second material.
+#
+# 0.9 mm is two perimeters at 0.4 plus a whisker. Thinner glows better and
+# starts to show the pixel's own shape through it; thicker glows evenly and
+# dimmer. It is the number most worth printing a test of.
+IRIS = dict(
+    dia   = 15.0,       # the iris step; 0 turns it off
+    step  = 0.4,        # how deep that step is, everywhere across it
+    pupil = 6.5,        # the lit circle; 0 turns it off
+    wall  = 0.9,        # what the shell is thinned to there
+)
+
 # The eyelid. It lives in the 4.5 mm annulus between the O32 ball and the
 # O41 socket. Angles are measured from straight ahead, positive upwards.
 #
@@ -543,7 +560,12 @@ def eyeball(hm, coll, sx):
     # the dome would never have fixed it: the dome is hollow, so its back is
     # an annulus from r=11.7 to r=16, and the lever sits on the axis at
     # r<4.2 - straight through the hole in the middle, touching nothing.
-    hm["_box"](add, (28.0, 3.0, P["lever_t"] * 2),
+    #
+    # 10 mm tall, not 6, because it is also the pad the 5050 pixel glues to.
+    # The pixel is 8 mm square and lives right behind the pupil; it used to
+    # sit 66 faces INSIDE this rib, and nothing reported it because check()
+    # skips every PROXY_ object. It does not skip this one any more.
+    hm["_box"](add, (28.0, 3.0, 10.0),
                (cx, cy - P["back_cut"] + 1.5, cz))
     # The link pin hangs BELOW the lever. The pan bar is a bar across both
     # eyes at the lever pins, and at eye-centre height its body would run
@@ -563,6 +585,57 @@ def eyeball(hm, coll, sx):
     lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
     hm["boolean"](ob, lob, 'UNION')
     bpy.data.objects.remove(lob, do_unlink=True)
+
+    # ---- the iris and the pupil -------------------------------------------
+    #
+    # Straight ahead, along +Y, and NOT along the socket's axis. The socket
+    # is raked 25 out and 10 down; the eyeball is not. An eye that looked
+    # down its own socket would be permanently cross-eyed and staring at the
+    # floor - the rake carries the OPENING outboard, not the gaze.
+    #
+    # The iris is a shallow step, so the eye reads as an eye with the power
+    # off. The pupil is not a hole: it is the same shell thinned to PUPIL_W,
+    # so the 5050 inside lights it and the rest of the ball stays opaque.
+    # Cut from the inside, which is why nothing shows on the surface.
+    # Both are a SPHERE clipped by a cylinder, not a flat-ended cylinder.
+    # A flat cutter cannot put a controlled step into a ball: sunk far enough
+    # to leave a 0.5 mm step it only reaches r=3.97, so a "O15 iris" came out
+    # O7.9 and the depth ran away at the centre. Against a sphere the depth
+    # is the same everywhere, and the cylinder just decides how wide.
+    # The two cuts are opposite ways round, and getting that backwards is
+    # what a first attempt did: it hollowed the iris out from the INSIDE and
+    # left a 0.4 mm skin over the whole disc, which read as "iris depth 0.4"
+    # in every measurement and split the dome into two shells.
+    #
+    #   iris  - take `step` off the OUTSIDE:  cylinder MINUS the sphere
+    #   pupil - thin from the INSIDE:         sphere INTERSECT the cylinder
+    #
+    if IRIS["dia"] > 0.0:
+        bm = bmesh.new()
+        hm["_cyl"](bm, IRIS["dia"], 60.0, (cx, cy + 30.0, cz), 'Y', segs=64)
+        tmp = hm["_link"](coll, "_IRIS_%s" % side, hm["_mesh"]("_IRIS_%s" % side, bm))
+        ball = bmesh.new()
+        _sphere(ball, 2.0 * (r - IRIS["step"]), (cx, cy, cz), segs=96)
+        bob = hm["_link"](coll, "_IRISBALL_%s" % side,
+                          hm["_mesh"]("_IRISBALL_%s" % side, ball))
+        hm["boolean"](tmp, bob, 'DIFFERENCE')
+        bpy.data.objects.remove(bob, do_unlink=True)
+        hm["boolean"](ob, tmp, 'DIFFERENCE')
+        bpy.data.objects.remove(tmp, do_unlink=True)
+    if IRIS["pupil"] > 0.0:
+        bm = bmesh.new()
+        _sphere(bm, 2.0 * (r - IRIS["step"] - IRIS["wall"]), (cx, cy, cz),
+                segs=96)
+        tmp = hm["_link"](coll, "_PUPIL_%s" % side,
+                          hm["_mesh"]("_PUPIL_%s" % side, bm))
+        clip = bmesh.new()
+        hm["_cyl"](clip, IRIS["pupil"], 60.0, (cx, cy + 10.0, cz), 'Y', segs=64)
+        cob = hm["_link"](coll, "_PUPILCLIP_%s" % side,
+                          hm["_mesh"]("_PUPILCLIP_%s" % side, clip))
+        hm["boolean"](tmp, cob, 'INTERSECT')
+        bpy.data.objects.remove(cob, do_unlink=True)
+        hm["boolean"](ob, tmp, 'DIFFERENCE')
+        bpy.data.objects.remove(tmp, do_unlink=True)
     return ob
 
 
@@ -1274,6 +1347,14 @@ def pose(tilt=0.0, pan=0.0, lid_R=None, lid_L=None, lid=None, rods=True):
         d = bpy.data.objects.get("eye_dome_%s" % side)
         if d:
             d.matrix_world = T @ _pan_m(sx, pan)
+        # The 5050 is glued INSIDE the dome, so it goes where the dome goes.
+        # Left standing still it was perfectly placed at rest and swept
+        # through by its own eyeball at every other angle.
+        led = bpy.data.objects.get("PROXY_eye_led_%s_LISTING" % side)
+        if led is not None:
+            if side not in _LED_REST:
+                _LED_REST[side] = led.matrix_world.copy()
+            led.matrix_world = T @ _pan_m(sx, pan) @ _LED_REST[side]
         l = bpy.data.objects.get("eye_lid_%s" % side)
         if l:
             l.matrix_world = T @ _tilt_m(la)
@@ -1304,6 +1385,7 @@ def _drive_points(tilt, pan, lid_R, lid_L):
 
 
 _ROD_L = {}
+_LED_REST = {}     # where the 5050 proxies sit before anything moves
 
 
 def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
@@ -1361,10 +1443,57 @@ def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
         hb = hm["_link"](coll, "PROXY_horn_%s" % name,
                          hm["_mesh"]("PROXY_horn_%s" % name, bm))
         hb.color = (0.94, 0.94, 0.92, 1.0)
+        for o in (ob, hb):
+            for f in o.data.polygons:
+                f.use_smooth = True
     return pts
 
 
 # ---------------------------------------------------------------------------
+SMOOTH_ANGLE = 35.0
+
+
+def smooth_all(angle=None, coll=None, verbose=False):
+    """Shade everything smooth, BY ANGLE.
+
+    Not plain shade-smooth. Every face in these parts is already flagged
+    smooth and they still render faceted, because from Blender 4.1 the flag
+    on its own is not what does it - smoothing is a modifier now. And plain
+    smooth-everything is the wrong answer anyway: it rounds the corners of
+    the boxes as well as the spheres, so a printed bracket ends up looking
+    like a bar of soap. By angle, the domes and the tubes go smooth and every
+    edge sharper than 35 degrees stays an edge.
+    """
+    angle = SMOOTH_ANGLE if angle is None else angle
+    c = coll or bpy.data.collections.get(COLL)
+    if c is None:
+        return 0
+    prev = bpy.context.view_layer.objects.active
+    n = 0
+    for o in list(c.objects):
+        if o.type != 'MESH':
+            continue
+        for p in o.data.polygons:
+            p.use_smooth = True
+        try:
+            for x in bpy.context.view_layer.objects:
+                x.select_set(False)
+            bpy.context.view_layer.objects.active = o
+            o.select_set(True)
+            bpy.ops.object.shade_auto_smooth(angle=math.radians(angle))
+            n += 1
+        except Exception as exc:
+            print("    %s: auto-smooth failed (%s)" % (o.name, exc))
+    if prev is not None:
+        try:
+            bpy.context.view_layer.objects.active = prev
+        except Exception:
+            pass
+    if verbose:
+        print("  shaded %d objects smooth by %.0f degrees" % (n, angle))
+    return n
+
+
 def build(save=False):
     hm = _hm()
     old = bpy.data.collections.get(COLL)
@@ -1390,6 +1519,12 @@ def build(save=False):
         print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
     place_servos(hm, coll)
     _ROD_L.clear()
+    _LED_REST.clear()
+    for side in ("R", "L"):
+        led = bpy.data.objects.get("PROXY_eye_led_%s_LISTING" % side)
+        if led is not None:
+            _LED_REST[side] = led.matrix_world.copy()
+    smooth_all(verbose=True)
     print("  servo horns:")
     phase_horns(verbose=True)
     pose()
@@ -1462,6 +1597,10 @@ def _tree(o):
 SKIP = ("_", "PR_", "PRBED", "PRTITLE", "PRLABEL", "CUT_", "REF",
         "PROXY_", "CHECK_", "SnapEye", "EyeMech", "Assembly", "Base",
         "Component", "ServoSizing")
+# ...except these. A proxy for something that lives INSIDE a printed part
+# still has to fit inside it, and blanket-skipping PROXY_ meant the 5050
+# pixels sat in the middle of the rib for as long as both existed.
+SKIP_EXCEPT = ("PROXY_eye_led_",)
 SKIP_EXACT = {"HEAD_SKIN", "HEAD_SOLID", "MOUNT_ZONE", "HEAD_CYBORG",
               "HEAD_CRANIUM_scriptbuild", "HEAD_REF",
               "forehead_casing_asprinted_13aug"}
@@ -1613,8 +1752,18 @@ def check(sweep=True, verbose=False):
     mine = set(o.name for o in coll.objects if o.type == 'MESH')
     others = [o.name for o in bpy.data.objects
               if o.type == 'MESH' and o.name not in mine
-              and not o.name.startswith(SKIP) and o.name not in SKIP_EXACT]
-    otrees = {n: _tree(bpy.data.objects[n]) for n in others}
+              and o.name not in SKIP_EXACT
+              and (o.name.startswith(SKIP_EXCEPT)
+                   or not o.name.startswith(SKIP))]
+    # Most of the head stands still, so its collision trees are built once.
+    # The 5050 pixels do not - they are glued inside the eyeballs and go
+    # where the eyeballs go - so theirs are rebuilt every pose. Left in the
+    # static set they reported 36 faces of collision at 16 degrees of tilt
+    # that were not there: a moving dome tested against a tree of where the
+    # pixel used to be.
+    moving_others = [n for n in others if n.startswith(SKIP_EXCEPT)]
+    otrees = {n: _tree(bpy.data.objects[n]) for n in others
+              if n not in moving_others}
     real = sorted(n for n in mine if not n.startswith("PROXY_"))
     plist = poses() if sweep else [(0.0, 0.0, LID["park"], LID["park"])]
 
@@ -1626,9 +1775,14 @@ def check(sweep=True, verbose=False):
         pose(*pz)
         here = [n for n in real if bpy.data.objects.get(n) is not None]
         mt = {n: _tree(bpy.data.objects[n]) for n in here}
+        ot = dict(otrees)
+        ot.update({n: _tree(bpy.data.objects[n]) for n in moving_others
+                   if bpy.data.objects.get(n) is not None})
         for e in here:
             for o in others:
-                pairs = mt[e].overlap(otrees[o])
+                if o not in ot:
+                    continue
+                pairs = mt[e].overlap(ot[o])
                 if pairs:
                     k = (e, o)
                     if k not in clashes or len(pairs) > clashes[k][0]:
