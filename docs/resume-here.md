@@ -22,8 +22,8 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 
 ## What to do next
 
-1. **Export STLs for plates 1 and 2** as you come to print them. Plates 3 and
-   4 are done. Run it from `cad/export_plate.py`:
+1. **All four plates are exported.** 3 and 4 are printed; 1 and 2 are waiting
+   in `exports/plate1/` and `exports/plate2/`. To re-export any of them:
 
    ```python
    exec(open(r"C:\Humalien\cad\export_plate.py").read())
@@ -33,6 +33,14 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 
    Naming is `<part>_x<qty>.stl`, and the `_xN` is the quantity to set in the
    slicer, not bodies in the file.
+
+   **The two halves will not share a plate.** 134 mm and 122 mm side by side
+   is exactly 256, with no clearance and no skirt. Two prints, and at
+   209.2 + 130.4 cm³ - about 425 g of PLA - budget a day each, not a day for
+   both.
+
+   **Do not commit plates 1 or 2.** `.gitignore` holds them out; they are cut
+   from the No-AI-licence sculpt.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
@@ -42,8 +50,8 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 
 | Plate | Holds | Status |
 | --- | --- | --- |
-| 1 | `HEAD_CRANIUM` | not exported |
-| 2 | `HEAD_FACE` | not exported |
+| 1 | `HEAD_CRANIUM` | exported 14 Aug, 209.2 cm³, 134 × 215 × 111 mm |
+| 2 | `HEAD_FACE` | exported 14 Aug, 130.4 cm³, 122 × 208 × 74 mm |
 | 3 | `pi5_tray`, `forehead_casing`, `pca9685_mount`, both `eye_bezel`, both `tray_rail`, 4× `cable_anchor` | **printed 13 Aug**, STLs in `exports/plate3/` |
 | 4 | both `ear_hub`, both `ear_spine`, all 5 coupons | exported 14 Aug to `exports/plate4/` |
 
@@ -111,6 +119,40 @@ Worth knowing: `verify()` in that file compares plate copies to source parts
 in **local** coordinates on purpose. Doing it in world space reported all nine
 plate-4 parts as different when the real disagreement was 8×10⁻⁴ mm of float
 noise from the differing transforms and the local distances were bit-identical.
+
+## Assembly order, once plates 3 and 4 are off the bed
+
+**Offer every coupon up to its real board before bolting anything to
+anything.** It takes ten minutes and it is the only reason the coupons exist.
+Three parts already printed on plate 3 rest on numbers only a coupon can
+confirm:
+
+| Coupon | Settles | Already built on it |
+| --- | --- | --- |
+| `coupon_pca9685` | whether the **HiLetgo** clone matches Adafruit's Eagle board — 62.23 × 25.40, Ø2.5 at 55.88 × 19.05 | `pca9685_mount`, whose holes are slotted *because* this is unproven |
+| `coupon_b0385` | the Arducam drawing — 38 × 38, outer pitch 34, inner 28 | `forehead_casing` |
+| `coupon_mg90s` | `servo_tab_pitch = 28.0` — **listing-grade, not dimensioned in any drawing** | every servo pocket in the eye mechanism |
+| `coupon_vl53l1x` | the slot fit measured off a LumaBot holder | `forehead_casing` |
+
+`coupon_mg90s` is the valuable one. That 28.0 is the weakest number in the
+whole CAD file.
+
+Then, none of which needs the shell:
+
+- Solder the PCA9685 headers — **the spare first**, that is why it is a 2-pack
+- Pi 5 onto `pi5_tray`, with both `tray_rail` and the four `cable_anchor`
+- PCA9685 onto `pca9685_mount`
+- Camera and VL53L1X onto `forehead_casing`
+- `ear_hub` + `ear_spine` joined, 2 × M3 × 10 each side
+- Wire it up, `i2cdetect -y 1`, confirm `0x40`, first servo sweep
+
+Blocked until the shell exists: mounting the ear hubs (six M3 through the
+shell) and the eye bezels.
+
+**Fasteners are not in [parts.md](parts.md) and nothing has been bought.**
+The build needs at minimum 4 × M3 × 10 for the two hub joins, M3 for the six
+shell mounts, M3 for the speaker posts, and M2/M2.5 for the boards. This is
+the most likely thing to stop an assembly day dead.
 
 ## The eye mechanism — the real open question
 
