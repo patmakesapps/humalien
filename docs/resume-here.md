@@ -545,6 +545,20 @@ plate copy, by the same local-coordinate fingerprint `export_plate.verify()`
 uses: 72075 vertices, 67574 faces, identical. Pat's call: leave the openings
 alone.
 
+### The dome's print orientation is still wrong
+
+The file claims `eye_dome_R/L` print flat-back-down. They do not, and have not
+since the file was written. Back-face-down puts the pan lever 4 mm below the
+bed and lays the Ø10 journal boss on its side as an unsupported cantilever;
+boss-down starts the sphere as a 90° overhang; boss-up starts it on a point.
+Neither is printable as drawn.
+
+The likely answer is to split the lever and the boss off as a separate part
+that presses into the dome, which would also let the dome print back-down and
+the stem print standing up. Not drawn. **Nothing else in the mechanism has
+this problem** — the frame prints flat on its arch, the gimbal flat in its own
+plane, the shaft and pegs standing on end.
+
 ### The traps, because this geometry invites them
 
 - **The nested-cutter trap, hit a fourth time.** Two overlapping solids merged
