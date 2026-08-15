@@ -193,7 +193,14 @@ P = dict(
     lever_r   = 11.0,
     lever_t   = 3.0,
     pin_drop  = 16.0,       # how far the link pin hangs below the eye line
-    link_d    = 2.6,
+    # Sized for 2 mm steel rod - a bicycle spoke. +0.3 for a joint that has
+    # to pivot freely, against the +0.2 this project uses for an M2 free
+    # hole and +0.4 for an M3: a pivot wants to be looser than a fastener
+    # but not sloppy. If a printed one rattles, take the next to 2.15.
+    #
+    # Only THREE of these holes take wire - the two servo pushrods and the
+    # tilt one. The eyeball-to-bar joints are printed pins on the domes.
+    link_d    = 2.30,
     link_t    = 3.0,
 
     # --- the tilt bearing: one shaft, two tubes, lids on the outside -----
@@ -551,7 +558,7 @@ def eyeball(hm, coll, sx):
     drop_bot = cz - P["pin_drop"] + 3.5
     hm["_cyl"](add, P["link_d"] + 2.6, drop_top - drop_bot,
                (cx, cy - P["lever_r"], (drop_top + drop_bot) / 2.0), 'Z')
-    hm["_cyl"](add, P["link_d"] - 0.1, 8.0,
+    hm["_cyl"](add, P["link_d"] - 0.15, 8.0,
                (cx, cy - P["lever_r"], drop_bot - 4.0 + 0.5), 'Z', segs=24)
     lob = hm["_link"](coll, "_EYEADD_%s" % side, hm["_mesh"]("_EYEADD_%s" % side, add))
     hm["boolean"](ob, lob, 'UNION')
@@ -1325,7 +1332,7 @@ def _rods(tilt=0.0, pan=0.0, lid_R=None, lid_L=None):
         near = horn_pin(name, ang)
         v = far - near
         bm = bmesh.new()
-        hm["_cyl"](bm, 2.5, v.length, tuple((near + far) / 2.0), 'Z',
+        hm["_cyl"](bm, ROD_D, v.length, tuple((near + far) / 2.0), 'Z',
                    direction=tuple(v.normalized()), segs=16)
         ob = hm["_link"](coll, "eye_rod_%s" % name,
                          hm["_mesh"]("eye_rod_%s" % name, bm))
@@ -1669,7 +1676,7 @@ def check(sweep=True, verbose=False):
 
 
 # ---------------------------------------------------------------------------
-ROD_D = 2.5
+ROD_D = 2.0         # the wire, not the hole
 
 
 def skew(verbose=True):
