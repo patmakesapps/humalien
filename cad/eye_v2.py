@@ -895,13 +895,25 @@ def pan_bar(hm, coll):
         bm = _p()
         hm["_box"](bm, (5.0, 4.0, dip + P["link_t"] + 2.0),
                    (sx * 28.5, py, pz - dip / 2.0))
+    # And a lug hanging below the dip for the servo's own pushrod.
+    #
+    # Pinned straight into the dip, the rod ran along the underside of the
+    # bar and fouled it by 0.84 mm at full pan and down-tilt - which the
+    # overlap test could never report, because a rod in its own pin hole is
+    # in ALLOWED. `clearances()` found it. Six millimetres of lug puts the
+    # joint clear of the bar's body and the rod approaches from open air.
+    bm = _p()
+    hm["_box"](bm, (8.0, 4.0, PAN_LUG + P["link_t"] + 2.0),
+               (SERVOS["pan"]["drive"][0], py,
+                pz - dip - PAN_LUG / 2.0 + (P["link_t"] + 2.0) / 2.0))
     bar = _union(hm, coll, "eye_pan_bar", prims)
     cut = bmesh.new()
     for sx in (-1, 1):
         hm["_cyl"](cut, P["link_d"], 20.0,
                    (sx * P["pitch"] / 2.0, py, pz), 'Z', segs=24)
     hm["_cyl"](cut, P["link_d"], 20.0,
-               (SERVOS["pan"]["drive"][0], py, pz - dip), 'Z', segs=24)
+               (SERVOS["pan"]["drive"][0], py, pz - dip - PAN_LUG),
+               'Z', segs=24)
     hm["_apply"](coll, bar, cut, "_CUT_pan_bar", 'DIFFERENCE')
     return bar
 
@@ -918,6 +930,7 @@ SERVO = dict(l=22.5, w=12.0, h=22.7, total_h=35.5,
              shaft_d=5.5, shaft_up=4.5, shaft_off=6.0)
 
 SERVO_Y = 126.0     # all four shafts in one plane, so one plate carries them
+PAN_LUG = 6.0       # how far the pan bar's drive pin hangs below the dip
 
 # All four servos are on the FIXED plate, and that settles a contradiction
 # this file used to carry. The header said pan and both lids "ride on the
@@ -951,7 +964,8 @@ SERVO_Y = 126.0     # all four shafts in one plane, so one plate carries them
 # them - it goes under. That is what fixes the servo heights, not packing.
 SERVOS = {
     "pan":   dict(loc=(24.0, SERVO_Y, 163.0), axis=None,  horn=11.0,
-                  drive=(24.0, P["y"] - P["lever_r"], P["z"] - P["pin_drop"] - 8.0)),
+                  drive=(24.0, P["y"] - P["lever_r"],
+                         P["z"] - P["pin_drop"] - 12.0 - PAN_LUG)),
     "tilt":  dict(loc=(-4.0, SERVO_Y, 145.0), axis='X',   horn=13.6,
                   drive=(0.0, 156.0, P["cradle_z0"] - 6.0)),
     "lid_R": dict(loc=(12.8, SERVO_Y, 206.0), axis='-X',  horn=15.0,
@@ -1577,6 +1591,184 @@ def check(sweep=True, verbose=False):
 
 
 # ---------------------------------------------------------------------------
+ROD_D = 2.5
+
+
+def clearances(step=4.0, verbose=True):
+    """How close does each pushrod get to everything, through the range?
+
+    Overlap and clearance are different questions, and this file only had the
+    first. A rod that misses the eyeball by 0.1 mm reports exactly the same as
+    one that misses it by four, and only one of them can be built - the rods
+    are wire, they are bent by hand, and the eyeball is a printed sphere with
+    a printed sphere's tolerances.
+
+    It samples along each rod's axis rather than testing meshes against each
+    other, because a rod IS its axis plus a radius, and `closest_point_on_mesh`
+    is exact and cheap.
+    """
+    coll = bpy.data.collections.get(COLL)
+    if coll is None:
+        print("no %s collection" % COLL)
+        return {}
+    if "horn0" not in SERVOS["pan"]:
+        phase_horns()
+    if not _ROD_L:
+        _rods()
+    against = [o for o in bpy.data.objects
+               if o.type == 'MESH'
+               and (o.name.startswith("eye_") or o.name in
+                    ("HEAD_FACE", "HEAD_CRANIUM", "FIT_forehead_casing"))
+               and not o.name.startswith("eye_rod_")]
+    out = {}
+    t, p, k = P["tilt_max"], P["pan_max"], LID["park"]
+    poses_ = []
+    ti = -t
+    while ti <= t + 0.01:
+        pa = -p
+        while pa <= p + 0.01:
+            li = 0.0
+            while li <= k + 0.01:
+                poses_.append((ti, pa, li, li))
+                li += k / 4.0
+            pa += p
+        ti += t
+    for pz in poses_:
+        pose(*pz)
+        pts = _drive_points(*pz)
+        for name in ("pan", "tilt", "lid_R", "lid_L"):
+            far = pts[name]
+            ang, _e = solve_horn(name, far, _ROD_L[name])
+            near = horn_pin(name, ang)
+            n = max(6, int((far - near).length / step))
+            # The last 4 mm at each end is inside a pin boss on purpose, so
+            # it is not clearance, it is the joint.
+            for i in range(n + 1):
+                f = i / float(n)
+                q = near.lerp(far, f)
+                if (q - far).length < 4.5 or (q - near).length < 4.5:
+                    continue
+                for o in against:
+                    inv = o.matrix_world.inverted()
+                    hit, loc, nrm, _i = o.closest_point_on_mesh(inv @ q)
+                    if not hit:
+                        continue
+                    d = ((o.matrix_world @ loc) - q).length - ROD_D / 2.0
+                    key = (name, o.name)
+                    if key not in out or d < out[key][0]:
+                        out[key] = (d, pz, q.copy())
+    pose()
+    if verbose:
+        print("pushrod clearance, worst over %d poses "
+              "(joint ends excluded):" % len(poses_))
+        rows = sorted(out.items(), key=lambda kv: kv[1][0])
+        for (rod, obj), (d, pz, q) in rows[:14]:
+            flag = "TOUCHING" if d < 0.3 else ("tight" if d < 1.0 else "")
+            print("  eye_rod_%-6s vs %-20s %6.2f mm  at tilt %+.0f pan %+.0f "
+                  "lid %.0f  (%.1f %.1f %.1f) %s"
+                  % (rod, obj, d, pz[0], pz[1], pz[2], q.x, q.y, q.z, flag))
+    return out
+
+
+def _volume(ob):
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    v = bm.calc_volume(signed=True)
+    bm.free()
+    return v
+
+
+def _health(name, tag=""):
+    """open / non-manifold / degenerate, in one line."""
+    ob = bpy.data.objects.get(name)
+    if ob is None:
+        return "%s: missing" % name
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    openE = sum(1 for e in bm.edges if len(e.link_faces) == 1)
+    nonm = sum(1 for e in bm.edges if len(e.link_faces) > 2)
+    tiny = sum(1 for f in bm.faces if f.calc_area() < 1e-5)
+    n = len(bm.verts)
+    bm.free()
+    return ("%s %s: %d v, open %d, non-manifold %d, near-zero-area faces %d"
+            % (name, tag, n, openE, nonm, tiny))
+
+
+def _eye_axis(sx):
+    """The direction the socket on side sx faces.
+
+    Same construction as `head_style.eye_axis`, and the two angles are
+    `head_style.S["eye"]["rake_out"]` = 25 and `["rake_down"]` = 10. The
+    socket's bore is centred on the eyeball, so this axis runs through the
+    ball's centre and therefore through the tilt axis as well - which is why
+    a rim coaxial with the bore clears an eyelid concentric with the ball by
+    the same amount all the way round.
+    """
+    o, d = math.radians(25.0), math.radians(10.0)
+    return Vector((sx * math.sin(o), math.cos(o) * math.cos(d),
+                   -math.sin(d))).normalized()
+
+
+SOCKET_BORE = 37.6      # the new opening
+SOCKET_CUT  = 41.0      # what head_style.S["eye"]["dia"] cut it at
+SOCKET_END  = 25.0      # the rim stops on a sphere this far from the eye
+                        # centre, so it has no flat annular end face
+
+
+def socket_aperture(bore_only=True):
+    """Measure the eye openings: rays outward from the socket axis until they
+    leave HEAD_FACE's material. Reports the radius of the hole, not a guess."""
+    face = bpy.data.objects.get("HEAD_FACE")
+    if face is None:
+        return {}
+    inv = face.matrix_world.inverted()
+    out = {}
+    for sx, side in ((1, "R"), (-1, "L")):
+        c = Vector((sx * P["pitch"] / 2.0, P["y"], P["z"]))
+        ax = _eye_axis(sx)
+        u = ax.cross(Vector((0.0, 0.0, 1.0))).normalized()
+        v = ax.cross(u).normalized()
+        rs = []
+        for k in range(24):
+            a = 2.0 * math.pi * k / 24.0
+            d = (u * math.cos(a) + v * math.sin(a)).normalized()
+            # start on the axis, just inside the skin
+            best = None
+            for t in (19.0, 21.0, 23.0):
+                org = c + ax * t
+                hit, loc, nrm, _i = face.ray_cast(inv @ org,
+                                                  (inv.to_3x3() @ d).normalized(),
+                                                  distance=1e6)
+                if hit:
+                    r = ((face.matrix_world @ loc) - org).length
+                    best = r if best is None else min(best, r)
+            if best is not None:
+                rs.append(best)
+        if rs:
+            out[side] = (min(rs), sum(rs) / len(rs), max(rs))
+    return out
+
+
+# A rim inside the eye openings was tried on 15 Aug and thrown away. The
+# measurement that prompted it stands and is worth keeping: `socket_aperture()`
+# reports the opening's radius as 20.48 at its tightest and 34.21 at its
+# widest, against an eyeball of 16 - so the gap is not 4.5 mm all round, it is
+# 4.5 at one edge and 18 at another, because the bore is raked 25 out and 10
+# down while the ball is not. That is what you see through the face.
+#
+# The rim itself does not go back in without a different approach. Built as an
+# annulus coaxial with the bore and trimmed against HEAD_SOLID, it came out as
+# a tube standing proud of the cheek like a lens barrel - the trim did not
+# take - and its flat annular end face unioned into HEAD_FACE as a single
+# 145-sided n-gon, which every BVH and every slicer triangulates straight
+# across the hole. Anyone picking this up again should note that the second
+# fault is the more dangerous of the two: the model looked fine and the
+# exported STL would have had a disc across the eye socket.
+#
+# Pat's call, 15 Aug: leave the openings alone.
+
+
 def casing_relief(apply=False):
     """What the forehead casing has to give up so an upper eyelid can exist.
 
@@ -1615,12 +1807,41 @@ def casing_relief(apply=False):
         print("dry run - call casing_relief(apply=True) to cut it, and then")
         print("re-export plate 5 before printing it")
         return
-    coll = ob.users_collection[0]
-    cut = bmesh.new()
-    for sx in (-1, 1):
-        hm["_box"](cut, (18.0, 12.0, 3.0),
-                   (sx * P["pitch"] / 2.0, 164.5, P["casing_z"] + 1.0))
-    hm["_apply"](coll, ob, cut, "_CUT_casing_relief", 'DIFFERENCE')
+    # BOTH copies, and that is not belt and braces. `export_plate` reads the
+    # source `forehead_casing`; the assembly - and therefore every collision
+    # test in this file - sees `FIT_forehead_casing`. Cut one and the part
+    # you print is right while the model still says it clashes; cut the
+    # other and the model goes quiet while the printed part still fouls.
+    # This project has already lost a hand edit to exactly that split.
+    # FIT first, and that order is the whole trick. The cutter is built in
+    # world coordinates; `FIT_forehead_casing` is in the head where the eyes
+    # are, and `forehead_casing` is parked out on the print bed at x=520. A
+    # box at x=+-31 misses the source completely - it "cut" it and changed
+    # nothing, 1567 vertices in and 1567 out. So cut the copy that is in the
+    # right place, then hand the source that mesh.
+    done = 0
+    for nm in ("FIT_forehead_casing",):
+        o = bpy.data.objects.get(nm)
+        if o is None:
+            print("  %s: not in the file" % nm)
+            continue
+        n0 = len(o.data.vertices)
+        cut = bmesh.new()
+        for sx in (-1, 1):
+            hm["_box"](cut, (18.0, 12.0, 3.0),
+                       (sx * P["pitch"] / 2.0, 164.5, P["casing_z"] + 1.0))
+        hm["_apply"](o.users_collection[0], o, cut,
+                     "_CUT_casing_relief_%s" % nm, 'DIFFERENCE')
+        print("  %-22s %d -> %d vertices" % (nm, n0, len(o.data.vertices)))
+        done += 1
+    src = bpy.data.objects.get("forehead_casing")
+    fit = bpy.data.objects.get("FIT_forehead_casing")
+    if done and src is not None and fit is not None:
+        old = src.data
+        src.data = fit.data.copy()
+        bpy.data.meshes.remove(old)
+        print("  forehead_casing now carries the same mesh, %d vertices"
+              % len(src.data.vertices))
     print("cut. re-export plate 5.")
 
 

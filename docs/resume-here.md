@@ -66,9 +66,10 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
-3. **The eye mechanism is drawn, checked through its whole range, and has
-   one open decision** — a 2 mm scallop in `forehead_casing`, which is on
-   plate 5 and unprinted. See below. Cogley's ε3.2 is reference only.
+3. **The eye mechanism is drawn and passes its checks through the whole
+   range.** `forehead_casing` has been relieved 2 mm for the eyelids, so
+   **plate 5 must be re-exported before printing**. Cogley's ε3.2 is
+   reference only.
 
 ## The six plates
 
@@ -413,8 +414,8 @@ plus one lid per eye so they can wink independently.
 | `eye_pan_bar` | 188 v | links both eye levers, dipped in the middle |
 
 All ten: one shell, watertight, zero open edges, zero non-manifold, zero weld
-debt, and inside the head at every pose. **One clash remains and it is a
-decision rather than a fault** — see below.
+debt, and inside the head at every pose. **`check()` passes** — no collision
+with anything, at any of the twenty-nine poses it sweeps.
 
 Ranges, and every one of them is what the linkage can really deliver rather
 than what it was asked for: pan **±30°**, tilt **±16°**, each lid **52°**.
@@ -474,40 +475,75 @@ is only open through the pad itself. In front of it the eyeballs start: panned
 30°, a dome swings its back rim to y=146.7. Four millimetres, and the arch
 fills them.
 
-### The one thing left, and it needs a decision
+### The casing relief: decided and cut
 
-**`forehead_casing` has to give up about 2 mm.** The eyelid is a shell over
-the ball with 0.35 of running clearance and 1.2 of wall, so its outer surface
-is 17.55 from the eye centre against the ball's 16. The ball's top is z=225.
-The casing's underside is z=225 and it is **solid from x=−47 to +47** —
-checked by ray, not assumed. Wherever the lid crosses the top of the eye it
-stands 1.7 mm proud of the ball, and that is where the casing is.
+**`forehead_casing` gave up 2 mm, and `check()` passes.** The eyelid is a
+shell over the ball with 0.35 of running clearance and 1.2 of wall, so its
+outer surface is 17.55 from the eye centre against the ball's 16. The ball's
+top is z=225. The casing's underside was z=225 and solid from x=−47 to +47 —
+checked by ray, not assumed. Thinning the lid does not escape it, and parking
+it differently does not either; the band has to pass over the top of the eye.
 
-Thinning the lid does not fix it — at 0.9 of wall and 0.25 of gap it is still
-1.15 mm proud, and 0.9 mm is not a lid. Parking it differently does not either;
-the band has to pass over the top to get anywhere.
+So there is now a scallop 18 mm wide and 3 mm deep in the bottom rim of each
+eye's share of the casing. It is the edge of a panel that runs up to z=283 and
+carries nothing down there. Over the eyes the casing now starts at z=227.5;
+everywhere else it still starts at 225. Both copies are watertight, and the
+source and the plate copy agree by fingerprint.
 
-So: a scallop 18 mm wide and 3 mm deep in the bottom rim of the casing over
-each eye. `casing_relief()` prints the arithmetic and does nothing;
-`casing_relief(apply=True)` cuts it. **The part is on plate 5 and unprinted,
-so this is a decision rather than a problem** — but plate 5 has to be
-re-exported afterwards, and `check()` will keep saying FAIL until it is done.
+**Plate 5 has to be re-exported before it is printed.**
 
-### Two things the renders showed that no number would have
+`casing_relief()` prints the arithmetic and does nothing; `(apply=True)` cuts.
 
-**The eyeball does not fill its socket.** A Ø32 ball in a Ø41 opening raked
-25° out and 10° down leaves a crescent you can see the mechanism through,
-worst at the lower-outboard corner. That is what `eye_bezel_R/L` were for, and
-the brief retired them because the openings became "smooth Ø41 circles". They
-did; the ball still does not fill them. Bezel, bigger ball, or smaller
-opening — and none of the three is drawn.
+**Cut the FIT copy, not the source.** The cutter is built in world
+coordinates. `FIT_forehead_casing` is in the head where the eyes are;
+`forehead_casing` is parked out on the print bed at x=520. A box at x=±31
+misses the source completely — it "cut" it and changed nothing, 1567 vertices
+in and 1567 out, with no error — while the assembly went quiet because the
+copy *had* been cut. `casing_relief()` now cuts the copy that is in the right
+place and hands the source that mesh, so the two cannot drift.
 
-**The dome's print orientation is unresolved**, and the claim that it prints
-flat-back-down is wrong — it has been wrong since the file was written.
-Back-face-down puts the pan lever 4 mm below the bed and lays the Ø10 journal
-boss on its side as a cantilever. Neither is printable as drawn. The likely
-answer is to split the lever and the boss off as a part that presses into the
-dome, but that has not been drawn either.
+### Clearance is a different question from collision
+
+`clearances()` is new, and it earns its place immediately. Overlap tells you
+about contact; it says nothing about a rod that misses the eyeball by a tenth
+of a millimetre, and these rods are wire, bent by hand, running past printed
+spheres. Worse, the pushrods sit in ALLOWED — a rod in its own pin hole is a
+joint — so the overlap test was structurally blind to them.
+
+It samples along each rod's axis and asks `closest_point_on_mesh`, ignoring
+the last 4.5 mm at each end because that is the joint. First run:
+
+- **`eye_rod_pan` was 0.84 mm INSIDE `eye_pan_bar`** at full pan and
+  down-tilt, and had been the whole time. Pinned straight into the dipped
+  middle of the bar, the rod ran along the bar's own underside. It now pins to
+  a lug hanging 6 mm below the dip, and clears by 4.66 mm.
+- the two eyelid rods pass the gimbal with **0.52 mm**. Tight, and known.
+- nothing else is closer than 1.8 mm.
+
+### The eye openings: measured, and left alone
+
+`socket_aperture()` reports the opening's radius as **20.48 at its tightest
+and 34.21 at its widest** against an eyeball of 16. The gap is not 4.5 mm all
+round; it is 4.5 at one edge and 18 at another, because the bore is raked 25°
+out and 10° down while the ball is not. That is what you see through the face.
+
+A rim inside the opening was tried and thrown away, and the second of its two
+faults is worth carrying forward:
+
+- built as an annulus coaxial with the bore and trimmed against `HEAD_SOLID`,
+  it came out standing proud of the cheek **like a lens barrel** — the trim
+  did not take;
+- its flat annular end face unioned into `HEAD_FACE` as a **single 145-sided
+  n-gon**, and every BVH and every slicer triangulates such a face straight
+  across its own hole. The model looked right and the exported STL would have
+  had a disc across the eye socket. Triangulating to tidy it up is not the
+  answer either — the sculpt has 3378 legitimate n-gons and triangulating
+  those put 9 non-manifold edges into a printed part for nothing.
+
+`HEAD_FACE` was restored and verified against `PR_HEAD_FACE`, its untouched
+plate copy, by the same local-coordinate fingerprint `export_plate.verify()`
+uses: 72075 vertices, 67574 faces, identical. Pat's call: leave the openings
+alone.
 
 ### The traps, because this geometry invites them
 
