@@ -417,6 +417,86 @@ head *is*. And the openings have to be clustered before they are measured,
 or the ear ports get averaged in with the eyes and the answer comes out as
 92.6 mm.
 
+## The eye mechanism — bespoke, and started 15 Aug
+
+**Cogley's ε3.2 is reference only. It will not be printed.** Two reasons: it
+is **CC BY-NC-SA**, so none of his geometry can ship here and nothing built on
+it can be commercial; and every one of his plates needs support material,
+which nothing else in this project does.
+
+`cad/eye_v2.py` — `build()` makes the `EYE_v2` collection, `check()` proves it.
+
+**Four servos**, against his six: pan and tilt each linked across both eyes,
+plus one lid per eye so they can wink independently. What that gives up is
+per-eye pan, which buys convergence — real, but subtle, and it doubles the
+linkage count.
+
+### Built and verified
+
+| part | | |
+| --- | --- | --- |
+| `eye_dome_R`/`_L` | 2144 v | Ø32 dome, hollow for the 5050 pixel, pole sockets, pan lever |
+| `eye_gimbal` | 692 v | tilt frame, both yokes, trunnions at ±48.5 |
+| `eye_frame_R`/`_L` | 273 v | temple brackets, spigot into the Ø5.2 pad bore |
+
+All five: one shell, watertight, zero weld debt, inside the head.
+
+### Still to build
+
+Pan link, lid shells and lid arms, servo mounts. **None of it changes the
+head**, which is why the head halves went on the printer first.
+
+### The decisions, so they are not re-litigated
+
+**A gimbal, not a ball in a socket.** Two pushrods pulling on one free body
+fight each other, and slop in one shows up as error in the other.
+
+**The eyeballs are domes.** Only the front is ever visible through a Ø41
+socket. A sphere would have to split into hemispheres, and with a vertical pan
+axis the split plane contains both poles — so the seam lands across the iris
+*and* the pivots land on the seam. A dome cut 7 mm behind centre is one piece,
+prints flat-back-down leaning 13°, and seams where nothing sees it.
+
+**The pan servo rides on the gimbal**, with the two lid servos. On the fixed
+frame its pushrod would chase a lever tilting away from it and pan would
+become a function of tilt. Only the tilt servo is on the frame.
+
+**The mechanism needs no new holes in the head.** The frame spigots into the
+temple dowel pads that are already in both printed halves.
+
+### Numbers that were measured, and one that was wrong twice
+
+- Eyeball centres **x = ±31, y = 160, z = 209**; Ø41 sockets raked 25° out,
+  10° down.
+- The bay is ~116 mm wide and 30 mm deep at full width (y 130..160), then
+  narrows to a **73 mm corridor** behind y=125 where the ear hubs pinch in.
+  The servos live in that corridor.
+- **Tilt bearings at |x| = 48.5.** On the tilt axis `MOUNT_ZONE` runs out
+  between 50 and 52 and the eyeballs reach 47 — a **three-millimetre window**.
+  Thin for a beam, ample for a bearing on a 97 mm span, and the tightest thing
+  in the design. **If the printed gimbal binds, look here first.**
+- **The temple pad bore is at x = 49.79**, not 57.79. 57.79 is the inner wall
+  face, which is what a probe walking outward until it hits something finds.
+  A frame built on it put 107 vertices outside the skin.
+
+### Three faults the checker caught that inspection would not
+
+Worth knowing because they are the shapes of mistake this geometry invites:
+
+- The gimbal built as **7 disconnected shells** because one stub axle stopped
+  **0.4 mm** short of its arm. Every shell individually healthy.
+- The frame's Ø11 bearing bosses reached 5.5 mm forward of the tilt axis into
+  a skull that is narrowing there. They are D-shaped now, taking their
+  material backwards where there is room.
+- Merging primitives into one bmesh and self-unioning afterwards leaves
+  non-manifold edges — EXACT will not resolve a dozen coincident faces in one
+  pass. Each part is now unioned **one primitive at a time**, which is what
+  `head_mounts` does and for the same reason.
+
+`check()` tests containment against **HEAD_SOLID, not MOUNT_ZONE** — the zone
+has the eye openings subtracted, and the eyeball is supposed to sit in one, so
+checking a dome against the zone reports the entire visible eye as a fault.
+
 ## Still open
 
 - **The SHT41 has no case, and no part in the CAD file at all.** It is in
