@@ -6,9 +6,11 @@ do next**; the rest is why.
 ## 15 Aug in one line
 
 The ear hub bosses that broke off the printer were **never attached** — the
-hub exported as five separate solids — and that, a sealed screw hole, a stale
-casing in the assembly and a missing plate are all now fixed. **Plate 5 is
-exported and ready to print.**
+hub exported as five separate solids. That, a sealed screw hole, a camera
+pocket the Arducam could not seat in, PCA9685 standoffs fouling the pin tails,
+and a stale casing in the assembly are all fixed. **`eye_pitch` turned out to
+be settled at 62 all along, so the head halves are unblocked**, and the eye
+mechanism is now a bespoke design rather than Cogley's.
 
 ## State of the file
 
@@ -38,16 +40,12 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 
 ## What to do next
 
-0. **Print plate 5.** `exports/plate5/` — both ear hubs and the re-cut
-   `forehead_casing`. This is the plate that unblocks everything else.
-   Then the head halves, plates 1 and 2, one print each.
+0. **Print plate 5** — `forehead_casing` and `pca9685_mount`, the two parts
+   that need running again. Then the head halves, plates 1 and 2, one print
+   each; nothing gates them any more.
 
-   When the hubs come off: the bosses should be part of the disc, with a
-   visible cone at the base of each. If any of them is a loose peg again,
-   stop — that means the file being sliced is not `exports/plate5/`.
-
-1. **All five plates are exported.** 3, 4 and 5 are printed or ready; 1 and 2
-   are waiting in `exports/plate1/` and `exports/plate2/`. To re-export any:
+1. **All six plates are exported.** 3, 4 and 6 are printed; 5 is the reprint
+   plate; 1 and 2 are waiting. To re-export any:
 
    ```python
    exec(open(r"C:\Humalien\cad\export_plate.py").read())
@@ -68,49 +66,47 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
-3. **The eye mechanism** is the open design question. See below.
+3. **The eye mechanism is now a bespoke design.** Cogley's ε3.2 is reference
+   only — it will not be printed. See below.
 
-## The five plates
+## The six plates
 
 | Plate | Holds | Status |
 | --- | --- | --- |
-| 1 | `HEAD_CRANIUM` | exported 14 Aug, 209.2 cm³, 134 × 215 × 111 mm |
-| 2 | `HEAD_FACE` | exported 14 Aug, 130.4 cm³, 122 × 208 × 74 mm |
-| 3 | `pi5_tray`, `pca9685_mount`, both `eye_bezel`, both `tray_rail`, 4× `cable_anchor` | **printed 13 Aug**, STLs in `exports/plate3/` |
-| 4 | both `ear_spine`, all 5 coupons | **printed 14 Aug**, STLs in `exports/plate4/` |
-| 5 | both `ear_hub`, `forehead_casing` | **the reprint plate** — exported 15 Aug to `exports/plate5/` |
+| 1 | `HEAD_CRANIUM` | 209.2 cm³, 134 × 215 × 111 mm — **not printed, and no longer blocked** |
+| 2 | `HEAD_FACE` | 130.4 cm³, 122 × 208 × 74 mm — **not printed, and no longer blocked** |
+| 3 | `pi5_tray`, both `eye_bezel`, both `tray_rail`, 4× `cable_anchor` | **printed 13 Aug** |
+| 4 | both `ear_spine`, all 5 coupons | **printed 14 Aug** |
+| 5 | `forehead_casing`, `pca9685_mount` | **the reprint plate** — 15 Aug |
+| 6 | both `ear_hub` | **printed 15 Aug**, after the boss fix |
 
-Plate 5 is the three parts that have to be printed again: the two ear hubs
-because their bosses were never attached, and `forehead_casing` because the
-hand edit to its camera cable exit had never reached the part the exporter
-reads. Both hubs are 84.4 × 81.6 × 20.6 mm and the casing 96 × 58 × 5; on a
-256 bed they sit 7.6 mm and 30.2 mm apart with 39.8 mm to the nearest edge.
+**Plate 5 is the only one waiting.** `forehead_casing` because its camera
+pocket would not accept the Arducam, and `pca9685_mount` because its standoffs
+fouled the board's pin tails. They sit 14.3 mm apart.
 
-`ear_hub` and `forehead_casing` were **moved off** plates 4 and 3 rather than
-copied, so no part appears on two plates and no plate says "print me" twice.
-The STLs they leave behind are superseded, so they were moved to
-`exports/plate3/superseded/` and `exports/plate4/superseded/` — kept, because
-they are the record of what actually came off the bed, but out of the folder
-you drag into a slicer.
+Parts were **moved** between plates rather than copied, so no part appears on
+two plates and no plate says "print me" twice. `exports/` is one folder per
+plate, current geometry only — the superseded files were deleted, because git
+history already holds every one of them and all they did in the working tree
+was make it ambiguous which STL to print.
 
 **The two ear hubs grew.** The root flare took them from 74.4 to 84.4 mm
-across, and on plate 4 they had been hand-placed 82.4 mm apart — so on the old
-layout they would now **overlap by 2 mm**. Moving them was necessary, not
-tidiness.
-
-`exports/` is one folder per plate — `exports/plate3/`, `exports/plate4/`.
-Everything in `plate3/` is exactly the files that were printed on 13 Aug,
-moved rather than regenerated, so it stays a record of what came off the bed.
+across, and they had been hand-placed 82.4 mm apart on plate 4 — so on the old
+layout they would now **overlap by 2 mm**. Moving them to plate 6 was
+necessary, not tidiness.
 
 The plate layout lives in the `print ready` collection and includes a hand
 arrangement: `ear_hub_L` was moved to sit with `ear_hub_R`. That position is in
 the `.blend` only. There is no script left that rebuilds the collection, on
 purpose — the one that did was deleted so it could not overwrite the layout.
 
-**Checked before you ask:** all 22 plate copies are the same geometry as the
-part in the assembled head, compared by a fingerprint that ignores position and
-rotation. Every part is a closed, manifold solid — zero open edges, zero
-non-manifold edges.
+**Checked before you ask:** all 31 `FIT_`/`PR_` copies are the same geometry
+as the part they copy, compared by a fingerprint that ignores position and
+rotation — vertex and face counts, scale, and the sorted vertex-to-centroid
+distances in local coordinates. A vertex count alone would pass two different
+parts that happen to have the same number of points. Every part is a closed,
+manifold solid, and every exported STL is one connected shell with every edge
+shared exactly twice and zero degenerate triangles.
 
 ## What 15 Aug found, and fixed
 
@@ -336,8 +332,9 @@ resolvable by measuring the file:
   carried a slotted 20 mm grid rather than holes. It stays unknown until the
   reference mechanism is assembled. The brief's rule stands: *do not start
   cutting geometry that depends on those answers before they exist.*
-- **`eye_pitch` is unresolved** — sculpted sockets at 56, design value 62. One
-  number, and it is a decision, not a calculation.
+- **`eye_pitch` is SETTLED at 62** — see the section above. It was never a
+  decision, only an unrecorded fact: `head_style.S["eye"]["pitch"]` is 62 and
+  the sockets were cut on it.
 - **Licence.** Cogley's ε3.2 is CC BY-NC-SA. Measurements are facts and carry
   no licence; geometry does. Nothing of his may end up in this repo.
 
@@ -378,6 +375,47 @@ What that means in practice:
   well behind the eye bay at y≈131, so they do not fight the eye mechanism.
   **Watch the top edge** — 100 mm centred on the ear line reaches z≈254 and
   the Pi tray is at z=256. Glue a few mm low.
+
+## eye_pitch is 62, and the head is unblocked — 15 Aug
+
+**Settled. It was never really open**, it was only unrecorded. `head_style.S`
+has carried the answer all along:
+
+```python
+eye = dict(pitch=62.0, y=160.0, z=209.0, dia=41.0,
+           rake_out=25.0, rake_down=10.0)
+```
+
+The sockets were cut on that, so the head is already a pitch-62 head. The
+"sculpted sockets at 56" note was stale.
+
+Confirmed against the geometry rather than taken from the constant. Sweeping
+−y rays across `HEAD_FACE` and comparing each hit against `HEAD_SOLID` — a
+gap in the face where the solid silhouette has material is an opening —
+clusters into four openings: the two eye sockets at **x = ±34.0, 36 wide ×
+40 tall, centred z = 205.6**, and the two ear ports at ±67.
+
+Those numbers *are* pitch 62, seen through the rake. The openings sit at ±34
+rather than ±31 because 25° of outward rake carries the skin aperture
+outboard of the ball centre; the projected width is 36 against 41·cos 25° =
+37.2; and the centre falls at z 205.6 rather than 209 because of the 10° of
+downward rake.
+
+**Consequences:**
+
+- **Plates 1 and 2 no longer wait on anything.** The head can be printed
+  whenever. It was the last thing gating them.
+- `HEAD_CRANIUM` does not need re-cutting, so the `USERFIX` hand edit and the
+  six hand-made plugs are not at risk.
+- The eye mechanism has a hard target: **two Ø32 eyeballs centred at
+  x = ±31, y = 160, z = 209**, in Ø41 sockets raked 25° out and 10° down.
+
+Two traps if anyone re-measures this. A −y ray at the socket passes clean
+through `HEAD_FACE` and hits nothing, which is indistinguishable from being
+off the head entirely — test against `HEAD_SOLID` first to know where the
+head *is*. And the openings have to be clustered before they are measured,
+or the ear ports get averaged in with the eyes and the answer comes out as
+92.6 mm.
 
 ## Still open
 
