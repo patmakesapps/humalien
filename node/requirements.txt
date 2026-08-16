@@ -1,1 +1,4 @@
 websockets==16.1
+
+adafruit-blinka==9.2.0
+adafruit-circuitpython-pca9685==3.4.22
