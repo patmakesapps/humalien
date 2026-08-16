@@ -215,7 +215,22 @@ P = dict(
     web_x1    = 6.8,
 
     # --- the gimbal cradle ----------------------------------------------
-    cradle_y0 = 154.0,
+    # 154.0 until the plate was measured, and it made the part unprintable
+    # without either supports or thinner bearings. The gimbal lies in its own
+    # plane to print, so this face IS the first layer - except that it was not
+    # the lowest thing on the part. The tilt lever hangs to y=153.0 and both
+    # O13 journal housings bulge to 153.5, so the whole 620 mm2 floor sat a
+    # millimetre in the air on a 10 mm lug: 100 mm2 of a 1532 mm2 shadow.
+    #
+    # Trimming those three flush is the obvious fix and it is the wrong one -
+    # it takes the wall under both pan bores from 1.35 to 0.85 mm and under
+    # the tilt link pin from 1.85 to 0.85. Dropping the floor instead ADDS
+    # a millimetre, swallows both housings, and lands flush with the lever.
+    #
+    # It costs a millimetre of clearance behind: the frame's arch is at
+    # y 145.5..149.5, so this leaves 3.5 mm rather than 4.5. check() sweeps
+    # it. The z floor is the one that cannot move - see pan_z0 above.
+    cradle_y0 = 153.0,
     cradle_y1 = 166.0,
     cradle_z0 = 180.0,
     cradle_z1 = 190.0,

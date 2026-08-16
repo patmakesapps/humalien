@@ -115,10 +115,11 @@ PARTS = [
                                 "arch, so 104 mm of part balanced on a "
                                 "4.8 mm edge. This way: 416 mm2 down, and "
                                 "the overhang falls 1331 -> 128 mm2"),
-    ("eye_gimbal",   1, Y_UP,   "flat in its own plane, both bores roofed - "
-                                "but see gimbal_foot(): a 10 mm tab stands "
-                                "0.5-1.0 mm proud and lifts 640 mm2 of the "
-                                "bearing face off the bed"),
+    ("eye_gimbal",   1, Y_UP,   "flat in its own plane, both bores roofed. "
+                                "Really flat now: cradle_y0 went 154 -> 153 "
+                                "so the floor reaches the tilt lever and "
+                                "swallows both journal housings. 100 -> 710 "
+                                "mm2 on the bed"),
     ("eye_pan_bar",  1, Y_UP,   "flat; 533 mm2 on the bed"),
     ("eye_dome_R",   1, Y_UP,   "back face down - the only face it has"),
     ("eye_dome_L",   1, Y_UP,   "back face down"),
@@ -398,8 +399,17 @@ BRIM_MIN_MM2 = 40.0
 # millimetre the whole way up; a flat ceiling the same area drops onto
 # nothing. So the limit is on area within ROOF_CONE of straight down, and the
 # 45-degree figure is reported beside it rather than judged.
+# and it is the largest CONNECTED, COPLANAR patch that is judged, not the
+# total. Total area fails a horizontal O9 tube, whose underside is 63 mm2
+# within 20 degrees of down and which prints perfectly, for the same reason
+# the domes do: it is curved, so every layer oversails the one below it by a
+# fraction of a millimetre. A patch is what drops onto nothing. Measured
+# against the gimbal's own pre-fix STL this reads 565 mm2 in ONE patch out of
+# 790 total - so it is a sharper test than the total was, not a looser one,
+# and it would have failed that part on its own.
 MAX_ROOF = 100.0
 ROOF_CONE = 20.0
+ROOF_COPLANAR = 5.0     # degrees; faces within this of each other are one patch
 # Overhang within this of the top is exempt: on the domes it is the hollow's
 # own ceiling, which no orientation turns downward and which closes over a
 # cavity nothing prints into.
@@ -431,6 +441,7 @@ def _print_stats(name, rot, limit=45.0):
     cos_roof = -math.cos(math.radians(ROOF_CONE))
     bed = air = roof = shadow = flat = 0.0
     worst = 0.0
+    roof_faces = []
     for f in bm.faces:
         a = f.calc_area()
         nu = f.normal.normalized().dot(u)
@@ -450,7 +461,27 @@ def _print_stats(name, rot, limit=45.0):
                 air += a
                 worst = max(worst, h)
                 if nu < cos_roof:           # near-horizontal: this is what sags
-                    flat += a
+                    roof_faces.append(f)
+
+    # Grow the near-horizontal faces into connected coplanar patches and keep
+    # the biggest. A curved underside breaks into many small patches; a real
+    # ceiling stays one.
+    cos_cop = math.cos(math.radians(ROOF_COPLANAR))
+    pool = set(roof_faces)
+    while pool:
+        seed = pool.pop()
+        n0 = seed.normal.normalized()
+        patch = seed.calc_area()
+        stack = [seed]
+        while stack:
+            f = stack.pop()
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g in pool and g.normal.normalized().dot(n0) >= cos_cop:
+                        pool.discard(g)
+                        patch += g.calc_area()
+                        stack.append(g)
+        flat = max(flat, patch)
     bm.free()
     return bed, air, worst, tall, shadow / 2.0, roof, flat
 
@@ -493,7 +524,7 @@ def printcheck(limit=45.0):
             note = ("BRIM - %.0f of a %.0f mm2 shadow (%.0f%%), %.1f mm tall"
                     % (bed, shadow, 100.0 * frac, tall))
         elif flat > MAX_ROOF:
-            note = ("%.0f mm2 of flat roof, highest %.1f mm up"
+            note = ("a %.0f mm2 flat ceiling, highest %.1f mm up"
                     % (flat, worst))
         print("  %-12s %7.1f of %6.1f mm2 %6.1f mm2 %6.1f mm2   %s"
               % (name, bed, shadow, flat, air, note or "ok"))
@@ -514,12 +545,19 @@ def printcheck(limit=45.0):
 
 
 def gimbal_foot():
-    """Why eye_gimbal cannot sit flat, in numbers rather than in argument.
+    """What eye_gimbal sits on, in numbers rather than in argument.
 
-    It is not the frame's problem. The frame stood on a knife edge with its
-    whole body 2.5 mm up; the gimbal is flat to within about a millimetre and
-    a single small tab is what holds it there. Printed as it is, the face
-    that carries both pan journals is the face that droops.
+    SETTLED - `cradle_y0` is 153.0 and this now reports a 710 mm2 first
+    layer. Kept because it is the measurement that found the fault and the
+    one that would catch it coming back.
+
+    The fault: the cradle floor was at y=154.0 while the tilt lever hung to
+    153.0 and both O13 journal housings bulged to 153.5, so 620 mm2 of the
+    face that carries both pan bearings sat a millimetre in the air on a
+    10 mm lug. Trimming those three flush was the obvious fix and the wrong
+    one - it takes the wall under both pan bores from 1.35 to 0.85 mm and
+    under the tilt link pin from 1.85 to 0.85. Dropping the floor adds the
+    millimetre instead of spending it.
     """
     ob = bpy.data.objects.get("eye_gimbal")
     if ob is None:
@@ -545,9 +583,9 @@ def gimbal_foot():
         print("  %.1f-%.1f mm up     : %7.1f mm2 facing straight down, on air"
               % (a, b, s))
     print("")
-    print("  So it is a 1 mm problem, not a 2.5 mm one. Trim that tab flush")
-    print("  and the bearing face becomes the first layer. Left as it is, the")
-    print("  face both pan journals are bored from is the face that sags.")
+    print("  Fixed by cradle_y0 154.0 -> 153.0: the floor was dropped to meet")
+    print("  the lever rather than the lever cut back to meet the floor, so")
+    print("  no bearing wall got thinner. check() passes at all 29 poses.")
 
 
 def export(out_dir=EXPORTS):

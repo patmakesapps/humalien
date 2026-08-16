@@ -66,10 +66,10 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 2. **Print the coupons** (they are on plate 4) before bolting anything to a
    real board. `pi5_tray`, `pca9685_mount` and `forehead_casing` are all built
    to dimensions the coupons exist to prove.
-3. **The eye mechanism is drawn and passes its checks through the whole
-   range.** `forehead_casing` has been relieved 2 mm for the eyelids, so
-   **plate 5 must be re-exported before printing**. Cogley's ε3.2 is
-   reference only.
+3. **The eye mechanism is drawn, passes its checks through the whole range,
+   and the plate is cleared to print.** `eye_plate.printcheck()` returns
+   True; give both eyelids a brim and nothing else needs anything. Plate 5
+   has been re-exported. Cogley's ε3.2 is reference only.
 
 ## The six plates
 
@@ -85,6 +85,20 @@ the `.blend` to disk twice per run before anyone had looked at the result.
 **Plate 5 is the only one waiting.** `forehead_casing` because its camera
 pocket would not accept the Arducam, and `pca9685_mount` because its standoffs
 fouled the board's pin tails. They sit 14.3 mm apart.
+
+**Plate 5 has been re-exported — 15 Aug, and it needed it.** The file on disk
+was 445.9 mm³ heavier than the part in the model: the eyelid relief had never
+made it into the STL. `PR_forehead_casing` was stale the same way, still the
+1567-vertex pre-relief mesh while the source and `FIT_forehead_casing` had
+both moved to 1582 — so the plate you were looking at and the file you would
+have printed were both the old part, while the assembly was right. The
+superseded mesh is parked hidden as `PR_forehead_casing_prerelief`.
+
+**The eye plate is now in the row with the others**, in the slot after plate
+6, with the same bed outline, title and labels. It is still not one of the
+numbered plates and cannot become one: `census()` only ever looks inside the
+`print ready` collection, and every eye object lives in `eye plate` under an
+`EP_` prefix. That is checked rather than assumed.
 
 Parts were **moved** between plates rather than copied, so no part appears on
 two plates and no plate says "print me" twice. `exports/` is one folder per
@@ -545,6 +559,12 @@ plate copy, by the same local-coordinate fingerprint `export_plate.verify()`
 uses: 72075 vertices, 67574 faces, identical. Pat's call: leave the openings
 alone.
 
+### The dome's print orientation — settled, see the eye plate section
+
+*Superseded 15 Aug. Splitting the eyeball into dome + stem + axle fixed this,
+and `printcheck()` now passes all three. The section below is kept for the
+reasoning.*
+
 ### The dome's print orientation is still wrong
 
 The file claims `eye_dome_R/L` print flat-back-down. They do not, and have not
@@ -609,11 +629,20 @@ plane, the shaft and pegs standing on end.
 
 - Six old ear screw holes: **closed**, no longer open.
 - The eyeballs ARE modelled now — `eye_dome_R/L` in `EYE_v2`. `PROXY_eyeball_R/L` are the placeholders they replace and are kept only as a measuring rule.
-- **`eye_bezel_R/L` are not vestigial after all.** The brief retired them
-  when the eye openings became smooth Ø41 circles, and the openings did —
-  but a Ø32 ball raked 25° out does not fill one, and the renders show a
-  crescent you can see the gimbal through. Bezel, bigger ball or smaller
-  opening; none of the three is drawn.
+- **`eye_bezel_R/L` are gone from the file, and the question they answered is
+  not.** The source objects were deleted when the bezels were retired, but
+  their plate copies sat on plate 3 for days afterwards with no source, and
+  both STLs stayed in `exports/plate3/` and in git — so `verify()` reported
+  two mismatches and `export_plate(3)` would have said `SOURCE OBJECT
+  MISSING` while leaving the stale files there to be printed. Copies, labels
+  and STLs are all removed now, and git history holds the geometry, which is
+  the same reasoning that retired the `superseded/` folders.
+
+  What remains open is the design question: a Ø32 ball raked 25° out does
+  not fill a Ø41 opening, and the renders show a crescent you can see the
+  gimbal through. **Bezel, bigger ball, or smaller opening — none of the
+  three is drawn.** The pair printed on plate 3 on 13 Aug still exist as
+  physical parts.
 - `print_layout.OUT_DIR` still points at `C:\humalien\humalien\print\v1`, a path
   from an older repo layout. Running `print_layout.build()` silently creates
   that folder instead of writing to `exports/`, and it writes every part flat
@@ -719,12 +748,66 @@ the axle into the cradle's bore; pin the pan bar to the stem's lever with a
 **Still not measured: the 5050.** It is `LISTING` at 8 × 3 × 8 and it now has
 a pad it has to fit on. Coupon it before trusting the stem's face.
 
-## The eye plate — ready to print, 15 Aug
+## The eye plate — READY, and this time it was measured, 15 Aug
 
-`cad/eye_plate.py`. **11 STL files, 14 pieces, 172 × 152 mm on a 256 bed.**
+`cad/eye_plate.py`. **11 STL files, 14 pieces, 171 × 150 mm on a 256 bed.**
 
     exec(open(r"C:\Humalien\cad\eye_plate.py").read())
-    build(); verify(); export()      # -> exports/eye/
+    build(); verify(); printcheck(); export()      # -> exports/eye/
+
+**`printcheck()` is the gate. It returns True.** Run it before any print; it
+is what "am I good to go" means now, and it is in the file rather than in
+anyone's head.
+
+**Both lids need a brim** in the slicer. Nothing else does, nothing needs
+support, and that is the whole of the pre-flight.
+
+### What printcheck() found that nothing else could
+
+`printability()` answers how much of a part overhangs. It cannot answer
+whether the part is standing on anything, and those turned out to be
+different questions:
+
+**`eye_frame` touched the bed with 0.0 mm².** Laid "flat on its arch" — as
+the table said, and as it exported — the mast tip stands 2.5 mm proud of the
+arch, so 104 mm of part balanced on one 4.8 mm edge with its entire underside
+in the air. It had no overhang problem worth the name and was completely
+unprintable. On its front face (`Z_DOWN`): 416 mm² down, overhang 1331 → 128.
+
+**Both eyelids touched with 0.0 mm² too**, on a crescent edge. On their ends
+they get 58 mm². They are the one genuinely handed pair on the plate, so they
+need **mirrored** rotations — the same one gives R 58 mm² and L only 32.
+
+**`eye_gimbal` sat on a 10 mm lug.** The cradle floor was at y=154.0 while
+the tilt lever hung to 153.0 and both Ø13 journal housings bulged to 153.5 —
+so 620 mm² of the face that carries both pan bearings was a millimetre in the
+air, on 100 mm² of a 1532 mm² shadow.
+
+Trimming those three flush is the obvious fix and it is the wrong one: it
+takes the wall under both pan bores from 1.35 to **0.85 mm** and under the
+tilt link pin from 1.85 to 0.85 — three loaded bearings down to about two
+perimeters. **`cradle_y0` went 154.0 → 153.0 instead**, dropping the floor to
+meet the lever rather than cutting the lever back to meet the floor. It adds
+the millimetre rather than spending it, swallows both housings, and lands
+flush. **100 → 710 mm² on the bed.** `check()` passes at all 29 poses and the
+worst rod clearance actually improved, to 1.96 mm.
+
+### The check took three passes to calibrate, and each miss was real
+
+Worth keeping, because every one of them would have signed off a bad plate:
+
+- an **absolute mm² floor** failed the Ø5 pegs — 19.5 mm² is 100% of a Ø5 end
+  face. A first layer has to be judged against the part's **own shadow**;
+- keying "top of part" off the **highest** overhanging face let the gimbal
+  through, because one small face near its top disabled the whole test;
+- counting **everything past 45°** failed the domes, which are fine — a
+  hollow sphere oversails by a fraction of a millimetre per layer. So the
+  limit is on area within 20° of straight down;
+- and even that failed a horizontal Ø9 tube, for exactly the domes' reason.
+  So it is the largest **connected coplanar patch** that is judged, not the
+  total. Checked against the gimbal's own pre-fix STL: **565 mm² in one
+  patch** out of 790 total, so the final test is sharper than the first one,
+  not looser.
 
 It is deliberately **not** part of `export_plate`. That file reads a part's
 plate number back from the x position of its `PR_` copy on a grid shared with
