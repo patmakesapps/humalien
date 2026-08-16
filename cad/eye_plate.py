@@ -63,28 +63,73 @@ PREFIX = "EP_"
 
 BED = 256.0
 MARGIN = 6.0        # from the bed's edge
-GAP = 5.0           # between parts
+GAP = 10.0          # between parts. Was 5, which packed the pegs and axles
+                    # close enough that their labels ran into each other -
+                    # there is 100 mm of bed spare, so it is free to spend.
 PACK_W = 190.0      # wrap to a new row here rather than at the bed's edge.
                     # Packed to the full 256 it came out 251 wide, which
                     # fits and leaves nowhere for a skirt; there is plenty
                     # of depth spare, so spend it.
-ORIGIN = Vector((3000.0, 0.0, 0.0))     # well clear of every other plate
+
+# The eye plate sits in the row with the numbered plates, on the grid
+# `export_plate` and `print_layout` share, in the slot after plate 6.
+#
+# It is still not one of them, and cannot become one by sitting there:
+# `census()` only ever looks inside the `print ready` collection, and every
+# object here lives in `eye plate` instead. Position is what census reads,
+# but only for objects it can already see, and it can never see these.
+#
+# It was parked 1000 mm off to one side with no bed, no title and no part
+# labels, which is what made it read as scratch geometry rather than a
+# plate. The furniture below is copied off `PRBED_plate6`, `PRTITLE_plate6`
+# and `PRLABEL_PR_ear_hub_R` rather than guessed at.
+PLATE_GAP = 60.0
+GRID_ORIGIN_X = 320.0
+SLOT = 7                                # the position in the row, not a plate number
+BED_CX = GRID_ORIGIN_X + BED / 2.0 + (SLOT - 1) * (BED + PLATE_GAP)
+ORIGIN = Vector((BED_CX - BED / 2.0, -BED / 2.0, 0.0))
+
+# Straight off the existing plates, so the two sets cannot drift apart.
+COL_BED = (0.25, 0.55, 0.95, 1.0)
+COL_LABEL = (0.9, 0.9, 0.9, 1.0)
+TITLE_SIZE = 12.0
+LABEL_SIZE = 6.0            # 7 on the other plates, but their parts are
+                            # bigger and further apart
+TITLE_Y = 138.0             # 10 mm clear of the bed's top edge
+LABEL_DROP = 4.0            # below the part's own front edge
+TITLE = "EYE PLATE  -  256 x 256 bed"
 
 # +Y up: the part's own +Y becomes the print's +Z.
 Y_UP = Matrix.Rotation(math.radians(90), 4, 'X')
 Y_DOWN = Matrix.Rotation(math.radians(-90), 4, 'X')
 X_UP = Matrix.Rotation(math.radians(-90), 4, 'Y')
+X_DOWN = Matrix.Rotation(math.radians(90), 4, 'Y')      # the mirror of X_UP
+Z_DOWN = Matrix.Rotation(math.radians(180), 4, 'X')     # the part's -Z is up
 FLAT = Matrix.Identity(4)
 
 # name, quantity, rotation, why it is that way up
 PARTS = [
-    ("eye_frame",    1, Y_UP,   "flat on its arch; nothing behind it to foul"),
-    ("eye_gimbal",   1, Y_UP,   "flat in its own plane, both bores roofed"),
-    ("eye_pan_bar",  1, Y_UP,   "flat"),
+    ("eye_frame",    1, Z_DOWN, "on its front face. NOT flat on the arch, "
+                                "which was measured at ZERO bed contact - "
+                                "the mast tip stands 2.5 mm proud of the "
+                                "arch, so 104 mm of part balanced on a "
+                                "4.8 mm edge. This way: 416 mm2 down, and "
+                                "the overhang falls 1331 -> 128 mm2"),
+    ("eye_gimbal",   1, Y_UP,   "flat in its own plane, both bores roofed - "
+                                "but see gimbal_foot(): a 10 mm tab stands "
+                                "0.5-1.0 mm proud and lifts 640 mm2 of the "
+                                "bearing face off the bed"),
+    ("eye_pan_bar",  1, Y_UP,   "flat; 533 mm2 on the bed"),
     ("eye_dome_R",   1, Y_UP,   "back face down - the only face it has"),
     ("eye_dome_L",   1, Y_UP,   "back face down"),
-    ("eye_lid_R",    1, Y_UP,   "back down"),
-    ("eye_lid_L",    1, Y_UP,   "back down"),
+    ("eye_lid_R",    1, X_UP,   "on its end, not back-down: back-down is a "
+                                "crescent edge with zero contact. 0 -> 58 mm2 "
+                                "on the bed, overhang 288 -> 160 mm2. Tall "
+                                "and narrow, so it wants a brim"),
+    ("eye_lid_L",    1, X_DOWN, "on its end, MIRRORED from eye_lid_R. The "
+                                "lids are the one genuinely handed pair, so "
+                                "the same rotation does not suit both: X_UP "
+                                "gives R 58 mm2 and L only 32"),
     ("eye_stem_R",   2, Y_DOWN, "spigot face down; every layer smaller than "
                                 "the one below it. Symmetric, so one file "
                                 "serves both sides"),
@@ -152,6 +197,41 @@ def _oriented(src, rot):
     return ob, (hi.x - lo.x, hi.y - lo.y, hi.z - lo.z)
 
 
+def _bed_outline(coll):
+    """The 4-vertex wire rectangle the other six plates are drawn on.
+
+    Four verts, four edges, no faces, `display_type='WIRE'` - so it shows the
+    bed's edge in the viewport and is invisible to anything that walks
+    polygons, including every check in this project.
+    """
+    x0, y0 = ORIGIN.x, ORIGIN.y
+    me = bpy.data.meshes.new("PRBED_eye")
+    me.from_pydata([(x0, y0, 0.0), (x0 + BED, y0, 0.0),
+                    (x0 + BED, y0 + BED, 0.0), (x0, y0 + BED, 0.0)],
+                   [(0, 1), (1, 2), (2, 3), (3, 0)], [])
+    me.update()
+    ob = bpy.data.objects.new("PRBED_eye", me)
+    ob.display_type = 'WIRE'
+    ob.color = COL_BED
+    coll.objects.link(ob)
+    return ob
+
+
+def _text(coll, name, body, loc, size, color):
+    """A flat FONT object, centred, matching PRTITLE_/PRLABEL_ on the others."""
+    cu = bpy.data.curves.new(name, type='FONT')
+    cu.body = body
+    cu.size = size
+    cu.align_x = 'CENTER'
+    cu.align_y = 'TOP_BASELINE'
+    cu.extrude = 0.0
+    ob = bpy.data.objects.new(name, cu)
+    ob.location = loc
+    ob.color = color
+    coll.objects.link(ob)
+    return ob
+
+
 def build(save=False):
     """Lay every eye part out on one bed, each in the way up it prints."""
     old = bpy.data.collections.get(COLL)
@@ -191,24 +271,69 @@ def build(save=False):
             ob.matrix_world = Matrix.Translation(
                 ORIGIN + Vector((x + dims[0] / 2.0, y + dims[1] / 2.0, 0.0))
             ) @ ob.matrix_world
-            placed.append((ob.name, dims, why))
+            placed.append((ob.name, dims, why, name, qty, ob))
             x += dims[0] + GAP
             row_d = max(row_d, dims[1])
-    used_y = y + row_d + MARGIN
+    # Centre the packed block in the bed. The shelf packer works from one
+    # corner, which left everything hard against the near edge; the other six
+    # plates all sit centred, and this is the difference you actually see.
+    parts = [o for o in coll.objects if o.type == 'MESH']
+    pts = [o.matrix_world @ v.co for o in parts for v in o.data.vertices]
+    used_x = used_y = 0.0
+    if pts:
+        x0, x1 = min(p.x for p in pts), max(p.x for p in pts)
+        y0, y1 = min(p.y for p in pts), max(p.y for p in pts)
+        used_x, used_y = x1 - x0, y1 - y0
+        shift = Matrix.Translation((ORIGIN.x + BED / 2.0 - (x0 + x1) / 2.0,
+                                    ORIGIN.y + BED / 2.0 - (y0 + y1) / 2.0,
+                                    0.0))
+        for o in parts:
+            o.matrix_world = shift @ o.matrix_world
+
+    # The furniture, so this reads as a plate rather than as loose geometry.
+    _bed_outline(coll)
+    _text(coll, "PRTITLE_eye", TITLE,
+          (ORIGIN.x + BED / 2.0, TITLE_Y, 0.0), TITLE_SIZE, COL_BED)
+
+    # One label per FILE, not per piece, carrying the quantity - the same
+    # `_xN` convention the exported names use. Labelling all fourteen pieces
+    # ran "eye_axle_R_1" and "eye_axle_R_2" straight through each other: the
+    # parts they name are 10 mm wide and the text is four times that.
+    groups = {}
+    for nm, d, why, base, qty, ob in placed:
+        groups.setdefault(base, [qty, []])[1].append(ob)
+    specs = []
+    for base, (qty, obs) in groups.items():
+        p = [o.matrix_world @ v.co for o in obs for v in o.data.vertices]
+        body = base if qty == 1 else "%s  x%d" % (base, qty)
+        specs.append([body, base,
+                      (min(q.x for q in p) + max(q.x for q in p)) / 2.0,
+                      min(q.y for q in p) - LABEL_DROP,
+                      len(body) * LABEL_SIZE * 0.52])       # advance width
+    # Stack any that would collide. The pegs, the shaft and the axles are
+    # 5-10 mm parts sharing a row, and their names are four times that wide,
+    # so no packing that fits the bed also fits the text - the labels have to
+    # step down out of each other's way.
+    specs.sort(key=lambda s: s[2])
+    for i, s in enumerate(specs):
+        for t in specs[:i]:
+            while (abs(s[3] - t[3]) < LABEL_SIZE * 1.2
+                   and s[2] - s[4] / 2 < t[2] + t[4] / 2
+                   and t[2] - t[4] / 2 < s[2] + s[4] / 2):
+                s[3] -= LABEL_SIZE * 1.4
+    for body, base, cx, cy, w in specs:
+        _text(coll, "PRLABEL_%s%s" % (PREFIX, base), body,
+              (cx, cy, 0.0), LABEL_SIZE, COL_LABEL)
 
     print("eye plate: %d pieces, %d files" % (len(placed), len(PARTS)))
-    for nm, d, why in placed:
+    for nm, d, why, base, qty, ob in placed:
         print("  %-20s %6.1f x %6.1f x %6.1f mm   %s"
               % (nm[len(PREFIX):], d[0], d[1], d[2], why))
-    ext = [o for o in coll.objects]
-    if ext:
-        pts = [o.matrix_world @ v.co for o in ext for v in o.data.vertices]
-        used_x = max(p.x for p in pts) - ORIGIN.x + MARGIN
-        used_y = max(p.y for p in pts) - ORIGIN.y + MARGIN
-    print("  bed used: %.0f x %.0f of %.0f x %.0f mm"
-          % (used_x, used_y, BED, BED))
-    if used_y > BED:
-        print("  *** DOES NOT FIT - %.0f mm over ***" % (used_y - BED))
+    print("  bed used: %.0f x %.0f of %.0f x %.0f mm, centred in slot %d"
+          % (used_x, used_y, BED, BED, SLOT))
+    if used_x > BED or used_y > BED:
+        print("  *** DOES NOT FIT - %.0f x %.0f over ***"
+              % (max(0.0, used_x - BED), max(0.0, used_y - BED)))
     if save:
         bpy.ops.wm.save_mainfile()
     return coll
@@ -236,6 +361,10 @@ def verify():
         return False
     ok = True
     for ob in sorted(coll.objects, key=lambda o: o.name):
+        # Skip the bed outline, the title and the part labels - furniture,
+        # not parts, and the bed is a face-less wire rectangle anyway.
+        if ob.type != 'MESH' or not ob.name.startswith(PREFIX):
+            continue
         base = ob.name[len(PREFIX):]
         if base[-2:-1] == "_" and base[-1].isdigit():
             base = base[:-2]
@@ -249,6 +378,176 @@ def verify():
         ok = ok and same
     print("verify(): %s" % ("PASS" if ok else "FAIL"))
     return ok
+
+
+# A first layer is judged against the part's OWN shadow, never against a flat
+# mm2 threshold. A O5 peg on its end contacts 19.5 mm2 and that is the whole
+# of it - 100% - while eye_frame laid on its arch contacted 0.0 of a 2236 mm2
+# shadow. An absolute limit calls the first one a failure and, set low enough
+# to pass it, calls the second one a pass. The ratio separates them cleanly.
+MIN_BED_FRAC = 0.15
+# Between this and MIN_BED_FRAC a part is standing on a small but real face,
+# which is what a brim is for: it buys bed adhesion and changes no geometry.
+# Below it, or on less than BRIM_MIN_MM2 of actual face, the contact is a line
+# or a point and no brim saves it - eye_frame on its arch touched 0.0 mm2.
+BRIM_BED_FRAC = 0.10
+BRIM_MIN_MM2 = 40.0
+# What actually sags is near-horizontal roof, not steep wall. A hollow sphere
+# printed open-side-down has hundreds of mm2 past 45 degrees and prints
+# perfectly, because each layer oversails the one below it by a fraction of a
+# millimetre the whole way up; a flat ceiling the same area drops onto
+# nothing. So the limit is on area within ROOF_CONE of straight down, and the
+# 45-degree figure is reported beside it rather than judged.
+MAX_ROOF = 100.0
+ROOF_CONE = 20.0
+# Overhang within this of the top is exempt: on the domes it is the hollow's
+# own ceiling, which no orientation turns downward and which closes over a
+# cavity nothing prints into.
+TOP_BAND = 3.0
+
+
+def _print_stats(name, rot, limit=45.0):
+    """(bed contact, unsupported area, how high it starts, height) in the
+    orientation this part actually prints, not in a default one.
+
+    The build direction is derived from the part's own row in PARTS. Asking
+    `eye_v2.printability()` for all eleven with one direction - which is what
+    it does by default - measures four of them the wrong way up and reports
+    numbers that belong to nothing.
+    """
+    ob = bpy.data.objects.get(name)
+    if ob is None:
+        return None
+    u = (rot.to_3x3().transposed() @ Vector((0.0, 0.0, 1.0))).normalized()
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.transform(bm, verts=bm.verts[:], matrix=ob.matrix_world)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    d = {v: v.co.dot(u) for v in bm.verts}
+    lo = min(d.values())
+    hi = max(d.values())
+    tall = hi - lo
+    cos_lim = -math.cos(math.radians(90.0 - limit))
+    cos_roof = -math.cos(math.radians(ROOF_CONE))
+    bed = air = roof = shadow = flat = 0.0
+    worst = 0.0
+    for f in bm.faces:
+        a = f.calc_area()
+        nu = f.normal.normalized().dot(u)
+        # The part's shadow on the bed. Every vertical line through a closed
+        # solid crosses it an even number of times, so summing |a * n.u| over
+        # every face counts the silhouette exactly twice.
+        shadow += abs(a * nu)
+        if max(d[v] for v in f.verts) - lo < 0.15:
+            bed += a
+        if nu < cos_lim:
+            h = f.calc_center_median().dot(u) - lo
+            if h < 1.0:
+                continue                    # a chamfer the first layers carry
+            if h >= tall - TOP_BAND:
+                roof += a                   # the top of the part / a cavity
+            else:
+                air += a
+                worst = max(worst, h)
+                if nu < cos_roof:           # near-horizontal: this is what sags
+                    flat += a
+    bm.free()
+    return bed, air, worst, tall, shadow / 2.0, roof, flat
+
+
+def printcheck(limit=45.0):
+    """Is this plate fit to put on a printer? One line per file, then a verdict.
+
+    Two numbers decide it, and the second one alone is not enough - which is
+    how the frame got exported. `eye_v2.printability()` measures overhang and
+    nothing else, and a part with no overhang at all can still be balanced on
+    a knife edge. Bed contact is the one that catches that.
+
+    Overhang at the very top of a part is exempt: on the domes it is the
+    hollow's own ceiling, which no orientation can turn downward and which
+    closes over a cavity nothing has to be printed into.
+    """
+    print("  %-12s %18s %9s %8s   %s"
+          % ("part", "first layer", "roof", "past 45", "verdict"))
+    bad = []
+    brims = []
+    for name, qty, rot, why in PARTS:
+        s = _print_stats(name, rot, limit)
+        if s is None:
+            print("  %-12s MISSING" % name)
+            bad.append((name, "no such object"))
+            continue
+        bed, air, worst, tall, shadow, roof, flat = s
+        frac = bed / shadow if shadow else 0.0
+        note = ""
+        brim = False
+        # The mm2 floor only bites when the fraction is low too. A O5 peg on
+        # its end is 19.5 mm2 and that is 100% of it - small is not the same
+        # as balanced, and judging it on area alone failed the one shape on
+        # this plate that cannot overhang at all.
+        if frac < BRIM_BED_FRAC or (frac < MIN_BED_FRAC and bed < BRIM_MIN_MM2):
+            note = ("stands on an edge - %.0f of a %.0f mm2 shadow (%.0f%%)"
+                    % (bed, shadow, 100.0 * frac))
+        elif frac < MIN_BED_FRAC:
+            brim = True
+            note = ("BRIM - %.0f of a %.0f mm2 shadow (%.0f%%), %.1f mm tall"
+                    % (bed, shadow, 100.0 * frac, tall))
+        elif flat > MAX_ROOF:
+            note = ("%.0f mm2 of flat roof, highest %.1f mm up"
+                    % (flat, worst))
+        print("  %-12s %7.1f of %6.1f mm2 %6.1f mm2 %6.1f mm2   %s"
+              % (name, bed, shadow, flat, air, note or "ok"))
+        if note and not brim:
+            bad.append((name, note))
+        elif brim:
+            brims.append(name)
+    print("")
+    if brims:
+        print("BRIM REQUIRED in the slicer: %s" % ", ".join(brims))
+    if bad:
+        print("NOT READY - %d of %d files:" % (len(bad), len(PARTS)))
+        for n, note in bad:
+            print("   %-14s %s" % (n, note))
+    else:
+        print("READY - every file stands on a real face and nothing sags.")
+    return not bad
+
+
+def gimbal_foot():
+    """Why eye_gimbal cannot sit flat, in numbers rather than in argument.
+
+    It is not the frame's problem. The frame stood on a knife edge with its
+    whole body 2.5 mm up; the gimbal is flat to within about a millimetre and
+    a single small tab is what holds it there. Printed as it is, the face
+    that carries both pan journals is the face that droops.
+    """
+    ob = bpy.data.objects.get("eye_gimbal")
+    if ob is None:
+        return
+    u = Vector((0.0, 1.0, 0.0))
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.transform(bm, verts=bm.verts[:], matrix=ob.matrix_world)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    lo = min(v.co.dot(u) for v in bm.verts)
+    foot = [v.co for v in bm.verts if v.co.dot(u) - lo < 0.05]
+    steps = sorted({round(v.co.dot(u) - lo, 2) for v in bm.verts})[:4]
+    down = [(f.calc_area(), f.calc_center_median().dot(u) - lo)
+            for f in bm.faces if f.normal.normalized().dot(u) < -0.7]
+    bm.free()
+    print("eye_gimbal, printed +Y up:")
+    print("  touching the bed : %d verts over x %.1f..%.1f, z %.1f..%.1f"
+          % (len(foot), min(p.x for p in foot), max(p.x for p in foot),
+             min(p.z for p in foot), max(p.z for p in foot)))
+    print("  the steps above  : %s mm" % steps)
+    for a, b in ((0.5, 1.2), (1.2, 2.5)):
+        s = sum(ar for ar, h in down if a <= h < b)
+        print("  %.1f-%.1f mm up     : %7.1f mm2 facing straight down, on air"
+              % (a, b, s))
+    print("")
+    print("  So it is a 1 mm problem, not a 2.5 mm one. Trim that tab flush")
+    print("  and the bearing face becomes the first layer. Left as it is, the")
+    print("  face both pan journals are bored from is the face that sags.")
 
 
 def export(out_dir=EXPORTS):
