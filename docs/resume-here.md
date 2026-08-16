@@ -309,9 +309,15 @@ Blocked until the shell exists: mounting the ear hubs (six M3 through the
 shell) and the eye bezels.
 
 **Fasteners are not in [parts.md](parts.md) and nothing has been bought.**
-The build needs at minimum 4 × M3 × 10 for the two hub joins, M3 for the six
-shell mounts, M3 for the speaker posts, and M2/M2.5 for the boards. This is
-the most likely thing to stop an assembly day dead.
+There is now a [shopping-list.md](shopping-list.md) with counts read out of
+the CAD, lengths, and links: **~12 × M3, 4 × M2.5, ~16 × M2** plus nuts, and
+the 2 mm music wire for the four pushrods. This is still the most likely
+thing to stop an assembly day dead.
+
+Two corrections to what that list used to say: the **4 × M3 × 10 for the hub
+joins are not needed** — the speakers are glued and `ear_spine` is retired,
+so those two blind threads per hub are unused — and there are **no speaker
+post screws** for the same reason.
 
 ## The eye bay, measured — superseded 15 Aug
 
