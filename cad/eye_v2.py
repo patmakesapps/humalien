@@ -208,10 +208,20 @@ P = dict(
     shaft_x   = 14.6,       # the shaft runs +-this; the balls start at 15.0
     shaft_fit = 0.4,        # diametral, tube bore over the shaft
     tube_od   = 9.0,
-    tube_x0   = 3.0,        # tube inboard end - the mast is inside this
+    # 3.0 until the first mechanism was printed and the frame's mast snapped
+    # off at the shaft. The corridor between the tubes is the ONLY place the
+    # frame can reach the tilt axis, so its width is the width of the only
+    # bearing the whole mechanism hangs on - and 4.8 mm of it was carrying
+    # both eyes, both lids and the tilt servo's reaction as a see-saw on a
+    # 29 mm shaft. Every millimetre here is a millimetre of that bearing.
+    #
+    # It cannot go much further: the gimbal's own web has to fit between the
+    # tube's inboard end and the eyelid hub at 7.4, and at 4.2..6.8 that web
+    # is down to 2.6 mm already.
+    tube_x0   = 4.0,        # tube inboard end - the frame's web is inside this
     tube_x1   = 14.8,       # tube outboard end - the ball starts at 15.0
-    mast_hx   = 2.4,        # frame mast half-width
-    web_x0    = 3.2,        # gimbal web, tube down to cradle
+    mast_hx   = 3.4,        # frame web half-width; 0.6 clear of tube_x0
+    web_x0    = 4.2,        # gimbal web, tube down to cradle
     web_x1    = 6.8,
 
     # --- the gimbal cradle ----------------------------------------------
@@ -256,24 +266,68 @@ P = dict(
                             # y=151 and up to z=224.4 as it clears the top
                             # of the eye. Two millimetres of bar bought
                             # fifteen degrees of eyelid.
-    arch_z_lo = 214.0,      # ...and a web in the middle brings it down to
-                            # the mast, in the corridor where no eyeball is
+    arch_z_lo = 214.0,      # unused since the mast became a web - kept
+                            # because `casing_relief` still quotes it
     arch_web  = 12.0,       # half-width of that web
     arch_hx   = 52.0,
-    plate_hx  = 3.0,        # temple plate, x 45.3..51.3
-    mast_y1   = 164.0,      # the mast leans forward and down 29 degrees
-    mast_z    = 216.0,      # its centre where it leaves the web. Chosen
-                            # so the mast's centreline passes through the
-                            # tilt axis: at 218 it passed 2.2 mm above,
-                            # which put the O5.2 shaft bore tangent to
-                            # the mast's own underside and left a
-                            # 4.8 x 0.5 mm hole in the part
-    boss_d    = 10.0,       # the shaft boss on the mast. 9.0 left the
-                            # leaning mast's lower corner sitting almost
-                            # exactly on the boss's surface, and the
-                            # union came back with one 4.8 x 0.5 mm face
-                            # missing - a near-tangent boolean, which is
-                            # the same fault as a coplanar one
+
+    # --- the top flange, and why the arch is no longer a bar --------------
+    # The first mechanism broke in two places on assembly, and both were the
+    # same fault: a slender member printed as an unsupported cantilever.
+    #
+    #   the mast   a 4.8 x 8 mm slab reaching 20 mm forward off a 4 mm
+    #              plate to the shaft boss, carrying the gimbal, both eyes,
+    #              both lids and the tilt servo's whole reaction
+    #   the peg    a O4.4 pin retained by two printed lips 0.5 mm thick -
+    #              one nozzle width - in a socket cut open outboard
+    #
+    # Neither is fixed by more material in the same shape. What fixes both is
+    # DEPTH: fold the flat bar into an L and the same 4 mm of wall becomes a
+    # 13 mm section, and the mast stops being a stick off a plate and becomes
+    # the web of a beam. The space to do it in was measured, not assumed -
+    # MOUNT_ZONE is open forward to y=176 over the whole width at z 228..236,
+    # and the only thing in front is FIT_forehead_casing at y=162.
+    #
+    # The eyelids cannot reach here either: a lid is a shell of outer radius
+    # 17.55 about the tilt axis at z=209, so nothing on it ever passes z=227,
+    # and the arch was already at 226 for that reason.
+    flange_z0 = 230.0,      # the flange is z 230..234, the arch's top 4 mm
+    flange_y1 = 160.5,      # ...running forward to here. 1.5 mm shy of the
+                            # forehead casing at y=162, which then stands as
+                            # the frame's forward backstop for free
+    # ...but only over |x| <= 45, and the temple is what says so. MEASURED
+    # off HEAD_FACE by casting +Y from y=152 at z=230: the wall's inner
+    # face is at y=170.5 at x=46, 161.1 at x=50 and 154.5 at x=52. A flange
+    # to 160.5 across the full 104 mm broke out through both temples, which
+    # is what the first `check()` after this rebuild reported. Outboard of
+    # 45 the arch stays the 4 mm bar it always was - which is where the
+    # temple plates are anyway, so the section is deep there regardless.
+    flange_hx = 45.0,
+
+    # The web that replaces the mast. A slab in the corridor between the
+    # tubes, hanging off the flange down to the shaft, stepped forward as it
+    # descends so that nothing in it overhangs when the part prints on its
+    # flange. Every step is 2.75 mm over 4 mm of z - 34 degrees off vertical.
+    # The web's front face, step by step. Two things bound it and they are
+    # at different heights: FIT_forehead_casing is a solid slab at y 162..167
+    # from z=225 UP, and below that the bay is open to y=165 at x=0. So the
+    # web is at its deepest where the load is - down at the shaft - and
+    # rakes back as it climbs past the casing.
+    web_steps = ((203.0, 221.0, 165.0),
+                 (221.0, 224.5, 163.0),
+                 (224.5, 228.0, 161.0),
+                 (228.0, 230.0, 160.5)),
+    web_z0    = 203.0,      # its bottom - the shaft boss's own underside
+    # The temple plate. 45.3 inboard, and a panned eyeball is what sets it:
+    # swept over the whole range, `eye_dome_R` reaches x=44.86 inside this
+    # plate's own y and z window, at tilt -16 pan -30. 44.0 was tried and
+    # `check()` reported the dome 0.2 mm into the plate.
+    plate_x0  = 45.3,
+    plate_x1  = 51.5,
+    boss_d    = 12.0,       # the rounded nose the shaft bore sits in. It is
+                            # no longer a boss on a stick, it is the bottom
+                            # of the web, so this only decides how much of
+                            # the corner is taken off
 
     # The temple dowel pads, already in both printed head halves. MEASURED
     # off HEAD_CRANIUM by listing surface crossings along +X at z=215:
@@ -288,23 +342,33 @@ P = dict(
     pad_x     = 49.79,
     pad_z     = 215.0,
     pad_bore  = 5.2,
-    pad_face  = 147.0,      # the pad ends here; the frame sits in front
-    plate_y1  = 151.3,
-    # The peg is a SEPARATE part, and that is a printing decision rather
-    # than a mechanical one. The frame prints flat on its arch, which puts
-    # +y upwards - and a spigot reaching back to y=130 would then point
-    # straight down into the bed. A peg pressed in afterwards also does the
-    # head's own job: those pad bores exist to locate the two halves on a
-    # pin, and one peg now does both.
-    peg_fwd   = 4.4,        # forward of the pad the wall closes to x=52.2,
-                            # so the section that passes through the frame
-                            # has to be thinner than the one in the bore
-    peg_d     = 5.0,        # a shade under the O5.2 pad bore; the press
-                            # fit comes from print tolerance, not from
-                            # modelling 0.05 mm of interference and then
-                            # having every collision test report it
-    peg_y0    = 134.0,
-    peg_head  = 6.5,
+    pad_face  = 147.0,      # the pad ends here; the frame seats on it
+    plate_y1  = 151.5,
+    # The temple anchor is now a SPIGOT ON THE FRAME, not a separate peg
+    # through a snap socket. What the snap actually was, in numbers: the
+    # socket bore is O4.6 on x=49.79, the mouth that lets the peg in is
+    # 3.6 mm across, and what is left between them is two lips
+    #
+    #     0.5 mm thick, 1.5 mm long, 3 mm wide
+    #
+    # 0.5 mm is ONE perimeter at a 0.4 nozzle. That is not a snap feature,
+    # and it is what let go on the left side.
+    #
+    # No closed bore is possible on that axis and never was: the pad bore's
+    # centre is x=49.79 and the face half's inner wall is at 52.2, so a
+    # O5.2 hole needs 2.6 mm outboard and there are 2.41. That is why the
+    # socket was cut open in the first place. A spigot needs no wall at all.
+    #
+    # It was a separate part for one reason - print orientation. A spigot
+    # pointing to -y prints into the bed when the frame lies on its arch.
+    # The flange changes that: the frame now prints standing on the flange,
+    # where the spigot runs horizontal like every other bore in this
+    # project. A O5 horizontal cylinder droops a tenth on its underside and
+    # that is welcome here, since it makes the fit in the O5.2 pad tighter.
+    spig_d    = 5.0,
+    spig_y0   = 135.5,      # 11.5 mm of engagement, all of it in the face
+                            # half - the split is at y=135 and the cranium's
+                            # share of this bore is only 2 mm deep
 
     casing_y  = 162.0,      # FIT_forehead_casing starts here - measured
     casing_z  = 225.0,      # and is solid from here up, full width
@@ -400,7 +464,21 @@ LID = dict(
     crank_a   = 250.0,      # where the crank points with the lid shut -
                             # straight down, which is both clear of the pan
                             # bar behind it and square to its own pushrod
-    crank_x0  = 11.3,
+    # 11.3 until the first pair were printed, and both cranks came off the
+    # bed as fringe rather than as arms. The lid prints standing on its hub,
+    # |x| upward, so the crank is a slab lying flat 3.9 mm above the bed -
+    # and the only thing under it is the hub, which reaches r=6.5. From
+    # there out to the pin at r=14 the arm was printing on nothing at all.
+    #
+    # Starting it at the hub's own inboard end instead makes it a FIN: its
+    # first layer is laid down at the same height as the hub's, and it grows
+    # with it. Nothing about the mechanism changes - the arm keeps the same
+    # radius, the same angle and the same sweep, so its clearance to the pan
+    # bar and to the tilt tube is exactly what `check()` already passed. It
+    # is only wider in x, in a band where the gimbal has nothing: its own
+    # web ends at 6.8 and its tube is r=4.5 about an axis this arm starts
+    # 6.5 out from.
+    crank_x0  = 7.4,        # = LID['hub_x0'] - the fin starts where the hub does
     crank_x1  = 14.3,
 )
 
@@ -852,7 +930,7 @@ def gimbal(hm, coll):
 
 
 def frame(hm, coll):
-    """The fixed bulkhead. One part, spanning both temple pads.
+    """The fixed bulkhead. One part, and now the ONLY part of the mount.
 
     It was two parts before, because "anything spanning between them would
     have to cross the eye bay at the height of the eyeballs". That is true
@@ -860,50 +938,95 @@ def frame(hm, coll):
     eyelids cannot reach further back than y=152.8, so behind the pan bar
     the bay is empty all the way across. The arch lives there.
 
-    Prints flat on the arch, +y upward. Everything else stands off that
-    plane in the +y direction: the pad plates 9 mm, the mast 22 mm, and the
-    mast leans only 19 degrees off vertical on its way down to the shaft
-    boss. There is nothing on the -y side at all, which is why the temple
-    pegs are separate parts.
+    REBUILT 16 Aug 2026, after the first one was assembled and broke.
+    ------------------------------------------------------------------
+    Two failures, one fault. The left temple let go at the snap socket and
+    the mast let go at the shaft boss, and both members were slender things
+    printed as unsupported cantilevers. The numbers are under `spig_d` and
+    `flange_z0` in `P`; what they add up to is that the whole mechanism -
+    two eyes, two lids, four servo reactions - hung on a 4.8 mm slab and two
+    lips one nozzle wide.
+
+    Three changes, and none of them is "make it thicker":
+
+    **A top flange.** z 230..234, running forward to y=160.5, full width.
+    The arch stops being a 4 x 8 bar and becomes a 13 x 4 L-section, which
+    is roughly eight times the fore-aft stiffness for 40% more material. It
+    also gives the web a root and the print a first layer.
+
+    **The mast becomes a web.** Not a slab reaching forward off a plate to a
+    boss, but a slab hanging off the flange down to the shaft, filling the
+    corridor between the gimbal's tubes. It is 27 mm deep in z where the
+    mast was 8 mm, and it is loaded along its depth. The corridor was
+    measured clear: nothing but the shaft is inside |x| = 4.0 between
+    y 151.5..166 and z 203..230.
+
+    **The pegs become spigots.** Integral, one piece, no snap. See `spig_d`.
+
+    PRINTS STANDING ON ITS FLANGE, which is `Z_DOWN` in `eye_plate.PARTS` -
+    the same row it already had, now for a real reason. The first layer goes
+    from 416 mm2 (the arch's top edge, a 104 x 4 knife) to about 1300 (the
+    whole flange), and every wall below it grows straight down off that
+    plate. The web's front face steps forward as it descends, 2.75 mm per
+    4 mm of z, so the steps are 34 degrees off vertical and self-support.
+    The spigots run horizontal.
+
+    Nothing on this part is a cantilever any more, which is the whole point.
     """
     ty, tz = P["y"], P["z"]
     prims, _p = _prims()
 
     ay0, ay1 = P["arch_y0"], P["arch_y1"]
     az0, az1 = P["arch_z0"], P["arch_z1"]
+    fz0, fy1 = P["flange_z0"], P["flange_y1"]
 
-    # The bar rides high, at z 224..232, and it has to: an eyeball panned 30
+    # The bar rides high, at z 226..234, and it has to: an eyeball panned 30
     # degrees swings its back rim out to |x|=44.6 at this depth, and reaches
     # z=219.8 doing it. Everything between |x|=15 and 47 is eyeball here.
     bm = _p()
     hm["_box"](bm, (2 * P["arch_hx"], ay1 - ay0, az1 - az0),
                (0.0, (ay0 + ay1) / 2.0, (az0 + az1) / 2.0))
-    # ...and in the corridor between the eyes, where there is no eyeball, a
-    # web brings it back down to where the mast can leave at a shallow
-    # angle. This is what the frame gets for printing flat: the whole x-z
-    # outline is the part's footprint, so shaping it costs nothing.
+    # The flange. This is the first layer of the print and the top chord of
+    # the beam, and it does both jobs with the same 4 mm. It stops at
+    # |x|=45 because the temple wall does - see `flange_hx`.
     bm = _p()
-    hm["_box"](bm, (2 * P["arch_web"], ay1 - ay0 - 1.0, az1 - 2.0 - P["arch_z_lo"]),
-               (0.0, (ay0 + ay1) / 2.0, (az1 - 2.0 + P["arch_z_lo"]) / 2.0))
+    hm["_box"](bm, (2 * P["flange_hx"], fy1 - ay0, az1 - fz0),
+               (0.0, (ay0 + fy1) / 2.0, (fz0 + az1) / 2.0))
     for sx in (-1, 1):
-        # The temple plate: a tongue hanging off the bar down to the pad
-        # bore, x 44..51.5 - outboard of the 42.6 that a panned eyeball
-        # reaches, inboard of the 52.6 where the face half's wall is.
+        # The temple plate: a tongue hanging off the flange down past the
+        # pad bore, x 44..51.5 - outboard of the 42.6 that a panned eyeball
+        # reaches, inboard of the 52.39 where the face half's wall is
+        # (MEASURED along +X at z=215: solid 41.79..47.19, VOID to 52.39).
+        # It runs the full height now, flange to below the bore, so the
+        # spigot's root is carried by a plate and not by the end of one.
+        # Its back face is at y=147.2 - 0.2 mm off the pad's own front face
+        # at 147.0, so the plate lands on the pad as a thrust seat once the
+        # spigots are home. Modelled flush it would be a coplanar pair, and
+        # every collision test in this file would report it forever.
         bm = _p()
-        hm["_box"](bm, (2 * P["plate_hx"], ay1 - ay0 - 1.0, az0 + 2.0 - (P["pad_z"] - 6.0)),
-                   (sx * (P["pad_x"] - 1.5), (ay0 + ay1) / 2.0,
-                    (az0 + 2.0 + P["pad_z"] - 6.0) / 2.0))
-    # The mast, leaning forward and down from the web to the shaft. It has
-    # to cross the whole bay in depth, from behind the eyes to the tilt axis
-    # between them, and it is the one part of the frame that is not flat -
-    # so its angle is the print's business: 29 degrees off vertical when the
-    # part lies on its arch.
-    dz = P["mast_z"] - tz
-    dy = P["mast_y1"] - P["arch_y0"]
-    bm = _p()
-    _rbox(bm, (2 * P["mast_hx"], math.hypot(dy, dz) + 2.0, 8.0),
-          (0.0, (P["arch_y0"] + P["mast_y1"]) / 2.0, (P["mast_z"] + tz) / 2.0),
-          Matrix.Rotation(math.atan2(-dz, dy), 4, 'X'))
+        hm["_box"](bm, (P["plate_x1"] - P["plate_x0"],
+                        P["plate_y1"] - (P["pad_face"] + 0.2),
+                        az1 - (P["pad_z"] - 6.0)),
+                   (sx * (P["plate_x0"] + P["plate_x1"]) / 2.0,
+                    (P["plate_y1"] + P["pad_face"] + 0.2) / 2.0,
+                    (az1 + P["pad_z"] - 6.0) / 2.0))
+        # ...and its spigot, straight back into the head's own pad bore.
+        bm = _p()
+        hm["_cyl"](bm, P["spig_d"], P["pad_face"] + 0.5 - P["spig_y0"],
+                   (sx * P["pad_x"], (P["pad_face"] + 0.5 + P["spig_y0"]) / 2.0,
+                    P["pad_z"]), 'Y', segs=32)
+
+    # The web, in the corridor between the tubes. Three boxes rather than a
+    # lean, and the steps are what make it printable: each one moves the
+    # front face 2.75 mm forward over 4 mm of descent, so no face on it is
+    # more than 34 degrees off vertical when the part stands on its flange.
+    # A single slab to y=166 would be a 5.5 mm ledge printing on air.
+    for z0, z1, yf in P["web_steps"]:
+        bm = _p()
+        hm["_box"](bm, (2 * P["mast_hx"], yf - ay0, z1 - z0),
+                   (0.0, (ay0 + yf) / 2.0, (z0 + z1) / 2.0))
+    # and a rounded nose where the shaft bore is, so the web's front-bottom
+    # corner is not a square block round a bearing
     bm = _p()
     hm["_cyl"](bm, P["boss_d"], 2 * P["mast_hx"], (0.0, ty, tz), 'X')
     ob = _union(hm, coll, "eye_frame", prims)
@@ -913,25 +1036,16 @@ def frame(hm, coll):
     hm["_cyl"](cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
                (0.0, ty, tz), 'X', segs=32)
     cut = _c()
+    # Apex toward -Z, not +Y, and that is a bug this part has carried since
+    # the teardrop was added. A teardrop's peak has to point the way the
+    # PRINT goes up. The frame prints Z_DOWN, so the print's up is the
+    # world's -z - and this roof was pointing at +y, which is sideways in
+    # the print. It left the shaft bore with a drooping ceiling AND a
+    # pointless lobe out of the side of it. Every other teardrop in this
+    # file is on a part that prints Y_UP, where the default happens to be
+    # right, which is why it went unnoticed.
     _teardrop(cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
-              (0.0, ty, tz), 'X', apex=1.40)
-    for sx in (-1, 1):
-        cut = _c()
-        # The peg socket is open outboard on purpose. The pad bore's centre
-        # is 49.79 and the face half's inner wall is 2.9 mm outboard of it,
-        # so there is no room for a wall on that side - the head's own wall
-        # closes the slot instead.
-        hm["_cyl"](cut, P["peg_fwd"] + 0.2, P["plate_y1"] - P["arch_y0"] + 4.0,
-                   (sx * P["pad_x"], (P["plate_y1"] + P["arch_y0"]) / 2.0,
-                    P["pad_z"]), 'Y', segs=24)
-        # The mouth is 4.2 across against a 5.2 bore, so the peg snaps in
-        # and stays. Cut the mouth the full 5.2 and its faces are tangent to
-        # the bore, which is a coplanar-surface boolean by another name - it
-        # left the frame with 15 open and 9 non-manifold edges.
-        cut = _c()
-        hm["_box"](cut, (6.0, P["plate_y1"] - P["arch_y0"] + 4.0, 3.6),
-                   (sx * (P["pad_x"] + 3.0),
-                    (P["plate_y1"] + P["arch_y0"]) / 2.0, P["pad_z"]))
+              (0.0, ty, tz), 'X', up=(0.0, 0.0, -1.0), apex=1.40)
     _cut_each(hm, coll, ob, cuts, "_CUT_frame")
     return ob
 
@@ -954,27 +1068,29 @@ def shaft(hm, coll):
 
 
 def peg(hm, coll, sx):
-    """Temple peg: locates the frame, and the two head halves, on one pin."""
-    side = "R" if sx > 0 else "L"
-    prims, _p = _prims()
-    # Each section overlaps the next by 1 mm. Butted exactly, the union
-    # found no intersection and the peg came out as three shells.
-    bm = _p()
-    hm["_cyl"](bm, P["peg_d"], P["pad_face"] - P["peg_y0"],
-               (sx * P["pad_x"], (P["pad_face"] + P["peg_y0"]) / 2.0,
-                P["pad_z"]), 'Y', segs=32)
-    # No head on it, and that is the wall's doing rather than a choice. The
-    # face half closes to x=52.2 by y=151.5, and the bore's centre is 49.79
-    # - so there are 2.4 mm to play with and a flange needs more. The frame
-    # is retained by its socket instead, which is a snap: the mouth is
-    # 3.6 across on a 4.6 bore, so the peg goes in and stays.
-    bm = _p()
-    hm["_cyl"](bm, P["peg_fwd"], P["plate_y1"] + 0.5 - (P["pad_face"] - 1.0),
-               (sx * P["pad_x"], (P["plate_y1"] + 0.5 + P["pad_face"] - 1.0) / 2.0,
-                P["pad_z"]), 'Y', segs=32)
-    ob = _union(hm, coll, "eye_peg_%s" % side, prims)
-    ob.color = (0.75, 0.75, 0.78, 1.0)
-    return ob
+    """WITHDRAWN, 16 Aug 2026 - not called. Read this before rebuilding it.
+
+    The temple peg was a O5 x 13 pin in the head's pad bore, stepped down to
+    O4.4 where it passed through the frame, and the frame snapped onto that
+    step through a socket cut open outboard. It existed for one reason: the
+    frame printed lying on its arch, and a spigot pointing to -y would have
+    pointed into the bed.
+
+    It broke on the first assembly, and it was always going to. What is left
+    of the socket between its O4.6 bore and its 3.6 mm mouth is two lips
+    0.5 mm thick - one perimeter at a 0.4 nozzle - and they were carrying
+    one end of the whole mechanism.
+
+    The frame now prints standing on its new flange, where a -y spigot runs
+    horizontal, so the spigot is part of the frame and this part is gone.
+    Nothing was lost by removing it: the pad bore's job of locating the two
+    head halves was 2 mm deep on the cranium side and the peg reached only
+    1 mm of that.
+
+    Kept, uncalled, so that the reason it went is attached to the thing that
+    went rather than only to the thing that replaced it.
+    """
+    raise NotImplementedError("eye_peg is withdrawn - see the docstring")
 
 
 def eyelid(hm, coll, sx):
@@ -1722,8 +1838,6 @@ def build(save=False):
     made.append(_solidify(frame(hm, coll)))
     made.append(shaft(hm, coll))
     for sx in (1, -1):
-        made.append(_solidify(peg(hm, coll, sx)))
-    for sx in (1, -1):
         made.append(_solidify(eyelid(hm, coll, sx)))
     made.append(_solidify(pan_bar(hm, coll)))
     for ob in made:
@@ -1766,7 +1880,6 @@ ALLOWED = {
     ("eye_dome_R", "eye_pan_bar"), ("eye_dome_L", "eye_pan_bar"),
     ("eye_pan_bar", "eye_rod_pan"),
     ("eye_lid_R", "eye_rod_lid_R"), ("eye_lid_L", "eye_rod_lid_L"),
-    ("eye_frame", "eye_peg_R"), ("eye_frame", "eye_peg_L"),
     ("eye_lid_R", "eye_dome_R"), ("eye_lid_L", "eye_dome_L"),
     ("eye_dome_R", "eye_stem_R"), ("eye_dome_L", "eye_stem_L"),
     ("eye_dome_R", "eye_axle_R"), ("eye_dome_L", "eye_axle_L"),

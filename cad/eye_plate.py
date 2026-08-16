@@ -21,11 +21,15 @@ it. What it does borrow is `print_clean()`, because the repairs that file
 learned - zero-area slits from coplanar boolean seams, shells that were
 never actually unioned - apply here exactly as they did to plate 4.
 
-ELEVEN FILES, FOURTEEN PIECES
-----------------------------
-The axles, the pegs and the stems are symmetric about their own centre
-plane, so left and right are the same object and each exports once with a
-quantity of two. `chirality()` is what says so - and it has to, because
+TEN FILES, TWELVE PIECES
+------------------------
+`eye_peg` was retired on 16 Aug 2026 - the frame carries its own temple
+spigots now, so the mount is one printed part instead of three. See
+`eye_v2.peg`, which is kept uncalled with the reason in it.
+
+The axles and the stems are symmetric about their own centre plane, so left
+and right are the same object and each exports once with a quantity of two.
+`chirality()` is what says so - and it has to, because
 volume, bounding box and a vertex-to-centroid fingerprint are all identical
 between a part and its mirror image, so none of the checks this project
 already had could tell a copy from a reflection.
@@ -109,12 +113,15 @@ FLAT = Matrix.Identity(4)
 
 # name, quantity, rotation, why it is that way up
 PARTS = [
-    ("eye_frame",    1, Z_DOWN, "on its front face. NOT flat on the arch, "
-                                "which was measured at ZERO bed contact - "
-                                "the mast tip stands 2.5 mm proud of the "
-                                "arch, so 104 mm of part balanced on a "
-                                "4.8 mm edge. This way: 416 mm2 down, and "
-                                "the overhang falls 1331 -> 128 mm2"),
+    ("eye_frame",    1, Z_DOWN, "STANDING ON ITS FLANGE. The rotation has "
+                                "not changed and its meaning has: the part "
+                                "used to balance on the 104 x 4 mm top edge "
+                                "of its arch, 416 mm2, with the mast "
+                                "sticking out sideways as a 23-degree "
+                                "cantilever - which is the member that "
+                                "snapped. The flange is now that face, "
+                                "about 1300 mm2, and every wall grows "
+                                "straight down off it"),
     ("eye_gimbal",   1, Y_UP,   "flat in its own plane, both bores roofed. "
                                 "Really flat now: cradle_y0 went 154 -> 153 "
                                 "so the floor reaches the tilt lever and "
@@ -137,7 +144,6 @@ PARTS = [
     ("eye_axle_R",   2, FLAT,   "standing on end - the only way to get a "
                                 "round journal; L and R are the same part"),
     ("eye_shaft",    1, X_UP,   "standing on end"),
-    ("eye_peg_R",    2, Y_UP,   "standing on end; L and R are the same part"),
 ]
 
 
@@ -410,6 +416,53 @@ BRIM_MIN_MM2 = 40.0
 MAX_ROOF = 100.0
 ROOF_CONE = 20.0
 ROOF_COPLANAR = 5.0     # degrees; faces within this of each other are one patch
+
+# --- what this file missed the first time ---------------------------------
+# `printcheck()` returned READY for a plate on which two members broke on
+# first assembly: the frame's mast and both eyelid cranks. Both were slender
+# things printed as unsupported cantilevers, and neither test above can see
+# that, for two different reasons.
+#
+#   the crank  a 3 x 18 mm slab lying FLAT, 3.9 mm above the bed, with
+#              nothing under it but air. 24.6 mm2 - and MAX_ROOF is 100.
+#   the mast   an 80.7 mm2 slope 23 degrees off horizontal, starting 17.3 mm
+#              up. ROOF_CONE is 20, so it was never even counted.
+#
+# What both have in common, and what NOTHING here was measuring, is that
+# there was no material underneath them. Area is not the question; a 68 mm2
+# ledge over a wall is a ledge and a 25 mm2 one over nothing is a failure.
+#
+# So: down-facing area whose straight-down ray misses the rest of the part,
+# grouped into connected COPLANAR patches, and the coplanarity is what makes
+# one number enough. A cantilever's underside is one flat face and stays one
+# patch however big it gets; a sphere's flank or a cylinder's belly is
+# hundreds of faces at slightly different angles and falls apart into
+# nothing. That is the same argument the roof test makes, and it is why the
+# dome - which is 104 mm2 of down-facing surface over open air, and prints
+# perfectly - scores 3.
+#
+# The threshold is not taste. It is what separates the seven STLs that were
+# actually printed, five of which came out fine:
+#
+#     biggest connected ON-AIR patch, mm2          ceiling(20)   past 55(35)
+#       eye_frame   BROKE - the mast                      0.0          80.7
+#       eye_lid_R   BROKE - the crank                    24.6          24.6
+#       eye_gimbal  printed fine                          6.9           9.4
+#       eye_stem_R  printed fine                          7.6           7.6
+#       eye_dome_R  printed fine                          0.0           3.2
+#       eye_pan_bar printed fine                          0.0           0.0
+#       eye_axle_R  printed fine                          0.0           0.0
+#
+# 9.4 is the worst part that survived and 24.6 the best that did not, so 15
+# sits with a 1.6x margin on both sides. The two cone angles collapse into
+# one once patches are grouped tightly, so only the 35-degree one is kept -
+# it is the usual "support past 55 degrees of overhang" line, and a flat
+# ceiling is inside it anyway.
+AIR_SKIRT = 1.5         # the first 1.5 mm is carried by the first layers
+                        # and the brim; below this a step is not a cantilever
+AIR_MAX = 15.0          # mm2, largest connected coplanar patch over nothing
+AIR_CONE = 35.0         # degrees off straight down = 55 degrees of overhang
+AIR_COPLANAR = 5.0      # and this is the load-bearing one - see above
 # Overhang within this of the top is exempt: on the domes it is the hollow's
 # own ceiling, which no orientation turns downward and which closes over a
 # cavity nothing prints into.
@@ -486,6 +539,123 @@ def _print_stats(name, rot, limit=45.0):
     return bed, air, worst, tall, shadow / 2.0, roof, flat
 
 
+def _air_stats(name, rot):
+    """The largest connected patch of this part that prints over NOTHING.
+
+    Returns (area, height, total) - the biggest coplanar patch, how far up
+    it starts, and how much down-facing area is over air altogether. Only
+    the first is judged; the third is there because it is the number that
+    looks alarming and is not, and seeing them side by side is what makes
+    the point that area alone decides nothing.
+
+    "Over nothing" is a ray straight down from each face's own centre. It is
+    the cheapest honest version of the question a slicer asks layer by
+    layer, and it is exact for the shapes on this plate, which are all
+    boxes, cylinders and spheres. What it would get wrong is a face
+    overhanging a wall that is beside it rather than beneath it - a bridge
+    landing - and there are none of those here.
+    """
+    src = bpy.data.objects.get(name)
+    if src is None:
+        return None
+    ob, _dims = _oriented(src, rot)
+    bpy.context.scene.collection.objects.link(ob)
+    # BAKE the orientation into the mesh and clear the matrix. `Object.
+    # ray_cast` takes and returns LOCAL coordinates, and `_oriented` puts the
+    # print orientation in `matrix_world` - so a face normal read off the
+    # bmesh and a ray fired at it are in two different frames. Left that way
+    # this reported the pan bar, which prints flat and has no overhang at
+    # all, as a 204 mm2 ceiling: it was reading the part's TOP face as
+    # down-facing. Triangulate in the same pass, because the part is a
+    # boolean result and ray_cast wants triangles it can trust.
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bmesh.ops.transform(bm, verts=bm.verts[:], matrix=ob.matrix_world)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.to_mesh(ob.data)
+    bm.free()
+    ob.matrix_world = Matrix.Identity(4)
+
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    zs = [v.co.z for v in bm.verts]
+    lo, hi = min(zs), max(zs)
+    tall = hi - lo
+    down = Vector((0.0, 0.0, -1.0))
+    cos_cop = math.cos(math.radians(AIR_COPLANAR))
+    cos_cone = -math.cos(math.radians(AIR_CONE))
+    pool, total = set(), 0.0
+    for f in bm.faces:
+        if f.normal.normalized().z >= cos_cone:
+            continue
+        c = f.calc_center_median()
+        h = c.z - lo
+        # Overhang in the top TOP_BAND is a cavity's own ceiling, which no
+        # orientation turns downward - the same exemption the roof test
+        # makes, and for the same reason.
+        if h < AIR_SKIRT or h >= tall - TOP_BAND:
+            continue
+        if not ob.ray_cast(c + Vector((0.0, 0.0, -0.05)), down,
+                           distance=1e6)[0]:
+            pool.add(f)
+            total += f.calc_area()
+    best, bh = 0.0, 0.0
+    while pool:
+        seed = pool.pop()
+        n0 = seed.normal.normalized()
+        area, stack, hs = seed.calc_area(), [seed], [seed.calc_center_median().z]
+        while stack:
+            f = stack.pop()
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g in pool and g.normal.normalized().dot(n0) >= cos_cop:
+                        pool.discard(g)
+                        area += g.calc_area()
+                        hs.append(g.calc_center_median().z)
+                        stack.append(g)
+        if area > best:
+            best, bh = area, min(hs) - lo
+    bm.free()
+    bpy.data.objects.remove(ob, do_unlink=True)
+    return best, bh, total
+
+
+def aircheck():
+    """Is anything on this plate printing over open air? One line per file.
+
+    This is the test that was missing when the first mechanism was printed
+    and two of its members snapped. See the block comment above AIR_SKIRT
+    for what they were and for where these numbers come from.
+    """
+    print("  %-12s %16s %11s   %s"
+          % ("part", "worst patch", "all on air", "verdict"))
+    bad = []
+    for name, qty, rot, why in PARTS:
+        s = _air_stats(name, rot)
+        if s is None:
+            print("  %-12s MISSING" % name)
+            bad.append((name, "no such object"))
+            continue
+        area, h, total = s
+        note = ""
+        if area > AIR_MAX:
+            note = ("a %.1f mm2 face on air, %.1f mm up (limit %.0f)"
+                    % (area, h, AIR_MAX))
+        print("  %-12s %8.1f mm2 @%5.1f %7.1f mm2   %s"
+              % (name, area, h, total, note or "ok"))
+        if note:
+            bad.append((name, note))
+    print("")
+    if bad:
+        print("ON AIR - %d of %d files would print a cantilever:" % (len(bad), len(PARTS)))
+        for n, note in bad:
+            print("   %-14s %s" % (n, note))
+    else:
+        print("NOTHING ON AIR - every down-facing face has part under it.")
+    return not bad
+
+
 def printcheck(limit=45.0):
     """Is this plate fit to put on a printer? One line per file, then a verdict.
 
@@ -539,9 +709,19 @@ def printcheck(limit=45.0):
         print("NOT READY - %d of %d files:" % (len(bad), len(PARTS)))
         for n, note in bad:
             print("   %-14s %s" % (n, note))
+    print("")
+    # Not optional, and not a separate thing to remember to run. The plate
+    # this file cleared on 15 Aug was printed and two members snapped, and
+    # the reason it cleared is that everything above measures how a part
+    # SITS and nothing measured what it hangs over.
+    air = aircheck()
+    print("")
+    if bad or not air:
+        print("NOT READY.")
     else:
-        print("READY - every file stands on a real face and nothing sags.")
-    return not bad
+        print("READY - every file stands on a real face, nothing sags, and")
+        print("nothing is printed over open air.")
+    return not bad and air
 
 
 def gimbal_foot():

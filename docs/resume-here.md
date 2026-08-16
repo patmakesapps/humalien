@@ -3,6 +3,53 @@
 Everything below is verified in the file, not remembered. Start with **What to
 do next**; the rest is why.
 
+## 16 Aug — the first mechanism was printed, assembled, and broke
+
+Three members let go, and all three were the same fault: **a slender thing
+printed as an unsupported cantilever**. Not one of them was a load calculation
+that came out wrong; every one of them was a shape that could not be printed in
+the orientation it was printed in.
+
+| broke | what it was | why |
+| --- | --- | --- |
+| left temple | a Ø4.4 peg retained by two printed lips **0.5 mm** thick — one nozzle width — in a socket cut open outboard | the socket could never be closed: the pad bore's centre is x=49.79 and the wall is at 52.2, so a Ø5.2 hole needs 2.6 mm outboard and there are 2.41 |
+| the mast | a 4.8 × 8 mm slab reaching 20 mm forward to the shaft boss, carrying the gimbal, both eyes, both lids and the tilt servo's whole reaction | printed `Z_DOWN` it is a 23°-from-horizontal cantilever, **80.7 mm² of it over open air**, starting 17.3 mm up |
+| both eyelid cranks | a 3 × 3 mm arm 18 mm long | printed `X_UP` it is a flat slab 3.9 mm above the bed with **24.6 mm² over open air** and only the hub under its root |
+
+**`eye_plate.printcheck()` returned READY for all of it**, and that is the part
+worth remembering. Everything it measured was about how a part *sits* — bed
+contact against its own shadow, flat ceilings within 20° of straight down.
+Nothing measured what a part *hangs over*. `aircheck()` is now that test, it is
+called from inside `printcheck()` so it cannot be forgotten, and its threshold
+is derived from the seven STLs that were actually printed rather than chosen:
+the worst part that survived scores 9.4 mm², the best that broke scores 24.6,
+and the limit is 15.
+
+### What changed
+
+- **The mount is one printed part.** `eye_frame` gained a top flange (z 230–234,
+  forward to y=160.5 over |x| ≤ 45), the mast became a deep stepped web in the
+  corridor between the tubes, and the temple pegs became integral spigots.
+  `eye_peg` is withdrawn — kept uncalled, with the reason in its docstring.
+  First layer 416 → **1230 mm²**; worst patch on air 80.7 → **13.6**.
+- **The eyelid crank starts at the hub** (`crank_x0` 11.3 → 7.4), so it prints
+  as a fin off the hub's own first layer instead of an arm in mid-air.
+  24.6 → **13.4 mm²** on air. Nothing about the linkage moved.
+- **The tilt bearing is 42% wider** — `tube_x0` 3.0 → 4.0, `mast_hx` 2.4 → 3.4.
+- **A teardrop was pointing the wrong way.** The frame's shaft bore had its
+  roof toward +y when the part prints `Z_DOWN` and the print's up is −z. Every
+  other teardrop in `eye_v2` is on a part that prints `Y_UP`, where the default
+  happens to be right, which is why it survived.
+
+`check()` PASSES at all 29 poses and `printcheck()` READY including `aircheck()`.
+Ten files, twelve pieces, re-exported to `exports/eye/`. `Humalien_v1.blend` is
+saved; `Humalien_v1.pre_hardening_20260816.blend` is the rollback point.
+
+**Still open, and not touched:** the frame is retained fore-and-aft by the
+spigot fit alone, with the forehead casing at y=162 standing 1.5 mm in front of
+the flange as a backstop. If the printed spigots come out loose, that gap is
+what has to close.
+
 ## 15 Aug in one line
 
 The ear hub bosses that broke off the printer were **never attached** — the
