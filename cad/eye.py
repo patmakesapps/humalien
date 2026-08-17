@@ -1259,8 +1259,12 @@ def place_horns(hm, coll):
     Drawn deliberately thin: just the arm plate at the spline tip, kept
     0.1-0.2 clear of shaft and strap so no proxy ever touches a printed
     part. The O2 pin is the M2 linkage screw, through the strap's bore.
-    The tilt horn gets no proxy - it lives inside the gimbal boss's pocket
-    and would never be seen.
+    The tilt horn DOES get a proxy now (v2.1). Through v2 it had none -
+    "it lives inside the pocket and would never be seen" - and unseen is
+    exactly how that coupling shipped broken twice; Pat's first question
+    at the bench was where the third horn went. Drawn at the MEASURED
+    stack (spline tip x 65.05), plate thinned to 1.2 so one proxy can
+    clear the slot floor on one side and the spline tip on the other.
     """
     p_pan, p_blk, _ = _horn_pins()
     out = []
@@ -1292,6 +1296,18 @@ def place_horns(hm, coll):
     bm = add()
     hm["_cyl"](bm, 2.0, 5.9, (6.15, p_blk.y, p_blk.z), 'X', segs=16)
     ob = _union(hm, coll, "PROXY_horn_blink", prims)
+    ob.color = (0.92, 0.92, 0.88, 1.0)
+    out.append(ob)
+
+    prims, add = _prims()               # tilt: arm UP, in the boss slot
+    # The one horn with no strap and no pin: it IS the drive. Plate in
+    # the slot at the measured plane - 0.15 to the slot floor at 63.4,
+    # 0.3 to the spline tip at 65.05, 0.45 to each slot wall.
+    bm = add()
+    hm["_box"](bm, (1.2, 5.3, 19.0), (64.15, 0.0, 9.5))
+    bm = add()      # hub disc, faces inside the plate - the weld trap
+    hm["_cyl"](bm, 7.2, 1.0, (64.15, 0.0, 0.0), 'X', segs=24)
+    ob = _union(hm, coll, "PROXY_horn_tilt", prims)
     ob.color = (0.92, 0.92, 0.88, 1.0)
     out.append(ob)
     return out
