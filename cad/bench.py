@@ -94,15 +94,6 @@ B = dict(
     zip_d=4.0,
     zip_y=(-44.0, -54.0),   # a pair per station = one strap
     zip_xs=(-68.0, -48.0, -28.0, 0.0, 28.0, 48.0, 68.0),
-
-    # --- SHT41 temp/humidity, behind the PCA ------------------------------
-    # Adafruit 25.5 x 17.6 STEMMA board, four corner holes 0.1" in from the
-    # edges: 20.32 x 12.7 pattern, M2.5. On 3 mm bosses so air reaches the
-    # sensor's underside, and on the PCA's side of the deck so the Pi's
-    # heat plume stays away from a sensor whose whole job is ambient truth.
-    sht_cx=-45.0, sht_cy=-95.0,
-    sht_hx=10.16, sht_hy=6.35,
-    sht_boss_d=6.0, sht_boss_h=3.0,
 )
 
 
@@ -116,7 +107,10 @@ STATIONS = dict(
     speaker=dict(centre=(73.75, -55.0, 57.0),    # +-x mirrored, firing out
                  dims=(21.0, 100.0, 45.0),       # Waveshare 8ohm 5W bar
                  holes=(92.0, 36.0)),            # flange pattern, MEASURED
-    sht41=(-45.0, -95.0),       # on the deck, behind the PCA
+    # SHT41: mounting deferred - the board on hand is not the Adafruit
+    # breakout the 20.32 x 12.7 guess assumed. It ties down in the cable
+    # channel until its real hole pattern is measured; behind the PCA,
+    # away from the Pi's heat, is still where it should live.
 )
 
 
@@ -198,11 +192,6 @@ def deck(hm, coll):
                        (B["pi_cx"] + sx * B["pi_hx"],
                         B["pi_cy"] + sy * B["pi_hy"],
                         zt + (B["pi_boss_h"] - 1.0) / 2.0), 'Z', segs=24)
-            bm = add()
-            hm["_cyl"](bm, B["sht_boss_d"], B["sht_boss_h"] + 1.0,
-                       (B["sht_cx"] + sx * B["sht_hx"],
-                        B["sht_cy"] + sy * B["sht_hy"],
-                        zt + (B["sht_boss_h"] - 1.0) / 2.0), 'Z', segs=20)
     ob = _union(hm, coll, "bench_deck", prims)
 
     cuts, cadd = _prims()
@@ -221,9 +210,7 @@ def deck(hm, coll):
             for cx, cy in ((B["pca_cx"] + sx * B["pca_hx"],
                             B["pca_cy"] + sy * B["pca_hy"]),
                            (B["pi_cx"] + sx * B["pi_hx"],
-                            B["pi_cy"] + sy * B["pi_hy"]),
-                           (B["sht_cx"] + sx * B["sht_hx"],
-                            B["sht_cy"] + sy * B["sht_hy"])):
+                            B["pi_cy"] + sy * B["pi_hy"])):
                 bm = cadd()
                 hm["_cyl"](bm, B["pilot_d"], B["pilot_deep"],
                            (cx, cy, zt + B["pi_boss_h"]
@@ -275,16 +262,6 @@ def proxies(hm, coll):
                (B["pca_cx"], B["pca_cy"] + 5.0, zb + 1.6 + 4.5))
     ob = _union(hm, coll, "PROXY_pca9685", prims)
     ob.color = (0.15, 0.3, 0.7, 1.0)
-    out.append(ob)
-
-    prims, add = _prims()               # SHT41: board + the sensor itself
-    zb = zt + B["sht_boss_h"]
-    bm = add()
-    hm["_box"](bm, (25.5, 17.6, 1.6), (B["sht_cx"], B["sht_cy"], zb + 0.8))
-    bm = add()
-    hm["_box"](bm, (3.0, 3.0, 2.0), (B["sht_cx"], B["sht_cy"], zb + 2.6))
-    ob = _union(hm, coll, "PROXY_sht41", prims)
-    ob.color = (0.1, 0.6, 0.55, 1.0)
     out.append(ob)
 
     # The speakers are NOT bench parts - they are HEAD stations, drawn so
