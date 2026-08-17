@@ -94,7 +94,12 @@ B = dict(
     # --- cable channel ----------------------------------------------------
     zip_d=4.0,
     zip_y=(-44.0, -54.0),   # a pair per station = one strap
-    zip_xs=(-68.0, -48.0, -28.0, 0.0, 28.0, 48.0, 68.0),
+    # +-42, not +-48: the first deck put O4 zip holes 3.0-3.2 from the
+    # O2.2 gantry foot pilots at +-51 - radii sum 3.1, so each pilot
+    # FUSED with its zip hole into a keyhole slot and the foot screws
+    # had nothing to bite. Pat found it at assembly (2026-08-17). Two
+    # holes can both be right and still be wrong next to each other.
+    zip_xs=(-68.0, -42.0, -28.0, 0.0, 28.0, 42.0, 68.0),
 
     # --- the brow gantry --------------------------------------------------
     # Two legs, an arm each, and a cradle that holds the forehead casing at
