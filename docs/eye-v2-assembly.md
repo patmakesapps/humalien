@@ -3,9 +3,13 @@
 Built from `cad/eye.py`. STLs in `exports/eye/`, one per part, already in
 their gated print orientation — do not rotate them in the slicer.
 
-**If you sliced before the pan fix (2026-08-17, parallelogram + dogleg):
-re-slice `eye_gimbal_x1.stl` and `eye_link_pan_x1.stl`. The other eleven
-are unchanged.**
+**Corrections, 2026-08-17.** (1) The pan fix (parallelogram + dogleg)
+changed `eye_gimbal_x1.stl` and `eye_link_pan_x1.stl`. (2) The tilt-pocket
+fix, found at the bench that afternoon, changed `eye_gimbal_x1.stl`
+AGAIN: the earlier pocket was cut where the horn physically cannot reach
+— the spline bottoms in the hub ~1.5 mm before the arm touches the boss.
+**Reprint the gimbal from the current STL.** Every other part from the
+morning print is still good.
 
 ## Slicer settings the gate requires
 
@@ -50,15 +54,18 @@ pins, straps, spine, tilt pin, pan bar.
 6. **Tilt servo into the right base upright** — body through the pocket,
    tabs screwed to the outer face. **Center it electrically (1500 µs)
    now** — after step 7 the pocket fixes the phase forever.
-7. **Gimbal onto the tilt drive** — with the servo centred, press the
-   horn onto the spline pointing **straight up**, then slide the gimbal
-   right so the horn drops into the boss pocket: arm in the slot, hub in
-   the recess. **No clamp screw** — the Ø3 dimple in the recess floor is
-   a dead end, not a hole. Left side: printed tilt pin through the
-   upright into the boss, head outboard; dab of glue on the head if it
-   walks. Once the pin is in, the gimbal has ~1 mm of side play against
-   a 2.1 mm-deep slot, so the horn is captive — that geometry, not a
-   screw, is what holds the joint together.
+7. **Gimbal onto the tilt drive** (needs the v2.1 gimbal — see the
+   corrections note at the top) — with the servo centred, press the horn
+   **fully home** on the spline pointing **straight up**. Slide the
+   gimbal toward the servo until the arm enters the vertical slot and
+   the boss face closes around it. The slot is 3.6 mm deep on purpose:
+   the horn seats wherever its spline stack puts it — no force, no
+   snap, the slot just swallows the arm. **No screw of any kind in this
+   joint.** Left side: printed tilt pin through the upright into the
+   boss, head outboard; dab of glue on the head if it walks. Once the
+   pin is in, the gimbal's ~1 mm of side play can't clear the slot
+   depth, so the horn is captive — the shape, not a fastener, holds the
+   joint together.
 8. **Pan servo** up through the shelf window (body up, horn down), tabs
    screwed up into the pilots. Center at 1500 µs, then press the horn on
    pointing **straight back, parallel to the eye levers** — this is the

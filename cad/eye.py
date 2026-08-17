@@ -187,18 +187,21 @@ E = dict(
     srv_cut_z0 = -17.5,     # body pocket: srv_h below the shaft axis, plus
     srv_cut_z1 = 6.3,       # the O12.1 collar round the shaft above it
     # The horn pocket in the gimbal's RIGHT tilt boss. The servo horn drops
-    # into an arm-shaped slot and the boss face closes over it; torque goes
-    # through the slot walls, not through screws. NO CENTRE SCREW: the
-    # "access bore" below dead-ends inside the lid hinge stub (found at
-    # assembly, 2026-08-17 - Pat looked for the hole; there isn't one, and
-    # never was). It does not matter: the gimbal has 1.0 mm of axial float
-    # between the uprights against a 2.1 mm slot, so once the tilt pin is
-    # in, the horn cannot leave the pocket. The joint is captive by
-    # geometry; the bore survives only as a O3 dimple in the recess floor.
-    horn_slot_w = 5.8,      # single-arm MG90S horn is 5.3 wide
-    horn_slot_deep = 2.1,   # arm plate is 1.7 thick
-    horn_hub_d  = 7.6,      # clearance over the O7 hub, and over the shaft tip
-    horn_screw_d = 3.0,     # vestigial - see the no-centre-screw note above
+    # into an arm-shaped slot and torque goes through the slot walls, not
+    # through screws. v2.1 (2026-08-17, at the bench): v2 cut this pocket
+    # at x 61.4..63.5, but the horn, pressed fully home on the mounted
+    # servo, has its plate out at ~65 - the spline bottoms in the hub long
+    # before the arm can reach. Pat tried the print; it simply does not
+    # go. The boss now reaches x=67.0 and the slot is deep enough that any
+    # plate plane from 63.4 to ~66.2 engages at least a millimetre of
+    # wall: the horn self-locates on the spline and the pocket meets it
+    # where it is. No centre screw either - the old access bore dead-ended
+    # inside the lid hinge stub and could never pass one; captivity does
+    # the job (1.0 mm axial float between the uprights vs the engagement).
+    horn_slot_w = 6.2,      # MG90S single-arm horn is 5.3-6.0 at the root
+    horn_slot_deep = 3.6,   # deep on purpose - swallows the 1.7 plate
+                            # wherever the real spline stack lands it
+    horn_hub_d  = 7.6,      # clearance over the O7 hub and the spline
 
     # --- the lid spine and its joint to the lids --------------------------
     # The spine bolts to the END FACES of the lids' inboard bosses - two M2
@@ -866,8 +869,9 @@ def gimbal(hm, coll):
     back to x=63.5 and carries a HORN POCKET, because the tilt servo's shaft
     IS the right-hand pivot - that is what direct drive means. The horn
     drops into an arm-shaped slot and torque goes through the slot's walls.
-    No clamp screw: the joint is captive by geometry (1.0 mm float vs a
-    2.1 mm slot) - see the no-centre-screw note on the pocket dims in E.
+    No clamp screw: the joint is captive by geometry (1.0 mm float vs the
+    slot engagement) - see the v2.1 note on the pocket dims in E for why
+    the pocket sits at x 63.4..67.2 and nowhere shallower.
 
     The gimbal also carries both riding servos, because that is the design's
     core decision: pan and blink move WITH tilt, so tilt cannot drag on
@@ -901,9 +905,14 @@ def gimbal(hm, coll):
         # kept tripping on.
         hm["_box"](bm, (E["arm_x"] - half + 1.0, E["gim_t"], E["gim_h"]),
                    (sx * (half - 1.0 + E["arm_x"]) / 2.0, 0.0, az))
-        # The post and boss, per side. On the right both stop at x=63.4 so
-        # the servo horn - arm plate at about x 63.6..65.1 once the shaft
-        # comes through the upright - swings in air instead of inside them.
+        # The post and boss, per side. The right POST still stops at
+        # x=63.4, but the BOSS runs on to x=67.0, because that is where
+        # the horn actually is: plate at ~65 once the spline bottoms in
+        # the hub (v2 stopped the boss at 63.5 and cut the pocket at
+        # 61.4..63.5 - unreachable; see the v2.1 note in E). The boss face
+        # keeps 2.55 to the servo's O12.1 collar at 69.55 and 2.0 to the
+        # upright's inner wall at 69.0, and it is coaxial with the tilt
+        # axis, so the sweep cannot change either number.
         # Post tops are NOT at z=7: the O14 boss's top tangent is exactly
         # there, and a tangent union is degenerate geometry - it is the
         # three coincident vertices the weld guard kept rolling back on.
@@ -915,7 +924,7 @@ def gimbal(hm, coll):
             hm["_box"](bm, (E["gim_t"], E["gim_t"], 36.0),
                        (60.4, 0.0, -22.5))
             bm = add()
-            hm["_cyl"](bm, E["tilt_boss_d"], 7.5, (59.75, 0.0, 0.0), 'X',
+            hm["_cyl"](bm, E["tilt_boss_d"], 11.0, (61.5, 0.0, 0.0), 'X',
                        segs=32)
         else:
             bm = add()
@@ -965,17 +974,16 @@ def gimbal(hm, coll):
     bm = cadd()                              # tilt pivot bore, LEFT only
     hm["_cyl"](bm, E["tilt_pin_d"] + E["fit"], E["gim_t"] * 6.0,
                (-E["arm_x"], 0.0, 0.0), 'X', segs=32)
-    # The horn pocket, RIGHT: arm slot, hub recess, and what was meant to
-    # be a centre-screw access bore - it dead-ends inside the lid hinge
-    # stub (the stub owns the axis from x 41.5 inboard of the boss), so it
-    # prints as a blind dimple. Kept because the part is printed and the
-    # joint never needed the screw; do not tell anyone to drive one.
+    # The horn pocket, RIGHT: arm slot at 63.4..67.2 (through the new boss
+    # face at 67.0), and a hub/spline recess running deeper to 61.5. Both
+    # open outboard; the slot's extra depth is the tolerance that lets the
+    # horn sit wherever the real spline stack puts it. The v2 centre-screw
+    # access bore is GONE - it dead-ended inside the lid hinge stub (the
+    # stub owns the axis inboard of the boss) and could never pass a screw.
     bm = cadd()
-    hm["_box"](bm, (2.3, E["horn_slot_w"], 21.0), (62.55, 0.0, 6.5))
+    hm["_box"](bm, (3.8, E["horn_slot_w"], 21.0), (65.3, 0.0, 6.5))
     bm = cadd()
-    hm["_cyl"](bm, E["horn_hub_d"], 4.3, (61.55, 0.0, 0.0), 'X', segs=32)
-    bm = cadd()
-    hm["_cyl"](bm, E["horn_screw_d"], 5.5, (58.25, 0.0, 0.0), 'X', segs=24)
+    hm["_cyl"](bm, E["horn_hub_d"], 5.7, (64.35, 0.0, 0.0), 'X', segs=32)
     # the shelf window the pan servo body passes up through, and its pilots
     bm = cadd()
     hm["_box"](bm, (23.0, 12.5, 6.0), (-28.0, -33.0, -29.0))
