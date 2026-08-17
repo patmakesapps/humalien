@@ -43,6 +43,17 @@ pins, straps, spine, tilt pin, pan bar.
 - Pin key flat seats in the ball bore without force.
 - Ø5 tilt pin spins freely in the base upright's left bore.
 
+## Sideways holes — printed reality
+
+Any pilot whose axis is HORIZONTAL in the print (tilt servo tabs, blink
+servo tabs) can skin over in FDM — the design has the holes, the print
+seals them. Clear them with a 1.5 mm drill; the servo's own tab holes
+are the drill guide, so hold the servo in place and drill through them.
+Same trick for the bench: the deck's tab screws bite the eye base's
+floor EDGE, which had no pilots on the first print — drill 1.5 through
+the deck's Ø2.2 tab holes into the edge before driving those screws.
+Current STLs cut all of these Ø1.9 and through where possible.
+
 ## Assembly order
 
 1. **Pins into balls** — key flat sets the phase; no glue.
@@ -71,9 +82,14 @@ pins, straps, spine, tilt pin, pan bar.
    pointing **straight back, parallel to the eye levers** — this is the
    parallelogram; one spline tooth off and the travel is offset. Dogleg
    strap onto horn and tab.
-9. **Blink servo** into the bracket, shaft toward the right eye. Center,
-   then horn pointing **forward at the lids, ~7° above level**. Strap up
-   to the spine crank.
+9. **Blink servo** — drops into the bracket **from the front**: the
+   plate's opening is a forward-facing slot, body in at its final spot,
+   tabs against the inboard face, screws along x. (On a gimbal printed
+   before the slot — v2.1 or older — cut the ~3 mm strip between window
+   and front edge with flush cutters first; the closed window's only
+   entry was a sideways slide the shelf physically blocks.) Center,
+   then horn pointing **forward at the lids, ~7° above level**. Strap
+   up to the spine crank.
 10. **First power**: software limits BEFORE moving — tilt ±16°, pan ±20°,
     blink −55°/+10° — and run slow. The mechanism was verified clash-free
     exactly inside those numbers, not outside them.

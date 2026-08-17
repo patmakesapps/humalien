@@ -990,12 +990,19 @@ def gimbal(hm, coll):
     for px in (-42.0, -14.0):
         bm = cadd()
         hm["_cyl"](bm, E["pilot_d"], 6.0, (px, -33.0, -29.0), 'Z', segs=20)
-    # the window the blink servo body passes through, and its tab pilots
+    # The blink servo opening - a SLOT open to the plate's front edge,
+    # not a closed window. The closed v2.1 window only admitted the body
+    # by an x-slide from inboard, and the shelf slab owns that corridor:
+    # Pat stood there with the servo and nowhere to come from. Open at
+    # the front, the servo DROPS IN from -y at its final x and the tabs
+    # screw to the same face. Pat hand-cut the printed gimbal to match.
     bm = cadd()
-    hm["_box"](bm, (8.0, E["srv_cut_w"], 23.0), (25.0, -26.0, -25.0))
+    hm["_box"](bm, (8.0, 18.2, 23.0), (25.0, -28.9, -25.0))
+    # tab pilots: O1.9 and THROUGH the plate - sideways O1.7 blind holes
+    # skin over in FDM (see the base's tilt pilots for the full story)
     for pz in (-39.0, -11.0):
         bm = cadd()
-        hm["_cyl"](bm, E["pilot_d"], 6.0, (24.5, -26.0, pz), 'X', segs=20)
+        hm["_cyl"](bm, 1.9, 10.0, (25.0, -26.0, pz), 'X', segs=20)
     _cut_each(hm, coll, ob, cuts, "_CUT_gimbal")
     return ob
 
@@ -1162,9 +1169,25 @@ def base(hm, coll):
     bm = cadd()                             # servo body pocket, RIGHT
     hm["_box"](bm, (8.0, E["srv_cut_w"], E["srv_cut_z1"] - E["srv_cut_z0"]),
                (E["base_x"], 0.0, (E["srv_cut_z0"] + E["srv_cut_z1"]) / 2.0))
-    for pz in (-20.0, 8.0):                 # servo tab pilots, outer face
+    # Servo tab pilots, outer face - THROUGH the wall and O1.9, not the
+    # first print's blind O1.7: a sideways hole that small is ~8 sagging
+    # layers and seals over in FDM. Pat met bare plastic where the sheet
+    # promised pilots and recovered by drilling through the servo's own
+    # tab holes. Vertical pilots keep O1.7; sideways ones get the bump
+    # and a clear exit so both mouths read as holes.
+    for pz in (-20.0, 8.0):
         bm = cadd()
-        hm["_cyl"](bm, E["pilot_d"], 5.5, (72.75, 0.0, pz), 'X', segs=20)
+        hm["_cyl"](bm, 1.9, E["base_t"] * 2.0, (72.0, 0.0, pz), 'X', segs=20)
+    # Bench tab-screw pilots in the floor's edge faces. The deck's tabs
+    # (bench.py, tab_x=30) drive M2 self-tappers into these edges, and
+    # the first print had nothing there - "No holes in eye_base needed"
+    # was a lie Pat paid for at the bench, tapper skating on bare PLA.
+    # O1.9 horizontal blind holes may still skin over; the deck's own
+    # tab hole guides a 1.5 mm drill straight into them if so.
+    for sx in (1, -1):
+        for ye in (E["base_y0"], E["base_y1"]):
+            bm = cadd()
+            hm["_cyl"](bm, 1.9, 12.0, (sx * 30.0, ye, -61.0), 'Y', segs=16)
     _cut_each(hm, coll, ob, cuts, "_CUT_base")
     return ob
 
