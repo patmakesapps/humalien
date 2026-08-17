@@ -297,6 +297,12 @@ def build(save=False):
     ob = deck(hm, coll)
     print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
     proxies(hm, coll)
+    n = 0
+    for o in coll.objects:      # house rule: everything shades smooth
+        if o.type == 'MESH':
+            hm["shade"](o, 35.0)
+            n += 1
+    print("  shaded %d objects smooth by 35 degrees" % n)
     if save:
         bpy.ops.wm.save_mainfile()
     return coll
