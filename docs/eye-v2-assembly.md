@@ -16,7 +16,7 @@ morning print is still good.
 | part | setting |
 |---|---|
 | eye_lid_r, eye_lid_l | supports ON + brim |
-| eye_gimbal | supports ON |
+| eye_gimbal | **supports OFF** — the STL carries four plain support blocks; twist them out with pliers after printing |
 | everything else | no support, no brim |
 
 ## Hardware

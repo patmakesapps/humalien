@@ -1353,6 +1353,44 @@ def set_origins():
     return n
 
 
+def gimbal_support(hm):
+    """Pat's support box - four plain blocks, not slicer trees and not a
+    lattice. Two under the floating pan shelf and wing (footprints stop
+    1.5 clear of the blink plate), one on each arm's top face reaching
+    up under the O5 hinge stub. Every face keeps a 0.2 release gap to
+    the part: grab, twist, they pop off. Lives in PRINT_AIDS (not a
+    mechanism part, exempt from health), ships only inside the gimbal's
+    STL - slice that one part with supports OFF."""
+    boxes = [
+        ((66.0, 34.5, 9.25), (-12.5, -24.25, -35.875)),   # shelf + wing
+        ((3.25, 34.5, 9.25), (31.125, -24.25, -35.875)),  # right corner
+        ((7.0, 4.0, 23.6), (52.0, 0.0, -14.5)),           # under R stub
+        ((7.0, 4.0, 23.6), (-52.0, 0.0, -14.5)),          # under L stub
+    ]
+    old = bpy.data.collections.get("PRINT_AIDS")
+    if old:
+        for o in list(old.objects):
+            bpy.data.objects.remove(o, do_unlink=True)
+        bpy.data.collections.remove(old)
+    aids = bpy.data.collections.new("PRINT_AIDS")
+    bpy.context.scene.collection.children.link(aids)
+    bm = bmesh.new()
+    for dims, at in boxes:
+        ret = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, verts=ret["verts"], vec=Vector(dims))
+        bmesh.ops.translate(bm, verts=ret["verts"], vec=Vector(at))
+    me = bpy.data.meshes.new("eye_gimbal_sup")
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new("eye_gimbal_sup", me)
+    aids.objects.link(ob)
+    ob.color = (0.55, 0.75, 0.55, 1.0)
+    for p in me.polygons:
+        p.use_smooth = True
+    print("  support blocks: %d" % len(boxes))
+    return ob
+
+
 def build(save=False):
     hm = _hm()
     old = bpy.data.collections.get(COLL)
@@ -1383,6 +1421,7 @@ def build(save=False):
     print("  origins on pivots:", set_origins())
     place_servos(hm, coll)
     place_horns(hm, coll)
+    gimbal_support(hm)
     if save:
         bpy.ops.wm.save_mainfile()
     return coll
@@ -1442,6 +1481,20 @@ def export_stls(dirpath=r"C:\Humalien\exports\eye"):
         src = bpy.data.objects[name]
         me = src.data.copy()
         me.transform(ns[okey] @ Matrix.Translation(src.location))
+        sup = bpy.data.objects.get("eye_gimbal_sup")
+        if name == "eye_gimbal" and sup:
+            # the support blocks ship INSIDE the gimbal's STL as extra
+            # shells - so this one part is sliced with supports OFF
+            ms = sup.data.copy()
+            ms.transform(ns[okey] @ Matrix.Translation(sup.location))
+            bx = bmesh.new()
+            bx.from_mesh(me)
+            bx.from_mesh(ms)
+            bx.to_mesh(me)
+            bx.free()
+            bpy.data.meshes.remove(ms)
+            print("  (gimbal STL carries its own support blocks - "
+                  "slice it with supports OFF)")
         zmin = min(v.co.z for v in me.vertices)
         me.transform(Matrix.Translation((0.0, 0.0, -zmin)))
         tmp = bpy.data.objects.new("_EXPORT_" + name, me)
