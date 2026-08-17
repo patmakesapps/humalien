@@ -26,9 +26,9 @@ are unchanged.**
 - Servo-bag **self-tappers** — horn-to-strap pivots (thread into the horn,
   strap swivels on the shank) and all servo mounting into Ø1.7 pilots.
 - 4× **M2 self-tappers** — spine pads into the lid boss faces.
-- 1× **long tilt clamp screw, ~12 mm under the head** (thread matched to
-  the bag's horn screw — take one to the store). The bag screw is ~8 mm
-  and cannot reach through the boss to the spline.
+- ~~1× long tilt clamp screw~~ — **VOID (2026-08-17).** The access bore
+  dead-ends inside the lid hinge stub; there is no through-hole and never
+  was. The tilt joint needs no screw at all — see step 7. No store trip.
 
 ## First plate: small parts, then commit
 
@@ -50,11 +50,15 @@ pins, straps, spine, tilt pin, pan bar.
 6. **Tilt servo into the right base upright** — body through the pocket,
    tabs screwed to the outer face. **Center it electrically (1500 µs)
    now** — after step 7 the pocket fixes the phase forever.
-7. **Gimbal onto the tilt drive** — horn on the spline, slide the gimbal
-   so the horn drops into the boss pocket, drive the long screw through
-   the access bore from the inboard side. Left side: printed tilt pin
-   through the upright into the boss, head outboard; dab of glue on the
-   head if it walks.
+7. **Gimbal onto the tilt drive** — with the servo centred, press the
+   horn onto the spline pointing **straight up**, then slide the gimbal
+   right so the horn drops into the boss pocket: arm in the slot, hub in
+   the recess. **No clamp screw** — the Ø3 dimple in the recess floor is
+   a dead end, not a hole. Left side: printed tilt pin through the
+   upright into the boss, head outboard; dab of glue on the head if it
+   walks. Once the pin is in, the gimbal has ~1 mm of side play against
+   a 2.1 mm-deep slot, so the horn is captive — that geometry, not a
+   screw, is what holds the joint together.
 8. **Pan servo** up through the shelf window (body up, horn down), tabs
    screwed up into the pilots. Center at 1500 µs, then press the horn on
    pointing **straight back, parallel to the eye levers** — this is the

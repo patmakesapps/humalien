@@ -188,12 +188,17 @@ E = dict(
     srv_cut_z1 = 6.3,       # the O12.1 collar round the shaft above it
     # The horn pocket in the gimbal's RIGHT tilt boss. The servo horn drops
     # into an arm-shaped slot and the boss face closes over it; torque goes
-    # through the slot walls, not through screws. One M2.5 down the middle
-    # (the horn's own centre screw) clamps it, fed through an access bore.
+    # through the slot walls, not through screws. NO CENTRE SCREW: the
+    # "access bore" below dead-ends inside the lid hinge stub (found at
+    # assembly, 2026-08-17 - Pat looked for the hole; there isn't one, and
+    # never was). It does not matter: the gimbal has 1.0 mm of axial float
+    # between the uprights against a 2.1 mm slot, so once the tilt pin is
+    # in, the horn cannot leave the pocket. The joint is captive by
+    # geometry; the bore survives only as a O3 dimple in the recess floor.
     horn_slot_w = 5.8,      # single-arm MG90S horn is 5.3 wide
     horn_slot_deep = 2.1,   # arm plate is 1.7 thick
     horn_hub_d  = 7.6,      # clearance over the O7 hub, and over the shaft tip
-    horn_screw_d = 3.0,     # access bore for the centre screw
+    horn_screw_d = 3.0,     # vestigial - see the no-centre-screw note above
 
     # --- the lid spine and its joint to the lids --------------------------
     # The spine bolts to the END FACES of the lids' inboard bosses - two M2
@@ -860,8 +865,9 @@ def gimbal(hm, coll):
     bore and rides the printed tilt pin; the right post's boss face is cut
     back to x=63.5 and carries a HORN POCKET, because the tilt servo's shaft
     IS the right-hand pivot - that is what direct drive means. The horn
-    drops into an arm-shaped slot, torque goes through the slot's walls, and
-    the horn's own centre screw clamps it through an access bore.
+    drops into an arm-shaped slot and torque goes through the slot's walls.
+    No clamp screw: the joint is captive by geometry (1.0 mm float vs a
+    2.1 mm slot) - see the no-centre-screw note on the pocket dims in E.
 
     The gimbal also carries both riding servos, because that is the design's
     core decision: pan and blink move WITH tilt, so tilt cannot drag on
@@ -959,7 +965,11 @@ def gimbal(hm, coll):
     bm = cadd()                              # tilt pivot bore, LEFT only
     hm["_cyl"](bm, E["tilt_pin_d"] + E["fit"], E["gim_t"] * 6.0,
                (-E["arm_x"], 0.0, 0.0), 'X', segs=32)
-    # The horn pocket, RIGHT: arm slot, hub recess, centre-screw access.
+    # The horn pocket, RIGHT: arm slot, hub recess, and what was meant to
+    # be a centre-screw access bore - it dead-ends inside the lid hinge
+    # stub (the stub owns the axis from x 41.5 inboard of the boss), so it
+    # prints as a blind dimple. Kept because the part is printed and the
+    # joint never needed the screw; do not tell anyone to drive one.
     bm = cadd()
     hm["_box"](bm, (2.3, E["horn_slot_w"], 21.0), (62.55, 0.0, 6.5))
     bm = cadd()
