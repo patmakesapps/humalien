@@ -101,18 +101,14 @@ B = dict(
     # holes can both be right and still be wrong next to each other.
     zip_xs=(-68.0, -42.0, -28.0, 0.0, 28.0, 42.0, 68.0),
 
-    # --- the brow gantry --------------------------------------------------
-    # Two legs, an arm each, and a cradle that holds the forehead casing at
-    # STATIONS["casing"] WITHOUT drilling it: the casing's own holes are the
-    # camera's, so the gantry grips the outline instead - shelf under, rails
-    # behind, stops beside, two screwed keeper clips over the top edge.
-    # Leg lane x 47..55: the shelf wing sweeps to |x|=46, the gimbal arms
-    # stay above y=-12, and the swept pan drive never leaves y > -58.
-    gan_leg_x=51.0,         # column centre; 8 square
-    gan_leg_w=8.0,
-    gan_leg_y=-42.0,        # y -46..-38: behind the bay rim at -36.8
-    gan_top=86.0,           # arm/rail band z 78..86, over the parked lids
-    gan_foot_ys=(-43.0, -54.0),     # deck screw stations, ahead of the PCA
+    # --- the brow gantry: SCRAPPED, Pat's call 2026-08-17 -----------------
+    # Two 8 mm legs and a cradle held the forehead casing over the bench.
+    # They flexed under the camera+ToF weight, their deck pilots died
+    # fused to zip holes, and the casing was always going to mount to the
+    # HEAD anyway - so the head carries it, and a USB webcam covers vision
+    # work until the head exists. The bench did its job: the casing is
+    # proven and its placement lives on in STATIONS, which the head file
+    # reads. The gantry code is in git history before this date.
 )
 
 
@@ -251,106 +247,7 @@ def deck(hm, coll):
             bm = cadd()
             hm["_cyl"](bm, B["zip_d"], B["plate_t"] * 3.0,
                        (x, y, zt - 2.0), 'Z', segs=16)
-    # gantry foot pilots - M2.5 self-tappers bite these through the plate
-    for sx in (1, -1):
-        for fy in B["gan_foot_ys"]:
-            bm = cadd()
-            hm["_cyl"](bm, B["m2_pilot"], B["plate_t"] * 3.0,
-                       (sx * B["gan_leg_x"], fy, zt - 2.0), 'Z', segs=16)
     _cut_each(hm, coll, ob, cuts, "_CUT_deck")
-    return ob
-
-
-def gantry_side(hm, coll, sx):
-    """One side of the brow gantry: foot on the deck, 8-square leg, arm
-    reaching forward at the top to meet the cradle. Uniform 8 mm thick in
-    x, so it prints lying on its side at 100% of its own shadow."""
-    zt = B["z_top"]
-    x = sx * B["gan_leg_x"]
-    w = B["gan_leg_w"]
-    prims, add = _prims()
-    bm = add()      # foot, on the deck top, ahead of the PCA's front edge
-    hm["_box"](bm, (w, 20.0, 4.0), (x, -48.0, zt + 2.0))
-    bm = add()      # leg
-    hm["_box"](bm, (w, 8.0, B["gan_top"] - zt),
-               (x, B["gan_leg_y"], (B["gan_top"] + zt) / 2.0))
-    bm = add()      # arm, forward over the parked lids to the cradle back
-    hm["_box"](bm, (w, 43.0, 8.0), (x, -24.5, B["gan_top"] - 4.0))
-    name = "bench_gantry_%s" % ("R" if sx > 0 else "L")
-    ob = _union(hm, coll, name, prims)
-    cuts, cadd = _prims()
-    for fy in B["gan_foot_ys"]:     # foot screws, M2.5 clearance
-        bm = cadd()
-        hm["_cyl"](bm, 2.6, 12.0, (x, fy, zt + 2.0), 'Z', segs=16)
-    for pz in (80.5, 84.5):         # cradle screw pilots, into the arm end
-        bm = cadd()
-        hm["_cyl"](bm, 1.7, 9.0, (sx * 49.5, -7.5, pz), 'Y', segs=16)
-    _cut_each(hm, coll, ob, cuts, "_CUT_" + name)
-    return ob
-
-
-def gantry_cradle(hm, coll):
-    """The frame the forehead casing drops into. Back face at y=-3, so the
-    casing's back (y=1) lands on the rails; every contact is on the plate's
-    outer margins where no board reaches (the camera board ends at x=43.9,
-    the rails start at 45). The bottom shelf carries it at z=25.9, the
-    front wall and side stops box it in, and the keeper clips close the
-    top. The bottom bar skips x 16..34 - that gap is the camera's cable
-    drop, and the left rail's notch at z 44..56 is the ToF lead's way out.
-    Prints on its back: every feature grows +y from the 4 mm frame."""
-    prims, add = _prims()
-    bm = add()      # side rails
-    hm["_box"](bm, (7.0, 4.0, 66.0), (48.5, -1.0, 55.0))
-    bm = add()
-    hm["_box"](bm, (7.0, 4.0, 66.0), (-48.5, -1.0, 55.0))
-    bm = add()      # top rail
-    hm["_box"](bm, (104.0, 4.0, 4.0), (0.0, -1.0, 86.0))
-    bm = add()      # bottom bar, split around the camera cable gap
-    hm["_box"](bm, (68.0, 4.0, 4.0), (-18.0, -1.0, 24.0))
-    bm = add()
-    hm["_box"](bm, (18.0, 4.0, 4.0), (43.0, -1.0, 24.0))
-    for cx, cw in ((-18.0, 68.0), (43.0, 18.0)):
-        bm = add()  # base ledge, shelf pad, and the front wall - an L that
-        hm["_box"](bm, (cw, 7.5, 1.8), (cx, 3.75, 23.1))   # traps the
-        bm = add()  # pad top at 25.75: the casing's radiused bottom edge
-        # dips to 25.86, so an exact-height shelf shaves it - it RESTS here
-        hm["_box"](bm, (cw, 6.0, 2.25), (cx, 3.0, 24.625))
-        bm = add()
-        hm["_box"](bm, (cw, 1.4, 7.8), (cx, 6.8, 27.1))
-    for sx in (1, -1):
-        bm = add()  # side stops, 0.5 clear of the casing's x=+-48 edges
-        hm["_box"](bm, (3.5, 6.5, 20.0), (sx * 50.25, 2.75, 50.0))
-    ob = _union(hm, coll, "bench_cradle", prims)
-    cuts, cadd = _prims()
-    bm = cadd()     # ToF cable notch, left rail - open to the FRONT, with
-    # a 1.8 web left at the back so the rail stays one piece: cut clean
-    # through and the whole bottom-left assembly becomes an island, which
-    # is exactly what the first build of this did
-    hm["_box"](bm, (7.2, 11.2, 12.0), (-48.5, 4.4, 50.0))
-    for sx in (1, -1):
-        for pz in (80.5, 84.5):     # through to the arm pilots
-            bm = cadd()
-            hm["_cyl"](bm, 2.6, 12.0, (sx * 49.5, -1.0, pz), 'Y', segs=16)
-        bm = cadd()                 # keeper clip pilots, top rail
-        hm["_cyl"](bm, 1.7, 3.5, (sx * 40.0, -0.75, 86.5), 'Y', segs=16)
-    _cut_each(hm, coll, ob, cuts, "_CUT_cradle")
-    return ob
-
-
-def gantry_clip(hm, coll):
-    """The keeper: a block on the top rail's front face with a lip hanging
-    over the casing's top front edge. Two screws, and the casing lifts
-    straight out. Print TWO."""
-    prims, add = _prims()
-    bm = add()
-    hm["_box"](bm, (8.0, 6.5, 5.0), (40.0, 4.25, 86.5))
-    bm = add()
-    hm["_box"](bm, (8.0, 1.4, 9.0), (40.0, 6.8, 84.5))
-    ob = _union(hm, coll, "bench_clip", prims)
-    cuts, cadd = _prims()
-    bm = cadd()
-    hm["_cyl"](bm, 2.2, 10.0, (40.0, 4.0, 86.5), 'Y', segs=16)
-    _cut_each(hm, coll, ob, cuts, "_CUT_clip")
     return ob
 
 
@@ -412,9 +309,7 @@ def build(save=False):
     coll = bpy.data.collections.new(COLL)
     bpy.context.scene.collection.children.link(coll)
     print("bench:")
-    made = [deck(hm, coll),
-            gantry_side(hm, coll, 1), gantry_side(hm, coll, -1),
-            gantry_cradle(hm, coll), gantry_clip(hm, coll)]
+    made = [deck(hm, coll)]
     for ob in made:
         print("  %-14s %d verts" % (ob.name, len(ob.data.vertices)))
     proxies(hm, coll)
@@ -439,10 +334,6 @@ def _checks():
 PLATE = [
     # (object, gated orientation, SUPPORT declared, print count)
     ("bench_deck",     "FLAT",   False, 1),
-    ("bench_gantry_R", "X_UP",   False, 1),
-    ("bench_gantry_L", "X_DOWN", False, 1),
-    ("bench_cradle",   "Y_UP",   False, 1),
-    ("bench_clip",     "X_UP",   False, 2),
 ]
 
 
