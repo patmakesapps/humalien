@@ -69,5 +69,13 @@ pins, straps, spine, tilt pin, pan bar.
 
 ## Servo channels (PCA9685)
 
-Suggested: ch0 tilt · ch1 pan · ch2 blink. Whatever you pick, write it in
-`brain/` next to the limits above.
+ch0 tilt · ch1 pan · ch2 blink — codified in `node/humalien_node/eyes_bench.py`
+along with the eye-degree limits, which are the same numbers the CAD's
+clearance sweeps verified.
+
+**Centering and testing**: on the Pi, `python -m humalien_node.eyes_bench`.
+`c` centres all three (that's steps 6 and 8's "center electrically first"),
+`sweep tilt` etc. runs a slow limit-to-limit pass, `invert`/`trim` sort out
+direction and neutral at the bench, `off` goes limp. Everything is
+slew-limited to 30°/s and starts limp — a fresh linkage never gets a
+full-speed step.
