@@ -207,6 +207,22 @@ P = dict(
     shaft_d   = 5.0,
     shaft_x   = 14.6,       # the shaft runs +-this; the balls start at 15.0
     shaft_fit = 0.4,        # diametral, tube bore over the shaft
+    # The FRAME's own bore on the same shaft. It was an inline `+ 0.2` at the
+    # cut - the only fit in this file that was not a named number - and it is
+    # the one that had to be driven in with a hammer on both printed sets.
+    #
+    # 0.2 diametral is 0.1 a side, and on FDM that is not a clearance. A bore
+    # prints UNDERSIZE (the nozzle overlaps into the hole on every layer) and
+    # a peg prints OVERSIZE, each by a tenth or two on a O5. Designed 0.2
+    # lands somewhere between zero and an interference fit, every time.
+    #
+    # Every other fit here is 0.30..0.60 - pan_fit 0.30, shaft_fit 0.40,
+    # axle_fit 0.40, hub_fit 0.60 - and none of them needed a hammer. This
+    # now matches them.
+    #
+    # It follows that the shaft is no longer held by friction, so it needs
+    # real axial retention rather than none. See `shaft()`.
+    frame_fit = 0.4,        # diametral, frame boss bore over the shaft
     tube_od   = 9.0,
     # 3.0 until the first mechanism was printed and the frame's mast snapped
     # off at the shaft. The corridor between the tubes is the ONLY place the
@@ -1033,7 +1049,7 @@ def frame(hm, coll):
 
     cuts, _c = _prims()
     cut = _c()
-    hm["_cyl"](cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
+    hm["_cyl"](cut, P["shaft_d"] + P["frame_fit"], 2 * P["mast_hx"] + 4.0,
                (0.0, ty, tz), 'X', segs=32)
     cut = _c()
     # Apex toward -Z, not +Y, and that is a bug this part has carried since
@@ -1044,7 +1060,7 @@ def frame(hm, coll):
     # pointless lobe out of the side of it. Every other teardrop in this
     # file is on a part that prints Y_UP, where the default happens to be
     # right, which is why it went unnoticed.
-    _teardrop(cut, P["shaft_d"] + 0.2, 2 * P["mast_hx"] + 4.0,
+    _teardrop(cut, P["shaft_d"] + P["frame_fit"], 2 * P["mast_hx"] + 4.0,
               (0.0, ty, tz), 'X', up=(0.0, 0.0, -1.0), apex=1.40)
     _cut_each(hm, coll, ob, cuts, "_CUT_frame")
     return ob
