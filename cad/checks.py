@@ -670,39 +670,83 @@ def _inside_test(name):
 def gate(parts, limit=45.0):
     """The whole pre-flight, for any list of (name, rotation).
 
-    Returns True only if every part would print. This is what "am I good to
-    go" means, and it lives in the repo rather than in anyone's head.
+    This is v1's `eye_plate.printcheck()` with the hard-coded PARTS table
+    taken out and nothing else changed. The conditions below are load-bearing
+    and were each arrived at by getting them wrong first - see the block
+    comments above MIN_BED_FRAC and AIR_SKIRT.
+
+    Two mistakes were made rewriting this the first time, and both made the
+    gate LOOSER or WRONGER, which is the only direction that matters:
+
+      - the mm2 floor was applied on its own rather than only when the
+        fraction is low too, so a O6 rod standing on its end - 28.1 mm2, and
+        100% of its own shadow - was called unprintable. Small is not the
+        same as balanced.
+      - "needs a brim" was reported as a failure rather than a warning, and
+        the flat-ceiling limit was not checked at all.
+
+    A brim is a slicer setting, not a defect. Standing on an edge is a defect.
+
+    A part may declare that it is printed WITH SUPPORT, as a third element in
+    its tuple. That exempts it from the roof and air limits and from nothing
+    else - it still has to stand on a real face. This is deliberately an
+    explicit per-part declaration rather than a loosened threshold: v1 banned
+    support material outright, inherited that rule without ever writing down
+    why, and then spent 312 orientation trials proving an eyelid impossible
+    against a standard no animatronic actually holds. A thin curved shell is
+    the shape support exists for. Saying so in the parts list is honest;
+    quietly raising MAX_ROOF until it passes is not.
     """
-    print("  %-14s %10s %8s %10s   %s"
-          % ("part", "bed", "of shadow", "worst air", "verdict"))
-    bad = []
-    for name, rot in parts:
+    print("  %-14s %18s %9s %8s   %s"
+          % ("part", "first layer", "roof", "on air", "verdict"))
+    bad, brims, supported = [], [], []
+    for row in parts:
+        name, rot = row[0], row[1]
+        sup = len(row) > 2 and bool(row[2])
         ps = _print_stats(name, rot, limit)
         ai = _air_stats(name, rot)
         if ps is None or ai is None:
             print("  %-14s MISSING" % name)
             bad.append((name, "no such object"))
             continue
-        bed, unsup, high, tall, shadow = ps[:5]
+        bed, unsup, worst, tall, shadow, roof, flat = ps
+        area, high, total = ai
         frac = bed / shadow if shadow else 0.0
-        area, h, total = ai
-        notes = []
-        if frac < BRIM_BED_FRAC or bed < BRIM_MIN_MM2:
-            notes.append("stands on %.1f mm2 of a %.0f shadow" % (bed, shadow))
+        note, brim = "", False
+        # The mm2 floor only bites when the fraction is low too. A O5 peg on
+        # its end is 19.5 mm2 and that is 100% of it.
+        if frac < BRIM_BED_FRAC or (frac < MIN_BED_FRAC and bed < BRIM_MIN_MM2):
+            note = ("stands on an edge - %.0f of a %.0f mm2 shadow (%.0f%%)"
+                    % (bed, shadow, 100.0 * frac))
         elif frac < MIN_BED_FRAC:
-            notes.append("needs a brim (%.0f%% of shadow)" % (100 * frac))
-        if area > AIR_MAX:
-            notes.append("%.1f mm2 on air %.1f mm up (limit %.0f)"
-                         % (area, h, AIR_MAX))
-        print("  %-14s %8.1f %8.0f%% %9.1f   %s"
-              % (name, bed, 100 * frac, area, "; ".join(notes) or "ok"))
-        if any("stands on" in n or "on air" in n for n in notes):
-            bad.append((name, "; ".join(notes)))
+            brim = True
+            note = ("BRIM - %.0f of a %.0f mm2 shadow (%.0f%%), %.1f mm tall"
+                    % (bed, shadow, 100.0 * frac, tall))
+        elif flat > MAX_ROOF and not sup:
+            note = ("a %.0f mm2 flat ceiling, highest %.1f mm up"
+                    % (flat, worst))
+        if area > AIR_MAX and not sup:
+            note = (note + "; " if note and not brim else "") + (
+                "%.1f mm2 on air, %.1f mm up (limit %.0f)"
+                % (area, high, AIR_MAX))
+        print("  %-14s %7.1f of %6.1f mm2 %6.1f mm2 %6.1f mm2   %s"
+              % (name, bed, shadow, flat, area, note or "ok"))
+        if (area > AIR_MAX and not sup) or (note and not brim):
+            bad.append((name, note))
+        elif brim:
+            brims.append(name)
+        if sup:
+            supported.append(name)
     print("")
+    if supported:
+        print("SUPPORT REQUIRED in the slicer: %s" % ", ".join(supported))
+    if brims:
+        print("BRIM REQUIRED in the slicer: %s" % ", ".join(brims))
     if bad:
-        print("NOT READY - %d of %d would not print:" % (len(bad), len(parts)))
+        print("NOT READY - %d of %d:" % (len(bad), len(parts)))
         for n, why in bad:
             print("   %-16s %s" % (n, why))
         return False
-    print("READY - %d parts." % len(parts))
+    print("READY - every part stands on a real face, nothing sags, and")
+    print("nothing is printed over open air.")
     return True
