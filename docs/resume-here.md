@@ -1,3 +1,95 @@
+# Resume here — end of 18 Aug 2026
+
+Everything below is verified in the file, not remembered. Start with **What to
+do next**; the rest is why. The working scene is
+`Downloads\Humalien_v3.blend` — **save it before closing Blender**, most of
+today's state lives there and nowhere else.
+
+## What to do next
+
+1. **Cross-check the shell depth registration.** The cranium/face shells are
+   registered fore-aft from the socket ring (inner surface at y≈17, eyeball
+   fronts at +15.2). Before trusting clearances to the mm, verify against a
+   physical datum: `FIT_forehead_casing` sits in the scene at its true mount
+   position (y 1–6, z 25–84) and its three bosses land on the face shell.
+2. **Rebuild `ENVELOPE_eye_module` from the shell interior.** The current box
+   (x ±64, y −80..+12, z −30..+24) was measured off HEAD_REF; the printed
+   shells are the real walls now.
+3. **Design the chassis, one part at a time**, inside that envelope, against
+   the design thesis below. Nothing gets modeled without a visible motion
+   check in Blender first.
+4. Housekeeping: the Bruton reference (`REFERENCE_BRUTON`, hidden) faces −Y;
+   the scene convention is gaze = **+Y**. Rotate it 180° about Z when next
+   used.
+
+## Design thesis (Pat's call, 18 Aug)
+
+Open-faced chassis that mounts inside the printed head shells. No jaw/mouth
+movement. Exposed electronics are fine — it is a cyborg. Speakers and
+camera/sensor cases mount to the face/cranium shells directly (they are easy);
+the chassis carries the busy region: eye mechanism, Pi 5, PCA9685, wiring. The
+failure being designed against is assembly in tight spaces — every screw a
+hand can reach, nothing threaded blind.
+
+Eye mechanism: ours, not Cogley's (his kit is licensed; this one is for sale).
+James Bruton's MIT-licensed demo (`XRobots/ServoSmoothing`, `head.stp`) is the
+*reference* for joint geometry — eye held at side pivots by a yoke, lids
+pivoting coaxially at the same points, one servo closing upper+lower lid
+through a link, screws as pivots (screws are allowed again as of today). His
+eyes are 96 mm / 116 IPD — a desk-scale demo. We keep his ratios, our
+dimensions: 32 mm eyes at 62 IPD, MG90S/SG90 servos (same footprint as his).
+Candidate simplification: two direct-drive pan servos under the eyes.
+**Corrected 18 Aug (later):** this file previously said that arrangement
+"worked on the bench". It did not. Pat bench-tested it and the servos moved
+the rig, not the eyes — the eyeballs stayed put. Treat direct-drive-under-
+the-eye as UNPROVEN; the bench result it claimed does not exist. Keep it only
+if the shell interior allows, else pan from behind, Bruton-style. Realistic
+count: 2 pan + 2 lid + 1 tilt = 5 servos.
+
+## 18 Aug — what happened, in facts
+
+- **The v3 bench mechanism is dead** and the post-mortem is mechanical, not
+  electrical: eyes on one shaft supported at both ends plus a center coupler —
+  over-constrained, three printed journals of friction. Servos were fine.
+  The center lid rod also ran through the region where independently-panning
+  eyeballs live (axis is inside the balls for |x| 15–47), so any
+  center-connected lid design is geometrically impossible with panning eyes;
+  cross-connections must arc behind the balls.
+- **Scene truth established:** gaze is +Y (the face points +Y; the smooth −Y
+  dome is the back of the skull). HEAD_REF is restored to design registration:
+  scale 1.0, loc (0,−160,−209), which puts the documented eye centers
+  (±31, 160, 209 head-local) exactly at the scene eyeballs (±31, 0, 0).
+  A mid-session 1.779× scale-up was undone (was: loc (0,−210.8,−363.9)).
+- **Deleted files recovered from the Recycle Bin:**
+  `C:\humalien` (the old working repo — includes `print\v1\` with
+  **`head_cranium_x1.stl` and `head_face_x1.stl`, the exact printed shells**,
+  plus bezels, ear hubs, casing, trays), `female_human_head.obj` (Downloads),
+  `Humalien_v1` blends (OneDrive Desktop\Blender and Downloads), and
+  `EyeMech_ε3.2_All_Plates_-_BambuStudio.3mf` (Downloads).
+- **Shells imported and registered** (`HEAD_SHELLS` collection): print STLs
+  are in bed orientation (cut-face-down; the face also 180° about vertical —
+  it went in upside down once before this was caught). Now: cut seam mates at
+  y≈−1, socket cutouts centered on the eye line z=0, socket centroids at
+  x ≈ ±36 (the almond reaches temple-ward of the ±31 eye axes; the bezels
+  bridge that), shell inner surface at sockets y≈17.
+- **Bruton reference in scene:** `REFERENCE_BRUTON` collection, 250 loose
+  parts split from `head.stp` (converted STEP→GLB via cascadio in the session
+  scratchpad venv). Scale verified 1:1 mm. 131 of the islands are
+  zero-thickness construction sheets — not printable; it is a measuring
+  reference, not a print source.
+- **Licensing, because this is for sale:** Bruton's repo is MIT — commercial
+  use and derivatives are fine, keep his copyright notice. The head sculpt is
+  No-AI licensed — the shells are printable for the build but **not
+  redistributable**; the sellable product is the mechanism, never the head
+  geometry. (Same reason `exports/` stays out of git.)
+- An eyelid experiment earlier today briefly destroyed `eye_lid_R` in the
+  scene; it was restored intact from the `.blend1` rolling backup. The upper
+  lid design on the table: one-piece ganged lid driven from one end cup,
+  optional second servo on the other end (mirrored + trimmed in software)
+  instead of any printed bearing.
+
+---
+
 # Resume here — end of 15 Aug 2026
 
 Everything below is verified in the file, not remembered. Start with **What to
