@@ -486,6 +486,40 @@ def fitcheck():
     print("  ->", "FITS" if not bad else "%d part(s) still fouling" % bad)
 
 
+EXPORTS = r"C:\Users\PatrickKearney\Downloads\humalien\exports\eye_direct"
+
+# Print order is not a suggestion. The coupon settles HORN["hole_r"], and the
+# balls' seat geometry is derived from it - get it wrong and both balls are
+# scrap.
+PRINT_ORDER = ["d_COUPON_horn_bolt_circle", "d_bracket", "d_ball_R", "d_ball_L"]
+
+
+def export_stls(out=EXPORTS):
+    """The four physical pieces. Proxies are servos and horns - they come out
+    of a bag, not a printer, and are never exported."""
+    import os
+    col = bpy.data.collections.get(COLL)
+    if col is None:
+        raise RuntimeError("run build() first")
+    os.makedirs(out, exist_ok=True)
+    done = []
+    for i, name in enumerate(PRINT_ORDER, 1):
+        o = col.objects.get(name)
+        if o is None:
+            raise RuntimeError("missing " + name)
+        bpy.ops.object.select_all(action='DESELECT')
+        o.hide_set(False)
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        path = os.path.join(out, "%d_%s.stl" % (i, name.replace("d_", "", 1)))
+        bpy.ops.wm.stl_export(filepath=path, export_selected_objects=True)
+        done.append(path)
+        print("  %d. %s" % (i, path))
+    bpy.ops.object.select_all(action='DESELECT')
+    print("  print them in that order - 1 decides whether 3 and 4 are right")
+    return done
+
+
 def report():
     col = bpy.data.collections.get(COLL)
     lo = Vector((1e9,) * 3)
