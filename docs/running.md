@@ -10,15 +10,27 @@ habit and drag OpenCV onto a machine that never opens a camera.
 
 ```bash
 cd node
-python -m pip install -r requirements.txt    # websockets, and that is all
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt    # WebSocket + Pi hardware drivers
 sudo apt install alsa-utils                  # arecord and aplay
 ```
+
+`.venv` and everything installed in it survive a reboot. Activation only
+changes the current shell, so activate it again in every new terminal with
+`. node/.venv/bin/activate` from the repository root, or use the environment's
+interpreter directly (for example,
+`node/.venv/bin/python -m humalien_node.server`). If `which python` reports
+`/usr/bin/python`, the environment is not active; do not reinstall the same
+packages into the system interpreter.
 
 **Never install `brain/requirements.txt` on the Pi.**
 
 | Package | Brain | Pi | Why |
 | --- | --- | --- | --- |
 | `websockets` | yes | **yes** | The link between them |
+| `adafruit-blinka` | no | **yes** | CircuitPython-compatible access to Pi hardware |
+| `adafruit-circuitpython-pca9685` | no | **yes** | Eye-servo PWM driver |
 | `opencv-python` | yes | no | ~40 MB, and the Pi has no camera duties |
 | `numpy` | yes | no | Only for resampling and matching |
 | `soxr` | yes | no | The brain does all format conversion |
@@ -36,10 +48,10 @@ The node also needs **none** of these:
   where it moves when the Asus becomes a Jetson.
 - **Ollama.** The vision model is called from the brain.
 
-This is not just tidiness. The node is a dumb pipe by design — `arecord` in,
-`aplay` out — and keeping its dependency list to one package is what makes
-that claim true rather than aspirational. It is also why swapping the brain
-for a Jetson changes nothing on the Pi.
+This is not just tidiness. The node keeps only its transport, audio, and Pi
+hardware dependencies; the compute-heavy vision and voice stack stays on the
+brain. It is also why swapping the brain for a Jetson changes nothing on the
+Pi.
 
 ## Switching between the laptop and the Pi
 

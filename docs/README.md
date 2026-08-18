@@ -43,9 +43,16 @@ swapping the Asus for a Jetson Orin Nano a non-event.
 
 ```bash
 cd node
-python -m pip install -r requirements.txt    # websockets only
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt    # WebSocket + Pi hardware drivers
 python -m humalien_node.server
 ```
+
+The environment survives a reboot, but its shell activation does not. In a
+new terminal, run `. node/.venv/bin/activate` from the repository root (or
+`. .venv/bin/activate` from `node/`) before using `python`. Alternatively,
+invoke `node/.venv/bin/python` directly.
 
 The Pi needs nothing from `brain/requirements.txt` — see
 [running.md](running.md) for what deliberately does *not* belong on it.

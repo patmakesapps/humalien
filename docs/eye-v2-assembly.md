@@ -100,7 +100,12 @@ ch0 tilt · ch1 pan · ch2 blink — codified in `node/humalien_node/eyes_bench.
 along with the eye-degree limits, which are the same numbers the CAD's
 clearance sweeps verified.
 
-**Centering and testing**: on the Pi, `python -m humalien_node.eyes_bench`.
+**Centering and testing**: on the Pi, from `node/`, activate the persistent
+environment with `. .venv/bin/activate`, then run
+`python -m humalien_node.eyes_bench`. Activation must be repeated in each new
+shell after a reboot; the installed libraries themselves are still in
+`.venv`. To avoid activation entirely, run
+`.venv/bin/python -m humalien_node.eyes_bench`.
 `c` centres all three (that's steps 6 and 8's "center electrically first"),
 `sweep tilt` etc. runs a slow limit-to-limit pass, `invert`/`trim` sort out
 direction and neutral at the bench, `off` goes limp. Everything is
