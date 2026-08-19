@@ -364,17 +364,32 @@ def _crank(tag, coll):
 
 
 def _conrod(tag, coll):
+    """Two pin eyes and the bar between them.
+
+    The bar runs pin CENTRE to pin CENTRE and is 5.0 wide, so it covers both
+    3.4 bores completely. Building the eyes as tubes and trusting the union to
+    leave their inner wall alone therefore gave two D-shaped half holes, open
+    on the side away from the bar and solid on the side the bar came in from -
+    manifold, one piece, no clash, and no pin fits. Everywhere else in this
+    file the plate that meets a bore starts OUTSIDE it (the tab at r=3.2 on a
+    2.2 bore, the crossbar webs at r=2.3); the conrod is the one place that
+    could not, because centre-to-centre is what makes the parallelogram exact.
+    So the eyes are solid discs and the bores are CUT, after the union."""
     d = DRIVE[tag]
     sx, r = d["sx"], d["rod"]
     tp, cp = tab_pin(tag, d["th0"]), crank_pin(tag, d["th0"])
     bore = PIN_D / 2 + PIN_FIT
+    x0, x1 = sorted((sx * r[0], sx * r[1]))
     frags = [
-        lambda bm: _tube(bm, bore, ROD_OD / 2, sx * r[0], sx * r[1], tp.y, tp.z),
-        lambda bm: _tube(bm, bore, ROD_OD / 2, sx * r[0], sx * r[1], cp.y, cp.z),
-        lambda bm: _bar(bm, (tp.y, tp.z), (cp.y, cp.z), ROD_OD - 1.5,
-                        sx * r[0], sx * r[1]),
+        lambda bm: _rod(bm, ROD_OD / 2, x0, x1, tp.y, tp.z, segs=48),
+        lambda bm: _rod(bm, ROD_OD / 2, x0, x1, cp.y, cp.z, segs=48),
+        lambda bm: _bar(bm, (tp.y, tp.z), (cp.y, cp.z), ROD_OD - 1.5, x0, x1),
     ]
-    return _fuse("rod_" + tag, frags, coll)
+    cuts = [
+        lambda bm: _rod(bm, bore, x0 - 1.0, x1 + 1.0, tp.y, tp.z, segs=48),
+        lambda bm: _rod(bm, bore, x0 - 1.0, x1 + 1.0, cp.y, cp.z, segs=48),
+    ]
+    return _fuse("rod_" + tag, frags, coll, cuts=cuts)
 
 
 def _lip(tag):
@@ -622,6 +637,95 @@ def _touching(a, b):
     return False
 
 
+def _bores():
+    """Every hole something has to pass through, and the thing that passes.
+
+    (part, (cy, cz), probe diameter, x span). Every axis here runs along x.
+    The probe is the real MALE part - pin, axle, spline - over its real
+    length, NOT the hole with a margin bolted on. That distinction is the
+    whole test: an arbitrary 1 mm of overshoot on the bail hubs reaches x
+    13.9 and clips the lower arm, which legitimately sits at 13.8 beside the
+    hub with the axle ending at 13.0. Probing with the axle asks the only
+    question that matters - does the axle go in - and gets it right.
+
+    One probe covers BOTH hubs of a bail, because one axle does."""
+    out = []
+    for tag in ASSY:
+        d = DRIVE[tag]
+        sx = d["sx"]
+        tp, cp = tab_pin(tag, d["th0"]), crank_pin(tag, d["th0"])
+        # each conrod eye rides a pin that stands off its own plate to PIN_END
+        out.append(("rod_" + tag, (tp.y, tp.z), PIN_D,
+                    tuple(sorted((sx * (d["tab"][1] - 0.5), sx * PIN_END)))))
+        out.append(("rod_" + tag, (cp.y, cp.z), PIN_D,
+                    tuple(sorted((sx * (d["collar"][1] - 0.5), sx * PIN_END)))))
+        # the axle, through both hubs and the window between them
+        out.append(("bail_" + tag, (EYE_Y, EYE_Z), AXLE_D, (-AXLE_X, AXLE_X)))
+        # the servo spline into the crank collar
+        c0, c1 = sorted((sx * d["collar"][0], sx * d["collar"][1]))
+        out.append(("crank_" + tag, (d["sv"][1], d["sv"][2]),
+                    COLLAR_BORE - 0.4, (c0 - 1.0, c1 + 1.0)))
+    return out
+
+
+def bores(verbose=True):
+    """Does the pin actually go through?
+
+    Nothing else in check() can see a filled bore. A part whose hole has been
+    swallowed by a later union is still manifold, still one loose piece, still
+    clash-free and still the right size on the outside - it simply cannot be
+    assembled, which is how two conrods reached the printer with half holes.
+
+    So probe each hole with an over-length cylinder the size of the real pin
+    and intersect it with the part. Any volume at all and the pin does not go.
+    The probe spans the pin's own length and not one millimetre more. The
+    first cut of this used the hole's span plus a 1 mm margin at each end and
+    reported bail_lower blocked: the margin reached x 13.9 and clipped the
+    lower arm, which sits at 13.8 next to a hub the axle stops short of at
+    13.0. A gate that cries wolf gets switched off, so it probes with the
+    part that actually has to go in."""
+    coll = bpy.data.collections[COLL]
+    blink(0.0)
+    ok = True
+    if verbose:
+        print("\n  DOES THE PIN GO THROUGH?  (probe = the real pin, at its real size)")
+        print("  %-14s %6s %7s %7s %10s %6s"
+              % ("part", "pin", "y", "z", "blocked", "grip"))
+        print("  " + "-" * 58)
+    for name, (cy, cz), dia, (x0, x1) in _bores():
+        ob = bpy.data.objects.get(name)
+        if ob is None:
+            continue
+        bm = bmesh.new()
+        # circumscribed, so a faceted probe cannot slip through a faceted
+        # bore that a round pin of the same diameter would foul
+        _rod(bm, (dia / 2.0) / math.cos(math.pi / 48), x0, x1, cy, cz, segs=48)
+        probe = _finish(bm, "_probe", coll)
+        v = _ivol(name, probe.name)
+        bpy.data.objects.remove(probe, do_unlink=True)
+        # how much of the hole the probe actually spans: a clear bore the
+        # pin only reaches halfway into is a different way to not assemble.
+        # Only the material AROUND this hole counts, so take the x extent of
+        # vertices within 1.5 diameters of its axis - the part's own overall
+        # extent would answer for some feature at the far end.
+        M, near = ob.matrix_world, []
+        for vv in ob.data.vertices:
+            q = M @ vv.co
+            if math.hypot(q.y - cy, q.z - cz) < 1.5 * dia:
+                near.append(q.x)
+        grip = (min(x1, max(near)) - max(x0, min(near))) if near else 0.0
+        bad = v > 1e-3 or grip < 1.0
+        ok &= not bad
+        if verbose:
+            print("  %-14s %6.1f %7.2f %7.2f %10.3f %6.1f %s"
+                  % (name, dia, cy, cz, v, grip,
+                     "*** BLOCKED" if v > 1e-3 else
+                     ("*** TOO SHORT" if grip < 1.0 else "")))
+    if verbose and ok:
+        print("  every bore is clear")
+    return ok
+
+
 def check(verbose=True):
     coll = bpy.data.collections[COLL]
     gaze = bpy.data.collections.get(COLL_GAZE)
@@ -739,6 +843,7 @@ def check(verbose=True):
         print("  %-6s servo swings %5.1f deg  (tab %+.0f -> %+.0f)"
               % (tag, abs(d["dth"]), d["th0"], d["th0"] + d["dth"]))
     print("  worst lid-to-ball gap anywhere in the blink: %.3f mm" % worst)
+    ok &= bores(verbose)
     print("\n%s" % ("ALL CHECKS PASSED" if ok else "*** CHECK FAILED"))
     return ok
 
