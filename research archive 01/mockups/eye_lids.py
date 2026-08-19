@@ -1,6 +1,6 @@
-"""Eyelids for the two O24 balls, and the linkage that actually drives them.
+r"""Eyelids for the two O24 balls, and the linkage that actually drives them.
 
-    exec(open(r"C:\H\humalien\mockups\eye_lids.py").read())
+    exec(open(r"C:\Humalien\research archive 01\mockups\eye_lids.py").read())
     build(); blink(0.0); blink(1.0); check()
 
 THE ONE FACT THE WHOLE THING RESTS ON

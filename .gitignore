@@ -23,8 +23,8 @@ brain/models/
 #
 # The head mesh is royalty-free under a No AI licence: free to use in the
 # build, not free to redistribute, and never to be fed to a generative 3D
-# tool. It stays out of git entirely — cad/head_ref.py reproduces the
-# import and scaling from wherever you keep the file locally.
+# tool. It stays out of git entirely — research archive 01/cad/head_ref.py
+# reproduces the import and scaling from wherever you keep the file locally.
 **/female_human_head.*
 
 # Anyone else's models, kept locally as a measuring reference and not ours
@@ -44,8 +44,9 @@ brain/models/
 #
 # Still true, and the reason to keep blend commits deliberate rather than
 # habitual: it is binary that git cannot diff, and every save writes a whole
-# new copy into history. mockups/eye_lids.py rebuilds every part from five
-# numbers and an arc, so the blend is a convenience, not the source of truth.
+# new copy into history. research archive 01/mockups/eye_lids.py rebuilds
+# every part from five numbers and an arc, so the blend is a convenience,
+# not the source of truth.
 # If it starts bloating the repo, move it to git-lfs.
 *.blend[0-9]
 Eye_Study_v1.blend
@@ -62,8 +63,8 @@ Eye_Study_v1.blend
 # them is redistribution. Ignoring the whole folder removes the chance of
 # getting that wrong by hand.
 #
-# cad/rack.py and cad/eye_v2.py rebuild every part, and cad/checks.py gates
-# them before any of it reaches a bed.
+# research archive 01/cad/rack.py and .../cad/eye_v2.py rebuild every part,
+# and .../cad/checks.py gates them before any of it reaches a bed.
 exports/
 print/
 *.stl
