@@ -35,14 +35,20 @@ brain/models/
 *.mtl
 *.fbx
 
-# Blender working files, including the .blend1/.blend2 rolling backups and any
-# hand-made safety copy. HEAD_FACE and HEAD_CRANIUM live inside these and are
-# cut from the No-AI-licence sculpt above, so the file is not ours to
-# redistribute. It is also 50+ MB of binary that git cannot diff.
-# What is NOT reproducible - the USERFIX_HEAD_CRANIUM hand edit - is a
-# liability precisely because it only exists here. See commit 30235e1.
-*.blend
+# Blender rolling backups and the v1 file. The v2 working .blend is now
+# TRACKED. The rule that blanket-ignored every .blend was written when
+# HEAD_FACE and HEAD_CRANIUM - cut from the No-AI-licence sculpt - lived
+# inside those files. That geometry went in 55f802d and no head mesh file
+# remains anywhere in the repo, so the licence argument no longer covers the
+# v2 file.
+#
+# Still true, and the reason to keep blend commits deliberate rather than
+# habitual: it is binary that git cannot diff, and every save writes a whole
+# new copy into history. mockups/eye_lids.py rebuilds every part from five
+# numbers and an arc, so the blend is a convenience, not the source of truth.
+# If it starts bloating the repo, move it to git-lfs.
 *.blend[0-9]
+Eye_Study_v1.blend
 
 # Exports are build output and are NOT tracked in v2. v1 tracked them, on the
 # reasoning that having the exact file that was printed is useful - and it
