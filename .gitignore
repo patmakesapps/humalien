@@ -69,6 +69,17 @@ exports/
 print/
 *.stl
 
+# ...with one deliberate exception. "test prints/" is the current set to put
+# on a bed, tracked so it can be pulled on the other laptop and so there is a
+# record of exactly what was printed when something comes out wrong.
+#
+# The licence argument above does not reach it: every part in there is built
+# from primitives by cad/eye_rig.py, and the two eyeballs are generated
+# spheres. No geometry cut from the No-AI head sculpt goes in this folder,
+# and nothing that is may ever be added to it.
+!test prints/
+!test prints/*.stl
+
 # Editors / OS
 .vscode/
 .DS_Store

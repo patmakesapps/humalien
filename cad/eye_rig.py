@@ -49,7 +49,11 @@ FORK_Y = (22.0, 46.0)                       # it is the only bearing there is
 
 WEB_Y = (43.0, 46.0)            # spine, behind balls that end at y 38.68
 BAR_X, BAR_Z = 36.0, 5.0
-TILT_X = (8.0, 11.0)            # tilt webs, in the corridor free at |x| < 19.5
+# The tilt webs are widened to 5.5 and dropped to the shelf's height, which
+# makes them the thing the shelf screws INTO: 19 mm of material front to back,
+# 5.5 mm across, so an M2 goes straight in level with 2 mm of wall each side.
+# 0.5 clear of the pillar at |x| 5 and of the tilt rod at |x| 11.5.
+TILT_X = (5.5, 11.0)
 SHAFT_D, SHAFT_X = 5.0, 18.0    # shaft runs out to 18 to carry the tilt lever
 
 LEV_R = 5.32                    # lever reaches FORWARD, past the pillar
@@ -97,7 +101,22 @@ DECK_X, DECK_Y, DECK_Z = 45.0, (18.0, 60.0), (-46.0, -42.0)
 SERVO_SRC = "PROXY_servo_pan.001"
 SV_PAN = dict(p=(0.0, 55.0, -16.72), shaft=(0, 0, -1), body=(1, 0, 0))
 SV_TILT = dict(p=(-19.78, 34.0, -35.95), shaft=(1, 0, 0), body=(0, 1, 0))
-SHELF_X, SHELF_Y = (-11.0, 26.0), (46.0, 64.0)  # -11: the tilt rod swings past
+# The servo cradle is its OWN part, bolted on.  Left in the frame it hung off
+# the back at a different height and facing a different way, so there was no
+# face to lay the frame on.  Taken off, the frame's whole back is one plane.
+# -11 at the inboard end is where the tilt rod swings past; 25 at the other is
+# 0.5 clear of the spine web.
+SHELF_X, SHELF_Y = (-11.0, 25.0), (46.0, 64.0)
+# The posts stand UP to the height of the tilt webs and the screws go in
+# level, which is the whole point: a screw driven up from underneath needs a
+# hole and a counterbore through the plate's bottom face, and that face is
+# the one the part prints on.  Level screws leave it untouched.
+POST_Y, POST_TOP = (46.0, 48.5), 3.5
+MNT_X, MNT_Z = 8.25, 0.0
+# The plate stops at y 46 and nothing reaches past it.  The posts straddle
+# the pillar at |x| 5.5..11 so they clear it, but the plate is 36 wide and
+# does not: running it forward to 43 put 48 mm3 through the leg at full
+# down-look.
 
 # The MG90S itself, measured off the proxy.  The ears are always normal to the
 # output shaft, so the pan servo (shaft down) bolts down through horizontal
@@ -349,14 +368,7 @@ def _frame(coll):
                                  -BAR_Z, BAR_Z))
     parts.append(lambda bm: _rodx(bm, SHAFT_D / 2, -SHAFT_X, SHAFT_X,
                                   EYE_Y, EYE_Z))
-    # the tail, and the shelf the pan servo bolts to
-    for s in (1, -1):
-        parts.append(lambda bm, t=s: _box(
-            bm, t * TAIL_X[0], t * TAIL_X[1], WEB_Y[1] - 2.0,
-            SHELF_Y[0] + 2.0, SHELF_Z[0], BAR_Z))
-    parts.append(lambda bm: _box(bm, SHELF_X[0], SHELF_X[1],
-                                 SHELF_Y[0], SHELF_Y[1],
-                                 SHELF_Z[0], SHELF_Z[1]))
+    # no tail and no shelf: RIG_shelf carries the pan servo and bolts on
     # the tilt lever - just a third web, further out, tying the shaft to the
     # spine.  No cantilever: the pin it carries is in the middle of a gusset.
     parts.append(lambda bm: _box(bm, TILT_LEV_X[0], TILT_LEV_X[1],
@@ -366,17 +378,10 @@ def _frame(coll):
     cuts = [lambda bm, s=sx: _rodz(bm, BORE_D / 2, -(FORK_Z + FORK_T + 1),
                                    FORK_Z + FORK_T + 1, s * EYE_X, EYE_Y)
             for sx in (1, -1)]
-    # The pan cradle.  The case drops through a slot that is open at the BACK,
-    # so the servo slides in from behind instead of having to be threaded down
-    # past its own wires; its ears land on the two rails either side and take
-    # a screw each.  The rails stay joined by a bridge across the front.
-    cuts.append(lambda bm: _box(bm, PAN_POCKET[0][0], PAN_POCKET[0][1],
-                                PAN_POCKET[1][0], SHELF_Y[1] + 1.0,
-                                SHELF_Z[0] - 1, SHELF_Z[1] + 1))
-    for h in PAN_HOLES:
-        cuts.append(lambda bm, q=h: _rodz(bm, SV_SCREW_D / 2,
-                                          SHELF_Z[0] - 1, SHELF_Z[1] + 1,
-                                          q.x, q.y))
+    # two pilots straight in through the back, into the tilt webs
+    for s in (1, -1):
+        cuts.append(lambda bm, t=s: _rody(bm, SV_SCREW_D / 2, WEB_Y[1] - 9.0,
+                                          WEB_Y[1] + 1.0, t * MNT_X, MNT_Z))
     return _obj("RIG_frame", coll, parts, cuts, loc=(0.0, EYE_Y, EYE_Z))
 
 
@@ -487,6 +492,38 @@ def _link(coll):
     return _obj("RIG_link", coll, parts, cuts, loc=(0.0, y, LNK_Z[0]))
 
 
+def _shelf(coll):
+    """The pan servo's cradle, on its own.
+
+    One flat plate with two posts standing off it, so it prints face down
+    with no overhang anywhere.  The posts stop under the frame's crossbar and
+    take a screw up into 7 mm of it - up, not sideways, because everything on
+    the back of the frame is 3 mm thick and 3 mm of PLA is not a thread."""
+    parts = [
+        lambda bm: _box(bm, SHELF_X[0], SHELF_X[1], SHELF_Y[0], SHELF_Y[1],
+                        SHELF_Z[0], SHELF_Z[1]),
+    ]
+    for s in (1, -1):
+        parts.append(lambda bm, t=s: _box(
+            bm, t * TAIL_X[0], t * TAIL_X[1], POST_Y[0], POST_Y[1],
+            SHELF_Z[1], POST_TOP))
+    # the case drops through a slot open at the BACK, so the servo slides in
+    # from behind; its ears land on the rails either side and take a screw
+    cuts = [lambda bm: _box(bm, PAN_POCKET[0][0], PAN_POCKET[0][1],
+                            PAN_POCKET[1][0], SHELF_Y[1] + 1.0,
+                            SHELF_Z[0] - 1, SHELF_Z[1] + 1)]
+    for h in PAN_HOLES:
+        cuts.append(lambda bm, q=h: _rodz(bm, SV_SCREW_D / 2,
+                                          SHELF_Z[0] - 1, SHELF_Z[1] + 1,
+                                          q.x, q.y))
+    for s in (1, -1):
+        cuts.append(lambda bm, t=s: _rody(bm, (SV_SCREW_D + 0.5) / 2,
+                                          POST_Y[0] - 1.0, POST_Y[1] + 1.0,
+                                          t * MNT_X, MNT_Z))
+    return _obj("RIG_shelf", coll, parts, cuts,
+                loc=(0.0, SHELF_Y[0], SHELF_Z[0]))
+
+
 def _horn(name, coll, crank, pin_out):
     """A printed servo horn.  Built at the origin: hub on local z, crank along
     local x, drive pin out the far face.  Prints hub-down, no support - the
@@ -564,6 +601,7 @@ def build():
 
     _base(coll)
     frame = _frame(coll)
+    shelf = _shelf(coll)
     link = _link(coll)
     for s, sx in (("L", 1), ("R", -1)):
         _cut_eye(s, sx, coll)
@@ -574,9 +612,9 @@ def build():
     horn_p = _horn("RIG_horn_pan", coll, PAN_CRANK, PAN_HORN_PIN)
     rod_p = _rod("RIG_rod_pan", coll, PAN_ROD_L)
 
-    _servos(coll, frame)
+    _servos(coll, shelf)
     # the pan drive rides the frame; the tilt drive stands on the base
-    for ob in (link, horn_p, rod_p):
+    for ob in (link, shelf, horn_p, rod_p):
         ob.parent = frame
         ob.matrix_parent_inverse = frame.matrix_world.inverted()
     for s in "LR":
@@ -596,7 +634,8 @@ def build():
     return check()
 
 
-PRINTED = ("RIG_base", "RIG_frame", "RIG_link", "RIG_pins_L", "RIG_pins_R",
+PRINTED = ("RIG_base", "RIG_frame", "RIG_shelf", "RIG_link",
+           "RIG_pins_L", "RIG_pins_R",
            "RIG_horn_tilt", "RIG_horn_pan", "RIG_rod_tilt", "RIG_rod_pan",
            "eye_L", "eye_R")
 
@@ -621,17 +660,111 @@ def _boxed():
 
 
 def _bed(me, m):
-    """How much of this part would actually be stuck to the bed, laid like m."""
-    co = [m @ v.co for v in me.vertices]
-    lo = min(c.z for c in co)
-    a = 0.0
-    for f in me.polygons:
-        vs = [co[i] for i in f.vertices]
-        if all(v.z - lo < 0.2 for v in vs):
-            n = len(vs)
-            for t in range(1, n - 1):
-                a += (vs[t] - vs[0]).cross(vs[t + 1] - vs[0]).length / 2
+    """How much of this part would actually be stuck to the bed, laid like m.
+
+    Via bmesh, because a boolean leaves big concave n-gons and fanning one of
+    those from a single corner counts the overlaps twice - it read the frame's
+    back as 2410 mm2 when it is 1537, which is enough to pick a worse face."""
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.transform(m)
+    lo = min(v.co.z for v in bm.verts)
+    a = sum(f.calc_area() for f in bm.faces
+            if all(v.co.z - lo < 0.2 for v in f.verts))
+    bm.free()
     return a
+
+
+PLATE_COLL = "TEST_PRINTS"
+
+
+def test_prints(folder=None, bed=220.0, gap=6.0, at=(70.0, 95.0)):
+    """Lay every printed part out on a bed, in the orientation it should be
+    printed in, and optionally write the STLs.
+
+    The layout in the scene and the files are the same geometry - they are
+    generated from the same objects, so what you inspect is what you print."""
+    import os
+    old = bpy.data.collections.get(PLATE_COLL)
+    if old:
+        for ob in list(old.objects):
+            bpy.data.objects.remove(ob, do_unlink=True)
+        bpy.data.collections.remove(old)
+    coll = bpy.data.collections.new(PLATE_COLL)
+    bpy.context.scene.collection.children.link(coll)
+
+    bm = bmesh.new()
+    _box(bm, at[0], at[0] + bed, at[1], at[1] + bed, -2.0, 0.0)
+    me = bpy.data.meshes.new("PLATE")
+    bm.to_mesh(me)
+    bm.free()
+    plate = bpy.data.objects.new("PLATE_%dx%d" % (bed, bed), me)
+    coll.objects.link(plate)
+    plate.display_type = "WIRE"
+
+    dg = bpy.context.evaluated_depsgraph_get()
+    items = []
+    for name in PRINTED:
+        src = bpy.data.objects.get(name)
+        if src is None:
+            print("  *** %s is missing" % name)
+            continue
+        me = bpy.data.meshes.new_from_object(src.evaluated_get(dg))
+        me.transform(src.matrix_world)
+        m = (Matrix.Identity(4) if name in UPRIGHT
+             else max(_boxed(), key=lambda r: _bed(me, r)))
+        me.transform(m)
+        lo = [min(v.co[i] for v in me.vertices) for i in range(3)]
+        hi = [max(v.co[i] for v in me.vertices) for i in range(3)]
+        me.transform(Matrix.Translation(Vector((-lo[0], -lo[1], -lo[2]))))
+        items.append([name, me, hi[0] - lo[0], hi[1] - lo[1], _bed(me, Matrix.Identity(4))])
+
+    items.sort(key=lambda it: -it[3])            # deepest row first
+    x, y, row = gap, gap, 0.0
+    placed = []
+    for name, me, w, d, contact in items:
+        if x + w + gap > bed:
+            x, y, row = gap, y + row + gap, 0.0
+        # the MESH stays at its own origin, so the STL is not carrying the
+        # layout offset around; only the object gets moved onto the plate
+        ob = bpy.data.objects.new(name, me)
+        coll.objects.link(ob)
+        placed.append((name, ob, me, contact, (at[0] + x, at[1] + y)))
+        x += w + gap
+        row = max(row, d)
+
+    over = y + row + gap
+    print("  %d parts laid out on a %.0f x %.0f bed, %.0f mm deep %s"
+          % (len(placed), bed, bed, over,
+             "" if over <= bed else "*** DOES NOT FIT"))
+    print("  part            bed contact   note")
+    for name, ob, me, contact, pos in placed:
+        note = "" if contact > 100 else ("brim it" if contact > 25 else "*** too small")
+        print("    %-14s %8.1f mm2  %s" % (name, contact, note))
+
+    if folder:
+        os.makedirs(folder, exist_ok=True)
+        for name, ob, me, contact, pos in placed:
+            for o in bpy.context.selected_objects:
+                o.select_set(False)
+            ob.select_set(True)
+            bpy.context.view_layer.objects.active = ob
+            path = os.path.join(folder, name + ".stl")
+            for call in (lambda: bpy.ops.wm.stl_export(
+                             filepath=path, export_selected_objects=True),
+                         lambda: bpy.ops.export_mesh.stl(
+                             filepath=path, use_selection=True)):
+                try:
+                    call()
+                    break
+                except Exception:
+                    continue
+            ob.select_set(False)
+        print("  STLs written to %s" % folder)
+    for name, ob, me, contact, pos in placed:      # now shuffle onto the plate
+        ob.location = (pos[0], pos[1], 0.0)
+    smooth(coll)
+    return [n for n, _, _, _, _ in placed]
 
 
 def export_stl(folder, orient=True):
@@ -847,7 +980,8 @@ SEATED = {
     ("RIG_link", "RIG_pins_L"), ("RIG_link", "RIG_pins_R"),
     ("RIG_pins_L", "eye_L"), ("RIG_pins_R", "eye_R"),
     ("RIG_base", "RIG_frame"),      # tilt shaft in the pillar bore
-    ("RIG_frame", "SV_pan"), ("RIG_base", "SV_tilt"),
+    ("RIG_shelf", "RIG_frame"),     # posts seated under the crossbar
+    ("RIG_shelf", "SV_pan"), ("RIG_base", "SV_tilt"),
     ("RIG_horn_tilt", "RIG_rod_tilt"), ("RIG_horn_pan", "RIG_rod_pan"),
     ("RIG_rod_tilt", "RIG_frame"), ("RIG_rod_pan", "RIG_pins_L"),
 }
@@ -875,7 +1009,7 @@ def check(verbose=True):
         # "bolted to it" is whitelisted below, which would hide a servo buried
         # in its own bracket.  So measure it instead of trusting the list.
         print("\n  DO THE SERVOS FIT THEIR CRADLES?")
-        for sv, mnt in (("SV_pan", "RIG_frame"), ("SV_tilt", "RIG_base")):
+        for sv, mnt in (("SV_pan", "RIG_shelf"), ("SV_tilt", "RIG_base")):
             a, b = bpy.data.objects.get(sv), bpy.data.objects.get(mnt)
             if not (a and b):
                 continue
