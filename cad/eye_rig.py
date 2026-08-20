@@ -44,7 +44,7 @@ CROSS_Z = (-11.0, -3.2)         # 7.8 mm up inside a ball that ends at -12
 SOCK_CL = 0.2                   # slip fit of cross in socket
 PUPIL_D, PUPIL_DEEP = 6.0, 2.0  # a dish at the front, to pour gloss black into
 
-FORK_Z, FORK_T, FORK_W = 13.5, 8.0, 12.0    # ONE arm now, and 8 mm of bore:
+FORK_Z, FORK_T, FORK_W = 13.5, 8.0, 16.0    # ONE arm now, and 8 mm of bore:
 FORK_Y = (22.0, 46.0)                       # it is the only bearing there is
 
 WEB_Y = (43.0, 46.0)            # spine, behind balls that end at y 38.68
@@ -157,6 +157,14 @@ TILT_PIN_X = (-15.0, -11.0)
 TILT_HORN_PIN, PAN_HORN_PIN = 5.5, 6.0
 PAN_ROD_Z = -23.5               # rod rides over the lever, beside the link
 NOTCH_X, NOTCH_Y = (-20.0, -10.0), (38.0, 50.0)   # deck, under the tilt horn
+
+# --- eyelid bearings -----------------------------------------------------
+# The lids pivot on the eye centreline, which inside |x| 19.5..43.5 is buried
+# in a ball.  So the pin lives OUTBOARD of each eye, on an arm off the spine,
+# and the lid is a plain bore that drops onto it.
+LID_BRK_X = (50.5, 53.5)
+LID_PIN_D, LID_PIN_X = 5.0, (43.6, 53.5)
+LID_ARM_Z = 4.0
 
 PAN_LIMIT, TILT_LIMIT = 25.0, 20.0
 SMOOTH_ANGLE = 35.0
@@ -359,13 +367,28 @@ def _frame(coll):
         x0, x1 = sx * EYE_X - FORK_W / 2, sx * EYE_X + FORK_W / 2
         parts.append(lambda bm, a=x0, b=x1: _box(
             bm, a, b, FORK_Y[0], FORK_Y[1], -(FORK_Z + FORK_T), -FORK_Z))
+        # The spine only has to carry the fork arm back to the crossbar. It
+        # used to run to +21.5 to meet an upper fork arm that no longer
+        # exists, so 16 mm of it was holding nothing up.
         parts.append(lambda bm, a=x0, b=x1: _box(
-            bm, a, b, WEB_Y[0], WEB_Y[1], -(FORK_Z + FORK_T), FORK_Z + FORK_T))
+            bm, a, b, WEB_Y[0], WEB_Y[1], -(FORK_Z + FORK_T), BAR_Z))
         parts.append(lambda bm, s=sx: _box(
             bm, s * TILT_X[0], s * TILT_X[1], EYE_Y, WEB_Y[1],
             -SHAFT_D / 2 - 0.5, SHAFT_D / 2 + 0.5))
     parts.append(lambda bm: _box(bm, -BAR_X, BAR_X, WEB_Y[0], WEB_Y[1],
                                  -BAR_Z, BAR_Z))
+    # the eyelid bearings: a rail out along the spine, an arm forward to the
+    # centreline, and the pin the lid's hub turns on
+    for sx in (1, -1):
+        rail = sorted((sx * (EYE_X + FORK_W / 2), sx * LID_BRK_X[1]))
+        arm = sorted((sx * LID_BRK_X[0], sx * LID_BRK_X[1]))
+        pin = sorted((sx * LID_PIN_X[0], sx * LID_PIN_X[1]))
+        parts.append(lambda bm, a=rail: _box(bm, a[0], a[1], WEB_Y[0],
+                                             WEB_Y[1], -BAR_Z, BAR_Z))
+        parts.append(lambda bm, a=arm: _box(bm, a[0], a[1], EYE_Y, WEB_Y[1],
+                                            -LID_ARM_Z, LID_ARM_Z))
+        parts.append(lambda bm, a=pin: _rodx(bm, LID_PIN_D / 2, a[0], a[1],
+                                             EYE_Y, EYE_Z))
     parts.append(lambda bm: _rodx(bm, SHAFT_D / 2, -SHAFT_X, SHAFT_X,
                                   EYE_Y, EYE_Z))
     # no tail and no shelf: RIG_shelf carries the pan servo and bolts on
@@ -678,7 +701,7 @@ def _bed(me, m):
 PLATE_COLL = "TEST_PRINTS"
 
 
-def test_prints(folder=None, bed=220.0, gap=6.0, at=(70.0, 95.0)):
+def test_prints(folder=None, bed=220.0, gap=6.0, at=(70.0, 95.0), parts=None):
     """Lay every printed part out on a bed, in the orientation it should be
     printed in, and optionally write the STLs.
 
@@ -704,7 +727,7 @@ def test_prints(folder=None, bed=220.0, gap=6.0, at=(70.0, 95.0)):
 
     dg = bpy.context.evaluated_depsgraph_get()
     items = []
-    for name in PRINTED:
+    for name in (parts or PRINTED):
         src = bpy.data.objects.get(name)
         if src is None:
             print("  *** %s is missing" % name)

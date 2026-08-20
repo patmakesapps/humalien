@@ -79,6 +79,8 @@ print/
 # and nothing that is may ever be added to it.
 !test prints/
 !test prints/*.stl
+!eye rig/
+!eye rig/*.stl
 
 # Editors / OS
 .vscode/
