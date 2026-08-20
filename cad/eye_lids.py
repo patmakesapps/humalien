@@ -385,7 +385,10 @@ def build():
     _tie(coll)
     _mount(coll)
     R._horn("LID_horn", coll, LID_HORN_R, LID_HORN_PIN)
-    _rod2("LID_rod", coll, DRIVE_ROD_L, R.PIN_L_D + 0.3, TIE_D + 0.3)
+    # both eyes take a 3 mm pin.  This bored the far one Ø5.3 for the TIE,
+    # left over from when the tie was the drive point - 1.15 mm of slop per
+    # side on a Ø3 crank pin, and visible as an oversized mouth.
+    _rod2("LID_rod", coll, DRIVE_ROD_L, R.PIN_L_D + 0.3, DRV_PIN_D + 0.3)
     src = bpy.data.objects.get(R.SERVO_SRC)
     if src is not None:
         ob = bpy.data.objects.new("SV_lid", src.data)
