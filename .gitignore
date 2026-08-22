@@ -86,3 +86,15 @@ print/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Blender working files. The .blend is the source of truth for geometry but it
+# is a 6 MB binary that changes wholesale on every save, so it lives on the
+# machine, not in the history. Back it up yourself.
+*.blend
+*.blend1
+
+# Printed output. STLs are generated from cad/ - regenerate them, do not
+# commit them. A stale folder of STLs beside a current one has already cost
+# two parts printed from a superseded file.
+exports/
+eye rig/

@@ -957,10 +957,14 @@ def _aabb(ob):
             [max(q[i] for q in p) for i in range(3)])
 
 
-def _apart(a, b):
+def _apart(a, b, pad=0.0):
     """True if the two boxes cannot possibly touch.  An EXACT boolean costs
-    real time and a depsgraph flush; most pairs are nowhere near each other."""
-    return any(a[1][i] < b[0][i] or b[1][i] < a[0][i] for i in range(3))
+    real time and a depsgraph flush; most pairs are nowhere near each other.
+
+    `pad` grows both boxes, for callers asking "are these two even near each
+    other" rather than "do these two overlap"."""
+    return any(a[1][i] + pad < b[0][i] - pad or b[1][i] + pad < a[0][i] - pad
+               for i in range(3))
 
 
 def _ivol(a, b):
@@ -1065,6 +1069,159 @@ def bore_ladder(folder=None, sizes=(4.75, 4.85, 4.95, 5.05)):
 
 SEAT_TOL = 1.0
 
+# A running joint is SUPPOSED to be close - that is what makes it a joint - so
+# it gets its own floor.  Anything else that comes this near is a crash the
+# printer has not got round to causing yet.
+MIN_GAP = 0.4                   # free parts passing each other
+MIN_JOINT = 0.15                # radial slack in a pin-in-bore fit
+# Both are printer numbers, not design numbers.  0.1 mm per side measured fine
+# in Blender and bound solid in PLA: the lid hub on its pin was 0.09 and the
+# whole rig came off the bed stiff.  The one joint that felt right was the
+# snap eye, which is 0.15 a side.
+
+
+def _sample(o, cap=600):
+    """World-space vertices of o, thinned to about `cap` of them."""
+    vs = o.data.vertices
+    step = max(1, len(vs) // cap)
+    m = o.matrix_world
+    return [m @ vs[i].co for i in range(0, len(vs), step)]
+
+
+def _gap(a, b):
+    """Smallest distance from a's sampled vertices to b's surface.
+
+    Approximate on purpose: vertex-to-surface, not surface-to-surface, so a
+    gap between two flat faces with no vertex near the closest point reads a
+    little wide.  For pins in bores and slabs passing slabs - which is all
+    this rig has - it is the number you want, and it is thousands of times
+    cheaper than the boolean the crash test uses."""
+    inv = b.matrix_world.inverted()
+    best = 1e9
+    for w in _sample(a):
+        ok, loc, _, _ = b.closest_point_on_mesh(inv @ w)
+        if ok:
+            best = min(best, (b.matrix_world @ loc - w).length)
+    return best
+
+
+def clearances(verbose=True, names=None):
+    """How much room is actually left between parts, in millimetres.
+
+    The crash test answers "do these two overlap", which is the same answer
+    for 9 mm of daylight and for 0.09.  That is how a rig that cannot be
+    turned by hand passed every check: nothing overlapped.  This asks the
+    other question."""
+    coll = bpy.data.collections[COLL]
+    names = names or ([o.name for o in coll.objects
+                       if not o.name.startswith("RIG_socket")] +
+                      [n for n in ("eye_L", "eye_R")
+                       if bpy.data.objects.get(n)])
+    poses = [(p, t) for p in (-PAN_LIMIT, 0.0, PAN_LIMIT)
+             for t in (-TILT_LIMIT, 0.0, TILT_LIMIT)]
+    tight = {}
+    for pan, tilt in poses:
+        look(pan, tilt)
+        bpy.context.view_layer.update()
+        box = {n: _aabb(bpy.data.objects[n]) for n in names}
+        for i, a in enumerate(names):
+            for b in names[i + 1:]:
+                if (a, b) in BURIED or (b, a) in BURIED:
+                    continue
+                if _apart(box[a], box[b], pad=3.0):
+                    continue
+                d = min(_gap(bpy.data.objects[a], bpy.data.objects[b]),
+                        _gap(bpy.data.objects[b], bpy.data.objects[a]))
+                k = (a, b)
+                if d < tight.get(k, (1e9,))[0]:
+                    tight[k] = (d, pan, tilt)
+    look(0, 0)
+
+    ok = True
+    if verbose:
+        print("\n  HOW MUCH ROOM IS LEFT?")
+        print("  (joints want >= %.2f mm of slack, everything else >= %.2f)"
+              % (MIN_JOINT, MIN_GAP))
+    for (a, b), (d, pan, tilt) in sorted(tight.items(), key=lambda kv: kv[1][0]):
+        joint = (a, b) in SEATED or (b, a) in SEATED
+        floor = MIN_JOINT if joint else MIN_GAP
+        bad = d < floor
+        ok &= not bad
+        if verbose and (bad or d < 3.0):
+            print("    %-14s %-14s %5.2f mm  %-7s at pan %+.0f tilt %+.0f %s"
+                  % (a, b, d, "joint" if joint else "free", pan, tilt,
+                     "***" if bad else ""))
+    if verbose and ok:
+        print("    everything has room")
+    return ok
+
+
+def _escapes(name, others, step=1.0, reach=60.0):
+    """The axes this part can be pulled straight out along, if any.
+
+    A part that cannot be taken off along any straight line was never going
+    to be put ON along one either.  This is the check that was missing: the
+    crash test only ever looked at the ASSEMBLED pose, so a collar too fat to
+    pass its own bore and a shaft trapped between two webs both sailed
+    through it, and neither could be built on a bench.
+
+    Conservative in one direction only - it says nothing about parts that
+    genuinely need to go in at an angle or in two moves, so read a TRAPPED as
+    "look at this", not as proof."""
+    o = bpy.data.objects[name]
+    home = o.matrix_world.copy()
+    out = []
+    for ax in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0),
+               (0, 0, 1), (0, 0, -1)):
+        v = Vector(ax)
+        clear = True
+        d = step
+        while d <= reach and clear:
+            o.matrix_world = Matrix.Translation(v * d) @ home
+            bpy.context.view_layer.update()
+            ab = _aabb(o)
+            for n in others:
+                if _apart(ab, _aabb(bpy.data.objects[n])):
+                    continue
+                if _ivol(o, bpy.data.objects[n]) > 0.5:
+                    clear = False
+                    break
+            if not clear:
+                break
+            # once its box is free of everything, it is out
+            if all(_apart(ab, _aabb(bpy.data.objects[n])) for n in others):
+                break
+            d += step
+        o.matrix_world = home
+        bpy.context.view_layer.update()
+        if clear:
+            out.append("%s%s" % ("+-"[v[0] + v[1] + v[2] < 0],
+                                 "xyz"[[abs(c) for c in ax].index(1)]))
+    return out
+
+
+def assembly(verbose=True, names=None):
+    """Can each part be got on and off the rig at all?"""
+    coll = bpy.data.collections[COLL]
+    names = names or ([o.name for o in coll.objects
+                       if not o.name.startswith(("RIG_socket", "SV_"))] +
+                      [n for n in ("eye_L", "eye_R")
+                       if bpy.data.objects.get(n)])
+    look(0, 0)
+    ok = True
+    if verbose:
+        print("\n  CAN EACH PART BE PUT ON AND TAKEN OFF?")
+    for n in names:
+        others = [m for m in names if m != n]
+        ways = _escapes(n, others)
+        bad = not ways
+        ok &= not bad
+        if verbose:
+            print("    %-14s %s" % (n, "*** TRAPPED - cannot come out along"
+                                    " any axis" if bad else
+                                    "comes out " + ", ".join(ways)))
+    return ok
+
 
 def check(verbose=True):
     coll = bpy.data.collections[COLL]
@@ -1133,5 +1290,13 @@ def check(verbose=True):
             print("    %-14s %-14s %8.2f mm3  at pan %+.0f tilt %+.0f  ***"
                   % (a, b, v, pan, tilt))
         ok &= not worst
+
+    # Both of these exist because every test above passed on a rig that could
+    # not be assembled and could not be turned by hand.  Overlap is not fit,
+    # and the assembled pose is not the whole story.
+    ok &= clearances(verbose)
+    ok &= assembly(verbose)
+
+    if verbose:
         print("\n  %s" % ("ALL CHECKS PASSED" if ok else "*** CHECK FAILED"))
     return ok

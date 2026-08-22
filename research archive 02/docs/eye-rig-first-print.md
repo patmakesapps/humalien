@@ -1,5 +1,11 @@
 # Eye rig — first print
 
+> **DEAD — DO NOT PRINT THIS SET.** The rig below was printed and assembled on
+> 22 Aug 2026 and cannot be built: the pins do not pass their bore, the frame
+> does not go onto the base, and the lid tie transmits no torque. See
+> [eye-rig-teardown.md](eye-rig-teardown.md) for the measurements. Everything
+> past this line is kept as a record of what was tried, not as instructions.
+
 Built from `cad/eye_rig.py` and `cad/eye_lids.py`. STLs in `eye rig/`, one
 per part, **already laid on the face they should print on** — don't rotate
 them in the slicer.
