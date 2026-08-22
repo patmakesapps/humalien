@@ -147,7 +147,12 @@ ROD_MOUTH = 2.75                        # 0.25 under the pin: THE number to
                                         # the C cracks; too loose and it walks.
 HORN_T, HORN_GAP = 3.5, 0.2
 HORN_HUB_D, HORN_ARM_W = 9.0, 7.0
-HORN_BORE = 4.7                 # under the 21T spline, so the teeth cut in
+HORN_BORE = 4.95                # MEASURED, not guessed.  4.7 had to be forced
+                                # and 5.2 dropped on and spun, so a ladder of
+                                # 4.75/4.85/4.95/5.05 pucks went onto a real
+                                # spline: 4.95 is the one that fits.  It is
+                                # printer-specific - reprint the ladder before
+                                # trusting it on a different machine.
 
 TILT_CRANK = 8.0                # equal cranks -> a parallelogram, so the tilt
 PAN_CRANK = 5.0                 # servo angle IS the tilt angle, exactly
@@ -1008,6 +1013,56 @@ SEATED = {
     ("RIG_horn_tilt", "RIG_rod_tilt"), ("RIG_horn_pan", "RIG_rod_pan"),
     ("RIG_rod_tilt", "RIG_frame"), ("RIG_rod_pan", "RIG_pins_L"),
 }
+LADDER_COLL = "BORE_LADDER"
+
+
+def bore_ladder(folder=None, sizes=(4.75, 4.85, 4.95, 5.05)):
+    """Hub pucks in a range of bore sizes, to find HORN_BORE on a real spline.
+
+    The horn bore is the one number on this rig that cannot be derived - it
+    depends on the printer and on the filament, and it is one-way: too small
+    splits the hub going on, too large strips under load.  Guessing costs a
+    print per guess, so print the whole range at once and keep the winner.
+
+    Each puck carries bumps on its rim counting its place in `sizes` - one
+    bump for the smallest - so four identical-looking discs coming off the
+    bed cannot be mixed up.  No labels to print and nothing to write down.
+
+        eye_rig.bore_ladder(folder="C:/some/where")
+
+    Press each onto a spline.  Keep the one that starts square and needs the
+    servo screw to seat it, then set HORN_BORE to it and rebuild the horns."""
+    old = bpy.data.collections.get(LADDER_COLL)
+    if old:
+        for o in list(old.objects):
+            bpy.data.objects.remove(o, do_unlink=True)
+        bpy.data.collections.remove(old)
+    coll = bpy.data.collections.new(LADDER_COLL)
+    bpy.context.scene.collection.children.link(coll)
+
+    names = []
+    for i, d in enumerate(sizes, start=1):
+        parts = [lambda bm: _rodz(bm, HORN_HUB_D / 2, 0.0, HORN_T, 0.0, 0.0)]
+        # 40 deg apart, so neighbouring bumps never touch: at 30 they
+        # overlapped and pinched the mesh where they met
+        for k in range(i):
+            a = math.radians(-60.0 + k * 40.0)
+            parts.append(lambda bm, a=a: _rodz(
+                bm, 1.25, 0.0, HORN_T,
+                math.cos(a) * HORN_HUB_D / 2, math.sin(a) * HORN_HUB_D / 2))
+        name = "BORE_%s" % ("%.2f" % d).replace(".", "p")
+        _obj(name, coll,
+             parts,
+             [lambda bm, d=d: _rodz(bm, d / 2, -1.0, HORN_T + 1.0, 0.0, 0.0)])
+        names.append(name)
+    smooth(coll)
+    print("  bore ladder: %s  (bumps count the size, 1 = smallest)"
+          % ", ".join("%.2f" % d for d in sizes))
+    test_prints(folder=folder, bed=60.0, gap=6.0, at=(0.0, 0.0),
+                parts=tuple(names))
+    return names
+
+
 SEAT_TOL = 1.0
 
 

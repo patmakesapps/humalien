@@ -174,8 +174,7 @@ def _lid(name, coll, sx, lead, tail):
          lambda bm: _wedge(bm, lead + 180.0, sec[0] - 40, sec[1]),
          lambda bm: _wedge(bm, lead + tail, sec[0] - 40, sec[1]),
          lambda bm: R._box(bm, x0 - 80, x0, AX_Y - 80, AX_Y + 80, -80, 80),
-         lambda bm: R._box(bm, x1, x1 + 80, AX_Y - 80, AX_Y + 80, -80, 80),
-         lambda bm: R._rodx(bm, BORE_D / 2, bore[0], bore[1], AX_Y, AX_Z)],
+         lambda bm: R._box(bm, x1, x1 + 80, AX_Y - 80, AX_Y + 80, -80, 80)],
         loc=(0.0, AX_Y, AX_Z))
 
     ct = sorted((sx * (HUB_X[0] + 0.5), sx * HUB_X[1]))
@@ -216,11 +215,18 @@ def _lid(name, coll, sx, lead, tail):
     boss = R._obj(
         name + "_boss", coll,
         boss_parts,
-        [_crank_bore,
-         lambda bm: R._rodx(bm, BORE_D / 2, hx[0] - 1, hx[1] + 1,
-                            AX_Y, AX_Z)],
+        [_crank_bore],
         loc=(0.0, AX_Y, AX_Z))
     _fuse(shell, boss)
+    # The pivot bore is cut ONCE, after the fuse.  Boring the shell and the
+    # hub separately and then unioning them put two Ø5.2 cylinders on the same
+    # axis, coincident wall on coincident wall, and EXACT will not resolve
+    # that: the right lid came out with 68 open edges while the left, whose
+    # extra drive crank moved the numbers, happened to survive.
+    _carve(shell, R._obj(
+        name + "_bore", coll,
+        [lambda bm: R._rodx(bm, BORE_D / 2, bore[0], bore[1], AX_Y, AX_Z)],
+        loc=(0.0, AX_Y, AX_Z)))
     return shell
 
 

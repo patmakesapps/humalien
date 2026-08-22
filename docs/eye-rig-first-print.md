@@ -8,33 +8,36 @@ Three MG90S servos: pan, tilt, blink. Two eyeballs, upper lids only.
 
 ---
 
-## Print the fit plate first
+## The fits
 
-Four numbers in this build are fits, and **one of them is a guess**. Print
-these three parts before anything else — they are the smallest on the plate
-and together they test both fits you can test cheaply.
+Four numbers in this build are fits. **Two of them have now been measured on
+a real printer** — 22 Aug 2026, grey PLA — and two still cannot be tested
+until the rig is together.
 
-| part | tests | why |
-|---|---|---|
-| `RIG_horn_pan.stl` | Ø4.7 bore onto the servo spline | the guess |
-| `RIG_horn_tilt.stl` | same, second sample | one may be a fluke |
-| `RIG_rod_tilt.stl` | Ø3.3 snap eye over a Ø3.0 pin | the tuning number |
+Both measured numbers are printer- and filament-specific. On a different
+machine, or in a different colour, check them again before committing to a
+plate. Twenty minutes of printing against hours for the big parts.
 
-Twenty minutes of printing. If either is wrong, everything downstream of it
-is wrong the same way, and the big parts take hours.
+### 1. Horn onto the spline — `HORN_BORE = 4.95`, in `cad/eye_rig.py`
 
-### 1. Horn onto the spline — `HORN_BORE = 4.7`, in `cad/eye_rig.py`
+**Measured, not guessed.** 4.7 had to be forced on and 5.2 dropped on and
+spun; a ladder of 4.75 / 4.85 / 4.95 / 5.05 pucks went onto a real spline and
+4.95 was the one that fit.
 
-**This is an estimate of the MG90S spline, not a measurement off yours.**
-The horn is meant to press on so the 21 teeth cut their own splines in the
-plastic, held by the servo's own screw. That makes it **one-way**: too small
-and you split the hub getting it on, too large and it strips under load.
+The horn presses on so the 21 teeth cut their own splines in the plastic,
+held by the servo's own screw. That makes it **one-way**: too small and you
+split the hub getting it on, too large and it strips under load. The useful
+window turned out to be about half a millimetre wide, which is why guessing
+in 0.1 steps cost two prints before the ladder settled it in one.
 
-- Push it on by hand. It should start square and need the screw to seat it.
-- If it drops on freely → bore is too big. Reduce `HORN_BORE`.
-- If it won't start at all → too small. Increase it.
-- Change in 0.1 steps. Measure your spline's major diameter with calipers
-  first if you have them; that's a better starting point than my 4.7.
+To re-measure on another printer or another filament:
+
+    eye_rig.bore_ladder(folder="C:/some/where")
+
+Four hub pucks, no arm and no pin, about ten minutes on a 60 mm square. Bumps
+on the rim count the size — one bump is the smallest — so they can't be mixed
+up coming off the bed. Press each onto a spline, keep the one that starts
+square and needs the screw to seat it, set `HORN_BORE` to it, and rebuild.
 
 ### 2. Snap eye over its pin — `ROD_MOUTH = 2.75`, in `cad/eye_rig.py`
 
@@ -44,9 +47,12 @@ mouth is 2.75 — **0.25 mm of interference**, so it snaps on and stays on.
 The rod has no pin to test against on its own; clip it onto any Ø3 rod, a
 drill shank, or the pin on `RIG_horn_tilt` once that's printed.
 
-- It should need a deliberate push and then hold.
+- It should need a deliberate push and then hold, and then swivel freely on
+  the pin once it is seated. 2.75 was confirmed good on the first print.
 - Cracks going on → mouth too tight, raise `ROD_MOUTH`.
 - Slides on with no click, or falls off → lower it.
+
+Loose to *swivel* is correct. Loose to *get on* is the failure.
 
 Both mouths on a rod face **opposite ways** on purpose, so no single sideways
 shove releases both ends.
