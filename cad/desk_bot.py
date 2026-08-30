@@ -261,6 +261,19 @@ HAT_XY = (65.0, 56.5)           # MUST beat PI_TALL or the HAT lands on the
 HAT_TALL = 10.0                 # USB stack.  fits() checks it.
 SHELF_Z = (92.33, 96.33)        # pan servo ears rest ON this; screws go DOWN
 PAN_TOP = 104.0                 # so the case top lands here
+# The shelf's underside is a 166 mm disc arriving 26 mm up in open air -
+# 17,500 mm2 of downward-facing area, and the servo seat is dead in the
+# middle of it, which is exactly where a bridge sags most.  This drops the
+# shelf straight down to the parting line under the servo, so the seat prints
+# off the PLATE instead of off a bridge, and what is left of the shelf spans
+# an anchored 68 mm gap rather than cantilevering 83 mm from the wall.
+#
+# Both limits are hard: y stops short of the shelf's two O26 holes at
+# (0, +-38), one of which is the wire way, and x stays well inboard of the
+# arm pockets, which reach x 42.7.
+PED_X, PED_Y = 11.5, (-15.0, 24.0)
+PED_TOP = 95.0                  # dies INSIDE the shelf's 92.33..96.33, so the
+                                # union overlaps in volume and shares no face
 # Waveshare 8 ohm 5W speaker set, from the datasheet, not from guessing:
 # 100 x 45 x 21 with FOUR 6.5 mm mounting holes on 92 x 36 centres.  Each box
 # is sealed and carries its own driver AND its own passive radiator on one
@@ -698,7 +711,10 @@ def _dome(coll, mat):
     # 3.4 mm of radius, so a flat disc meets it on one thin line and a cone
     # meets it all the way round.
     add = [lambda bm: _conez(bm, 84.0, 80.6, SHELF_Z[0], SHELF_Z[1], 0, 0,
-                             SEGS)]
+                             SEGS),
+           # pedestal: carries the servo seat down to the parting line
+           lambda bm: _box(bm, -PED_X, PED_X, PED_Y[0], PED_Y[1],
+                           SPLIT_Z, PED_TOP)]
     for sx in (1, -1):
         add.append(lambda bm, s=sx: _box(
             bm, s * SHO_X[0], s * SHO_X[1], -SHO_Y, SHO_Y,
@@ -706,6 +722,20 @@ def _dome(coll, mat):
         for ey in (-SHO_Y, SHO_Y):
             add.append(lambda bm, s=sx, y=ey: _rodx(
                 bm, SHO_R, s * SHO_X[0], s * SHO_X[1], y, ARM_AZ, FINE))
+        # Skirt: carries the housing straight down to the parting line.  The
+        # boss used to stop at ARM_AZ - SHO_R and leave a 613 mm2 ceiling in
+        # open air on each side, plus the whole lower half of both end caps.
+        # Standing it on the plate is the natural fix - no support, no bridge.
+        #
+        # Inset 2 and 1 mm in x and 1 mm in y from the housing ON PURPOSE, so
+        # it overlaps the boss in VOLUME and shares no face with it.  Two
+        # boxes that share a face is exactly what shredded the join ribs.
+        # Below z 72 this is inside the body's own flare, so the inset costs
+        # nothing anyone can see.
+        add.append(lambda bm, s=sx: _box(
+            bm, s * (SHO_X[0] + 2.0), s * (SHO_X[1] - 1.0),
+            -(SHO_Y + SHO_R - 1.0), SHO_Y + SHO_R - 1.0,
+            SPLIT_Z, ARM_AZ + 2.0))
 
     bore = _svpocket_ops(_sv_m((0, 0, PAN_TOP), (0, 0, 1), (0, 1, 0)), "-y")
     bore += [lambda bm: _rodz(bm, 13.0, SHELF_Z[0] - 1, SHELF_Z[1] + 1, 0, 38,
