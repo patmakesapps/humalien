@@ -98,3 +98,6 @@ Thumbs.db
 # two parts printed from a superseded file.
 exports/
 eye rig/
+
+# STL is build output, same rule as exports/ - the script is the source
+stl/
