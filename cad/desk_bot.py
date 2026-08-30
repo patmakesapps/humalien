@@ -192,7 +192,23 @@ RING_OD, RING_ID, RING_T = 37.0, 23.3, 3.2      # NeoPixel Ring 12B
 # out through the shoulder skin, where the dome has already narrowed to r 61.
 # Laid on its side the servo only needs 12.2 mm of height, which the shoulder
 # has in abundance, and it drops to 78 where the dome is still 88 wide.
-ARM_AX, ARM_AZ = 90.0, 82.0     # the shoulder face, and the arm axis
+# ARM_AZ was 82.0.  The arm root sweeps an 11.31 mm envelope about this axis
+# - the jog box's corners, not the hub - and at 82 that dipped to z 70.69,
+# where the dome's skin is still flaring out at r 93.14 against an arm face
+# at x 91.  6 mm3 buried at EVERY angle in ARM_RANGE, which is why posing the
+# arm never showed it: both bodies are symmetric about this axis, so the
+# interference does not move.  Only a sweep finds it.
+#
+# 84.5 lifts the envelope bottom to 73.19, where the skin is at 90.01, and
+# leaves 0.99 mm.  Raising the AXIS rather than slimming the arm is deliberate
+# and was decided with two arms already on the printer: the arm's mesh is
+# built relative to ARM_AZ and pivoted on it, so its STL is unchanged by this
+# and the printed parts stay valid.  Moving the arm outboard instead does NOT
+# work - the spline only reaches x 94, so an arm starting there grips nothing.
+#
+# The cost is that the boss now reaches z 94.5 and merges into the pan shelf
+# at 92.33.  That union is checked, not assumed.
+ARM_AX, ARM_AZ = 90.0, 84.5     # the shoulder face, and the arm axis
 SHO_X = (66.0, 90.0)            # housing: inboard end, and the face.  24
                                 # deep for a 22.7 case - 23 left 0.2 short
 # SHO_R was 9.0.  The ear slot's far corners sit at y +-22.2, and at the
@@ -206,6 +222,25 @@ SHO_CBORE_X = 85.0              # head sits here, just clear of the ear at 84.8
 ARM_BLADE_X = 110.0             # 15 mm outboard of the O190 waist: at 8
                                 # they vanished into the silhouette
 ARM_W, ARM_T, ARM_L = 28.0, 12.0, 60.0
+# Anything within this radius of the arm axis has to clear the dome's flare,
+# and the flare is what bit.  Measured 30 Aug 2026 by sweeping ARM_RANGE: the
+# old 11.0 hub and the old +-8 root swept an 11.31 envelope - the box corners,
+# not the hub - dipping to z 70.69, where the dome's skin is still at r 93.14
+# against an arm face at x 91.  6 mm3 buried at EVERY angle in the range.  Not
+# a swing clash: it is constant, because both are symmetric about that axis,
+# so posing the arm will never show it and only a sweep finds it.
+# The dome clears r 91 only above z 72.4, so the envelope has to come in to
+# 9.6.  8.5 and 6.0 give 1.4 mm.
+# Moving the arm outboard instead does NOT work and is worth writing down: the
+# spline only reaches x 94, so an arm starting there grips nothing.  Raising
+# ARM_AZ to 85 works geometrically but runs the boss into the pan shelf at
+# z 92.33.  Shrinking the root is the local fix.
+# REVERTED to 11.0 / 8.0 on 30 Aug 2026: two of these were already on the
+# printer when the shrink went in.  The clash is the arm root against the
+# DOME's flare, and the dome is not printed - so it gets fixed on the dome
+# side, where plastic has not been committed yet.  Fix the part that is still
+# a file, not the part that is already a solid.
+ARM_HUB_R, ARM_ROOT = 11.0, 8.0
 ARM_REST = -8.0
 ARM_RANGE = (-20.0, 75.0)       # +ve swings FORWARD, same sign both arms
 PAN_RANGE = (-80.0, 80.0)
@@ -805,10 +840,11 @@ def _arm(coll, mat, sx, tag):
     """Hub on the spline, a jog outboard, then the blade.  The jog is the
     whole reason the arm can hang past the O160 waist without touching it."""
     bx = ARM_BLADE_X * sx
-    parts = [lambda bm: _rodx(bm, 11.0, sx * (ARM_AX + 1.0),
+    parts = [lambda bm: _rodx(bm, ARM_HUB_R, sx * (ARM_AX + 1.0),
                               sx * (ARM_AX + 11.0), 0.0, ARM_AZ, FINE),
              lambda bm: _box(bm, sx * (ARM_AX + 1.0), bx + sx * ARM_T / 2,
-                             -8.0, 8.0, ARM_AZ - 8.0, ARM_AZ + 8.0),
+                             -ARM_ROOT, ARM_ROOT, ARM_AZ - ARM_ROOT,
+                             ARM_AZ + ARM_ROOT),
              lambda bm: _box(bm, bx - ARM_T / 2, bx + ARM_T / 2,
                              -ARM_W / 2, ARM_W / 2,
                              ARM_AZ - ARM_L, ARM_AZ),
