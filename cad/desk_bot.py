@@ -5,15 +5,18 @@ and two ring eyes that are LIGHT ONLY - no eye mechanism at all.  Four MG90S
 in the whole robot, out of the twelve on the bench.
 
     pan     one servo on a shelf inside the shoulder, output up.  The yoke
-            clamps its spline.  The yoke's flange bears on DB_top over a
-            21 mm annulus, so THE SERVO NEVER CARRIES THE HEAD'S WEIGHT - it
+            hub clamps its spline.  The hub's flange bears on DB_top over an
+            11 mm annulus, so THE SERVO NEVER CARRIES THE HEAD'S WEIGHT - it
             only supplies torque.  An MG90S output bearing will not take
             ~120 g of head as a thrust load, and this annulus is what stops
             it ever seeing one.
     nod     one servo INSIDE the head, on the head's own centre line.  The
             head is a sphere turning about its own centre, so nod is
             weight-neutral AND cannot collide with the body at any angle -
-            every point of a sphere stays HEAD_R from the axis.
+            every point of a sphere stays HEAD_R from the axis.  Its output
+            is bolted to the YOKE through DB_cplr, so what nods the head is
+            the servo's own reaction - see "the nod joint" below, because
+            for a while this drove nothing at all.
     arms    one servo each, axis left-right, arm swings fore and aft.  The
             blade is jogged outboard to |x| 86 so it clears the O160 waist.
 
@@ -28,15 +31,21 @@ Assembly order, which is the thing that has actually failed twice here:
     2.  bracket + servo go in through the O92 face opening and take two
         screws along +Y, driven straight through that same opening.  No
         screw in this build is driven along an axis you cannot see down.
-    3.  head drops between the yoke arms from above - 112 wide into a 116
-        gap, 2 mm a side.
+    3.  the two DB_yoke_arm drop onto the hub's tongues from above and take
+        one radial M3 each, driven from the REAR.  Then the head drops
+        between them - 112 wide into a 116 gap, 2 mm a side.
     4.  DB_cplr enters from the RIGHT, through the yoke bore, onto the servo
-        spline; its shoulder traps in the bore so it is the bearing too.
-        DB_pivot enters from the LEFT.  Both insert radially, both have a
-        clear driver path from outside.
+        spline, and TWO M2 BOLT ITS CAP TO THE YOKE ARM.  Those two bolts
+        are the entire drive: without them the servo turns the coupler in a
+        round hole and the head sits still, which is exactly what this file
+        built for the first three weeks of the desk bot.
+        DB_pivot enters from the LEFT: journal in the yoke, D section into a
+        boss inside the head, one M3 x 25 down its own axis into that boss.
+        Both insert radially, both have a clear driver path from outside.
         (Eye rig 01 died on a continuous shaft through a CLOSED bore that
         needed 23 mm of axial slide against 0.50 available.  This is that
-        same joint, built as two parts inserted from opposite ends.)
+        same joint, built as two parts inserted from opposite ends - and it
+        found a second way to fail that clearance checks cannot see.)
     5.  arm servos slide into their pockets from inside the dome; their two
         screws come in from OUTSIDE the shoulder, so the heads show as two
         small dots a side.  That is the price of a slide-in pocket on a
@@ -64,6 +73,17 @@ Print orientation, all support-free:
               cavity has no roof because DB_top is a separate flat ring.
     DB_top    flat.  It is the thrust bearing face, so it wants to be a
               first-layer surface anyway.
+    DB_yoke_hub   collar face down.  O60 of first layer, 24 mm tall, and the
+              one flat in it is the r30 -> r36 bearing eave at z 116.
+    DB_yoke_arm   on its -y face.  A flat 14 mm prism, no overhang at all,
+              and the layers run ALONG the plane the head bends it in.  Both
+              arms are the same STL, turned 180 deg about Z.
+
+Every one of those claims is now checked.  PRINT_ORIENT holds each part to
+the orientation it was drawn for and fits() counts the downward-facing area
+in it - because DB_yoke was "support-free, base down" in this docstring for
+weeks while actually standing 88 mm tall on 135 mm2 of plate under 6,021 mm2
+of flat roof, and nothing in the gate could say so.
 
     import desk_bot; desk_bot.build(); desk_bot.fits()
     desk_bot.pose(pan=30, nod=-12, arm_l=40, arm_r=-10)
@@ -184,6 +204,119 @@ YOKE_X = (58.0, 64.0)           # yoke arm inner and outer faces
 NOD_BORE = 8.0
 EYE_X, EYE_Z = 21.0, 6.0        # eyes set a little high reads friendly
 RING_OD, RING_ID, RING_T = 37.0, 23.3, 3.2      # NeoPixel Ring 12B
+
+# ------------------------------------------------------------ the nod joint
+# This joint had no drive path at all.  Measured 30 Aug 2026: EVERY mating
+# surface in it was a plain round cylinder - r3.85 shaft in an r4 bore, at
+# the yoke AND at the head, on BOTH sides.  So the servo turned DB_cplr,
+# DB_cplr turned in a round hole, and the head did not move.  Nothing was
+# keyed to anything: the head was not even rotationally LOCATED, it was a
+# ball hanging on two slip pins.
+#
+# It read as working in the viewport for one reason only - build() parented
+# DB_cplr to E_nod, so pose() swung the coupler along with the head.  The rig
+# was asserting a fix the geometry did not have, and fits() measured the
+# clearances at this joint and passed them, because clearance answers the
+# same for a joint that drives and a joint that spins.  That is eye rig 01
+# again in a different part: a check that cannot fail is not a check.
+#
+# The torque path has to CLOSE, and it closes like this:
+#
+#   RIGHT, the drive.  The servo case is screwed into the head.  Its spline
+#   turns DB_cplr, and DB_cplr's cap is BOLTED FLAT to the yoke arm's outer
+#   face with two M2.  The coupler is therefore part of the yoke - it is
+#   ground - and the servo's reaction is what nods the head.  Bolts rather
+#   than a key on purpose: 2.2 kg.cm on a O12 bolt circle is 21.6 N a screw,
+#   nothing in M2 shear, and a plain round shank means the servo can be
+#   CENTRED before the coupler is clocked.  A D would have to be clocked
+#   first and centred second, which is the wrong way round on a servo.
+#
+#   LEFT, the idler.  DB_pivot is the mirror image: keyed to the HEAD by a D
+#   section into a boss inside the shell, and free in the yoke as a plain
+#   journal.  It is hollow, and one M3 runs down its axis into that boss - so
+#   its only driver path is straight along -x from outside the robot, which
+#   is the rule this build has kept since eye rig 01.  Its collar and its cap
+#   sandwich the yoke arm with 0.3 of end float, and that is also the only
+#   thing locating the head axially.  The coupler must stay FREE to slide or
+#   the two fight each other over the same 0.3.
+NOD_JNL = NOD_BORE / 2 - FIT_MIN        # r3.85 journal in an r4 bore
+NOD_SPLINE = (YOKE_X[0] - 3.0, YOKE_X[0] - 3.0 + SV_HUB_Z)      # 55.0 .. 59.0
+                                        # read off _nod_m, not typed in: the
+                                        # servo's output plane and the top of
+                                        # its hub.  The coupler's socket ends
+                                        # at the second number and its shank
+                                        # starts at the first, so the shank
+                                        # can never bury itself in the case
+NOD_CAP_R, NOD_CAP_T = 8.0, 3.0         # cap, outboard of the yoke arm.
+                                        # 8, not 9: the arm is 14 wide,
+                                        # so the cap is 1 mm proud a
+                                        # side and the bolts still land
+                                        # in the post rather than on air
+NOD_BOLT_R = 6.0                        # M2 bolt circle radius in that cap.
+                                        # 6 - 0.85 clears the r4 nod bore by
+                                        # 1.15, and leaves 1.75 of cap edge
+NOD_FLOAT = 0.3                         # head end float, cap to collar
+NOD_KEY = 3.0                           # the D's flat, off the axis.  It
+                                        # faces -y, which is UP when the head
+                                        # prints face down - so the D is the
+                                        # key AND it is what stops the bore's
+                                        # crown drooping.  One feature, two
+                                        # problems
+NOD_KEY_X = (48.0, 55.0)                # the D, |x|.  7 mm of key
+NOD_BOSS_R, NOD_BOSS_X = 8.0, (42.0, 55.0)      # the boss it goes into
+NOD_SPOT_R, NOD_SPOT_X = 9.5, 55.0      # a FLAT spotface for the collar to
+                                        # bear on.  A sphere is a hopeless
+                                        # thrust face; at r9.5 the sphere is
+                                        # only 55.19 out, so a floor at 55.0
+                                        # cleans up into a real annulus
+M2_PILOT, M2_CLEAR = 0.85, 1.25         # radii, M2 into PLA
+M3_PILOT, M3_CLEAR = 1.25, 1.70         # radii, M3 into PLA
+
+# ---------------------------------------------------------------- the yoke
+# It was ONE part, and it did not print.  Measured on the built mesh, 30 Aug
+# 2026: 88 mm tall standing on 135 mm2 of first layer - the O14 sleeve alone,
+# nothing else touching the plate - under 6,021 mm2 of downward faces at a
+# dead 90 deg.  Three stacked flat roofs (23 mm off the sleeve at z 108.5,
+# 12 mm off the collar at 116, the 22 mm shelf cantilever at 119) and two
+# 6 x 14 posts standing 71 mm unbraced, 11.8 : 1.  Inverting it does not
+# help - 6,065 mm2, the three roofs merged into one 5,091 mm2 slab.
+#
+# Split three ways, and every piece prints support-free:
+#
+#   DB_yoke_hub   collar face down.  The O14 sleeve is gone: the collar is
+#                 r30 the whole way, which is what DB_top's O62 bore allows
+#                 anyway, so the first layer is O60 instead of O14.  The
+#                 flange is a 45 deg frustum, not a step.  What is left is
+#                 ONE unavoidable flat: the r30 -> r36 eave at z 116, 1,244
+#                 mm2, and it is unavoidable because a thrust flange over a
+#                 bore has to step out somewhere and r30 is the largest
+#                 thing that fits through DB_top.  It is a continuous eave
+#                 anchored on its inner edge with 6 mm of flange above it to
+#                 recover in, not a bridge over air.
+#   DB_yoke_arm   lying on its -y face.  The silhouette is a flat 14 mm
+#                 prism, so there is no overhang anywhere in it - and the
+#                 layers now run ALONG the plane the head's weight and the
+#                 nod reaction bend it in, instead of across it.  That is
+#                 the strongest orientation available for the one member
+#                 carrying the head; standing it up was the weakest.  Both
+#                 arms are the SAME STL, printed twice and turned 180 deg
+#                 about Z - which is why every feature in _yoke_arm is
+#                 symmetric in y.
+#
+# The joint is a tongue on the hub into a socket in the arm, with one radial
+# M3 driven from the REAR - the shell/dome rib trick, for the same reason:
+# on the assembled robot it is the only direction still reachable.  The head
+# is what caps the heights here.  It is a sphere about the nod axis, so it
+# does not move with nod at all, and the binding corner is the INBOARD one:
+# at x 29 the sphere is 59.1 away, which is what puts the arm foot's roof at
+# z 131 and not higher.
+YOKE_COLLAR_R, YOKE_COLLAR_Z = 30.0, (104.0, 116.0)
+YOKE_FLANGE_R, YOKE_FLANGE_Z = (36.0, 42.0), (116.0, 122.0)
+YOKE_TONGUE_X, YOKE_TONGUE_Y, YOKE_TONGUE_Z = (30.0, 42.0), 4.0, (122.0, 128.0)
+YOKE_FOOT_X, YOKE_FOOT_Z = 29.0, 131.0          # inboard end, and the roof
+YOKE_W = 7.0                                    # half width, arm and post
+YOKE_FIT = 0.15                                 # tongue into socket
+YOKE_SCREW = (36.0, 125.0)                      # the M3, at |x| and z
 
 # ---------------------------------------------------------------- the arms
 # The arm servo used to stand with its long axis VERTICAL.  Its ears span
@@ -396,6 +529,33 @@ def _rodr(bm, r, r0, r1, ang, cz, segs=PILOT):
     bmesh.ops.rotate(bm, verts=v, cent=(0, 0, 0),
                      matrix=Matrix.Rotation(ang, 3, "Z"))
     return v
+
+
+def _dx(bm, r, flat, x0, x1, cy, cz, segs=FINE):
+    """A rod on X with one chord taken off it, `flat` from the axis, on -y.
+
+    The whole nod bug was a round shaft in a round bore, and a D is the
+    cheapest thing that is not one: it cannot come loose the way a grub screw
+    can, it needs no second part, and it prints.  The flat faces -y because
+    that is UP when the head prints face down, so the same feature that keys
+    the pivot is also what stops the bore's crown drooping.
+
+    Built as a swept profile rather than as (cylinder minus box), because
+    every one of these is a boolean operand already and handing EXACT one
+    less thing to do at a glancing angle is worth the twenty lines.
+    """
+    phi = math.asin(max(-1.0, min(1.0, flat / r)))
+    n = max(8, segs)
+    prof = [(cy + r * math.sin(t), cz + r * math.cos(t))
+            for t in (-phi + (math.pi + 2 * phi) * i / n for i in range(n + 1))]
+    a = [bm.verts.new((x0, y, z)) for y, z in prof]
+    b = [bm.verts.new((x1, y, z)) for y, z in prof]
+    for i in range(n):
+        bm.faces.new((a[i], a[i + 1], b[i + 1], b[i]))
+    bm.faces.new((a[n], a[0], b[0], b[n]))      # the flat
+    bm.faces.new(list(reversed(a)))
+    bm.faces.new(b)
+    return a + b
 
 
 def _ball(bm, r, cx, cy, cz, segs=64):
@@ -793,28 +953,76 @@ def _top(coll, mat):
     return _obj("DB_top", coll, parts, cuts, mat)
 
 
-def _yoke(coll, mat):
-    """Collar, flange, and two arms up to the nod axis.  The flange is the
-    thrust bearing: it, not the servo, is what the head stands on."""
-    fz = (TOP_Z[1], TOP_Z[1] + 5.0)
-    parts = [lambda bm: _rodz(bm, 30.0, TOP_Z[0] - 3.5, fz[0], 0, 0, SEGS),
-             lambda bm: _rodz(bm, 42.0, fz[0], fz[1], 0, 0, SEGS),
-             # down to the spline: a sleeve round the servo hub
-             lambda bm: _rodz(bm, 7.0, PAN_TOP, TOP_Z[0] - 3.5, 0, 0,
-                              FINE)]
+def _yoke_hub(coll, mat):
+    """Collar, thrust flange, and the two tongues the arms socket onto.
+
+    The flange is the thrust bearing: it, not the servo, is what the head
+    stands on.  Printed collar face down, and every face in it is either
+    vertical, upward, or at 45 - except the r30 -> r36 eave at z 116, which
+    is the bearing step itself and cannot go anywhere else.
+    """
+    cr, cz = YOKE_COLLAR_R, YOKE_COLLAR_Z
+    fr, fz = YOKE_FLANGE_R, YOKE_FLANGE_Z
+    parts = [lambda bm: _rodz(bm, cr, cz[0], cz[1], 0, 0, SEGS),
+             # 45 deg, not a step: fr[1] - fr[0] == fz[1] - fz[0] and that
+             # is not a coincidence, it is the constraint
+             lambda bm: _conez(bm, fr[0], fr[1], fz[0], fz[1], 0, 0, SEGS)]
     for sx in (1, -1):
-        # arm: a slab leaning outward from the flange to the nod bore
         parts.append(lambda bm, s=sx: _box(
-            bm, s * 26.0, s * YOKE_X[1], -7.0, 7.0, fz[1] - 2.0, fz[1] + 6.0))
-        parts.append(lambda bm, s=sx: _box(
-            bm, s * YOKE_X[0], s * YOKE_X[1], -7.0, 7.0, fz[1], HEAD_Z + 10.0))
-        parts.append(lambda bm, s=sx: _rodx(
-            bm, 10.0, s * YOKE_X[0], s * YOKE_X[1], 0.0, HEAD_Z, FINE))
-    cuts = [lambda bm: _rodz(bm, HORN_BORE / 2, PAN_TOP - 1, TOP_Z[0], 0, 0)]
+            bm, s * YOKE_TONGUE_X[0], s * YOKE_TONGUE_X[1],
+            -YOKE_TONGUE_Y, YOKE_TONGUE_Y, YOKE_TONGUE_Z[0],
+            YOKE_TONGUE_Z[1]))
+    cuts = [lambda bm: _rodz(bm, HORN_BORE / 2, cz[0] - 1.0, TOP_Z[0], 0, 0)]
     for sx in (1, -1):
-        cuts.append(lambda bm, s=sx: _rodx(
-            bm, NOD_BORE / 2, s * 40.0, s * 80.0, 0.0, HEAD_Z, FINE))
-    return _obj("DB_yoke", coll, parts, cuts, mat, loc=(0, 0, TOP_Z[0]))
+        # the M3 threads the tongue right through - 8 mm of it
+        cuts.append(lambda bm, s=sx: _rody(
+            bm, M3_PILOT, -YOKE_TONGUE_Y - 1.0, YOKE_TONGUE_Y + 1.0,
+            s * YOKE_SCREW[0], YOKE_SCREW[1]))
+    return _obj("DB_yoke_hub", coll, parts, cuts, mat, loc=(0, 0, TOP_Z[0]))
+
+
+def _yoke_arm(coll, mat, sx, tag):
+    """One arm: socket, foot, post, nod hub.  Printed lying on its -y face.
+
+    Every feature here is symmetric in y and antisymmetric in x, so the two
+    arms are the SAME STL turned 180 deg about Z.  That is worth keeping:
+    the M3 has to enter from the rear on BOTH sides, which a blind hole on
+    one face would break the moment the part is turned round.  It is a
+    through hole for that reason and no other.
+    """
+    parts = [lambda bm: _box(bm, sx * YOKE_FOOT_X, sx * YOKE_X[1],
+                             -YOKE_W, YOKE_W, YOKE_FLANGE_Z[1], YOKE_FOOT_Z),
+             # no round hub round the bore.  There was one, r10, and it
+             # made the part 20 mm wide where everything else is 14 - so
+             # printed on its -y face the arm stood on the hub's TANGENT
+             # LINE, 15.7 mm2 of it, with 586 mm2 of slab hanging 3 mm off
+             # the plate.  The post already covers the bore (z 131..192
+             # against a bore at 182 +-4) and both M2 (182 +-6), so the hub
+             # was meat for its own sake and it cost the whole first layer.
+             lambda bm: _box(bm, sx * YOKE_X[0], sx * YOKE_X[1],
+                             -YOKE_W, YOKE_W, YOKE_FOOT_Z, HEAD_Z + 10.0)]
+    cuts = [
+        # the socket, open downward so the arm drops onto the tongue
+        lambda bm: _box(bm, sx * (YOKE_TONGUE_X[0] - YOKE_FIT),
+                        sx * (YOKE_TONGUE_X[1] + 1.0),
+                        -YOKE_TONGUE_Y - YOKE_FIT, YOKE_TONGUE_Y + YOKE_FIT,
+                        YOKE_TONGUE_Z[0] - YOKE_FIT,
+                        YOKE_TONGUE_Z[1] + YOKE_FIT),
+        lambda bm: _rody(bm, M3_CLEAR, -YOKE_W - 1.0, YOKE_W + 1.0,
+                         sx * YOKE_SCREW[0], YOKE_SCREW[1]),
+        # the nod bore stays ROUND on both sides.  The head has to turn on
+        # this one and the pivot has to turn in that one
+        lambda bm: _rodx(bm, NOD_BORE / 2, sx * 40.0, sx * 80.0, 0.0, HEAD_Z,
+                         FINE)]
+    # and the two M2 the coupler's cap bolts to.  They are the drive: this
+    # is the only thing in the robot stopping the nod servo spinning its own
+    # coupler in a round hole.  Through, so the same STL serves both arms
+    for dz in (NOD_BOLT_R, -NOD_BOLT_R):
+        cuts.append(lambda bm, d=dz: _rodx(
+            bm, M2_PILOT, sx * (YOKE_X[0] - 1.0), sx * (YOKE_X[1] + 1.0),
+            0.0, HEAD_Z + d))
+    return _obj("DB_yoke_arm_" + tag, coll, parts, cuts, mat,
+                loc=(0, 0, TOP_Z[0]))
 
 
 def _head(coll, mat):
@@ -836,7 +1044,23 @@ def _head(coll, mat):
     for sx in (1, -1):
         cuts.append(lambda bm, s=sx: _rodx(
             bm, NOD_BORE / 2, s * 40.0, s * 70.0, 0.0, HEAD_Z, FINE))
-    return _obj("DB_head", coll, parts, cuts, mat, loc=(0, 0, HEAD_Z))
+    # a FLAT for the pivot's collar to thrust against.  The sphere at r9.5 is
+    # 55.19 out, so a floor at 55.0 cleans up into a real annulus instead of
+    # a collar balancing on a curve
+    cuts.append(lambda bm: _rodx(bm, NOD_SPOT_R, -(NOD_SPOT_X + 2.0),
+                                 -NOD_SPOT_X, 0.0, HEAD_Z, FINE))
+    # AFTER the cavity, or the cavity deletes it: the boss the pivot keys
+    # into and the M3 threads into.  r8 at x 55 is 55.6 from the head centre,
+    # so it is buried in the wall rather than poking out of it
+    add = [lambda bm: _rodx(bm, NOD_BOSS_R, -NOD_BOSS_X[1], -NOD_BOSS_X[0],
+                            0.0, HEAD_Z, FINE)]
+    bore = [lambda bm: _dx(bm, NOD_BORE / 2, NOD_KEY + FIT_MIN,
+                           -(NOD_SPOT_X + 1.0), -(NOD_KEY_X[0] - 0.5),
+                           0.0, HEAD_Z),
+            lambda bm: _rodx(bm, M3_PILOT, -(NOD_KEY_X[0] + 1.0),
+                             -(NOD_BOSS_X[0] - 1.0), 0.0, HEAD_Z)]
+    return _obj("DB_head", coll, parts, cuts, mat, loc=(0, 0, HEAD_Z),
+                add=add, bore=bore)
 
 
 def _face(coll, mat, lens):
@@ -1167,7 +1391,8 @@ def build():
     _shell(coll, shell)
     _dome(coll, shell)
     _top(coll, accent)
-    yoke = _yoke(coll, accent)
+    yoke = [_yoke_hub(coll, accent)]
+    yoke += [_yoke_arm(coll, accent, s, t) for s, t in ((1, "L"), (-1, "R"))]
     head = _head(coll, shell)
     face = _face(coll, shell, lens)
     _chassis(coll, accent)
@@ -1175,18 +1400,45 @@ def build():
     sv = _servos(coll, horn)
     _proxies(coll, pcb, metal, spk)
 
-    # the two nod inserts, which is where eye rig 01 died
-    _obj("DB_cplr", coll,
-         [lambda bm: _rodx(bm, NOD_BORE / 2 - FIT_MIN, YOKE_X[0] - 4.0,
-                           YOKE_X[1], 0.0, HEAD_Z),
-          lambda bm: _rodx(bm, 7.0, YOKE_X[1], YOKE_X[1] + 3.0, 0.0, HEAD_Z)],
-         [lambda bm: _rodx(bm, HORN_BORE / 2, YOKE_X[0] - 5.0, YOKE_X[0] + 1.0,
-                           0.0, HEAD_Z)], accent, loc=(0, 0, HEAD_Z))
+    # the two nod inserts, which is where eye rig 01 died - and where this
+    # build had quietly repeated it until 30 Aug 2026
+    #
+    # DRIVE.  Round shank all the way, so the servo can be centred before
+    # anything is clocked, and the cap takes two M2 into the yoke arm's outer
+    # face.  Those two screws ARE the key.  Note what is not here: no
+    # shoulder bearing on the head.  The head has no material on this axis to
+    # bear on - _svpocket_ops opens it from x 31.7 right out to 56 - so the
+    # right-hand support is the servo's own output bearing, carrying half of
+    # 120 g RADIALLY.  That is a different load from the pan thrust this file
+    # refuses to put on a servo, and 0.6 N radial is inside an MG90S bushing.
+    cplr = _obj("DB_cplr", coll,
+                [lambda bm: _rodx(bm, NOD_JNL, NOD_SPLINE[0], YOKE_X[1],
+                                  0.0, HEAD_Z, FINE),
+                 lambda bm: _rodx(bm, NOD_CAP_R, YOKE_X[1],
+                                  YOKE_X[1] + NOD_CAP_T, 0.0, HEAD_Z, FINE)],
+                [lambda bm: _rodx(bm, HORN_BORE / 2, NOD_SPLINE[0] - 1.0,
+                                  NOD_SPLINE[1], 0.0, HEAD_Z)]
+                + [lambda bm, d=d: _rodx(bm, M2_CLEAR, YOKE_X[1] - 1.0,
+                                         YOKE_X[1] + NOD_CAP_T + 1.0,
+                                         0.0, HEAD_Z + d)
+                   for d in (NOD_BOLT_R, -NOD_BOLT_R)],
+                accent, loc=(0, 0, HEAD_Z))
+    # IDLER.  Journal in the yoke, D into the head, collar and cap sandwiching
+    # the arm with NOD_FLOAT between them - which is the only thing locating
+    # the head along its own axis.  Hollow: one M3 x 25 down the middle, and
+    # the only way to reach its head is from outside along -x.
     _obj("DB_pivot", coll,
-         [lambda bm: _rodx(bm, NOD_BORE / 2 - FIT_MIN, -YOKE_X[1],
-                           -(YOKE_X[0] - 8.0), 0.0, HEAD_Z),
-          lambda bm: _rodx(bm, 7.0, -(YOKE_X[1] + 3.0), -YOKE_X[1], 0.0,
-                           HEAD_Z)], [], accent, loc=(0, 0, HEAD_Z))
+         [lambda bm: _rodx(bm, NOD_JNL, -YOKE_X[1],
+                           -(YOKE_X[0] - NOD_FLOAT), 0.0, HEAD_Z, FINE),
+          lambda bm: _rodx(bm, NOD_CAP_R, -(YOKE_X[0] - NOD_FLOAT),
+                           -NOD_SPOT_X, 0.0, HEAD_Z, FINE),
+          lambda bm: _dx(bm, NOD_JNL, NOD_KEY, -NOD_KEY_X[1], -NOD_KEY_X[0],
+                         0.0, HEAD_Z),
+          lambda bm: _rodx(bm, NOD_CAP_R, -(YOKE_X[1] + NOD_CAP_T),
+                           -YOKE_X[1], 0.0, HEAD_Z, FINE)],
+         [lambda bm: _rodx(bm, M3_CLEAR, -(YOKE_X[1] + NOD_CAP_T + 1.0),
+                           -(NOD_KEY_X[0] - 0.5), 0.0, HEAD_Z)],
+         accent, loc=(0, 0, HEAD_Z))
 
     # ------------------------------------------------------------- rigging
     def empty(name, loc):
@@ -1209,11 +1461,16 @@ def build():
         ob.parent = parent
         ob.matrix_parent_inverse = parent.matrix_world.inverted()
 
-    for ob in (yoke, e_nod):
+    # DB_cplr belongs to E_PAN, not E_nod.  It is bolted to the yoke arm, so
+    # it is ground - it does NOT turn with the head, and parenting it as if
+    # it did is what made the old joint look like it worked.  If this line
+    # ever moves back under e_nod, the drive-path check below stops meaning
+    # anything, because the rig will be asserting the answer again.
+    for ob in yoke + [e_nod, cplr]:
         kid(ob, e_pan)
     for ob in (head, face, sv["SV_nod"], bpy.data.objects["PX_ring_L"],
                bpy.data.objects["PX_ring_R"], bpy.data.objects["PX_eye_L"],
-               bpy.data.objects["PX_eye_R"], bpy.data.objects["DB_cplr"],
+               bpy.data.objects["PX_eye_R"],
                bpy.data.objects["DB_pivot"]):
         kid(ob, e_nod)
     for t in "LR":
@@ -1272,6 +1529,132 @@ def _corners(lo, hi):
             for z in (lo.z, hi.z)]
 
 
+# ------------------------------------------------------- print orientation
+# The axis that points UP off the plate, and which way, for every part that
+# gets printed.  This is not a preference and it is not a slicer setting: it
+# is the orientation each part was DRAWN for, and every "no overhang here"
+# claim in this file is a claim about one of these.  The census below holds
+# them to it.
+#
+# It exists because the yoke's numbers were a surprise.  Nothing in fits()
+# could see that DB_yoke stood 88 mm tall on 135 mm2 of first layer under
+# 6,021 mm2 of flat roof - clearance checks cannot, clash checks cannot, and
+# the part had been "support-free, base down" in the header docstring for
+# weeks.  A claim no check can fail is a claim.
+# (axis, sign, budget).  A budget of None means REPORT ONLY - it is a part
+# whose orientation this file has never actually verified against a slice,
+# and a gate that fails on a number nobody has checked is a gate people learn
+# to ignore.  The four parts with a budget are the ones designed here, where
+# "no overhang" is a claim being made on purpose and is worth failing on.
+PRINT_ORIENT = {
+    "DB_chassis":    ("z", +1, None),   # header: base down.  The tray and the
+                                        # baffles are BRIDGES on purpose
+    "DB_shell":      ("z", +1, None),   # header: base down, 40 deg at the foot
+    "DB_dome":       ("z", +1, None),   # header: base down.  The pan shelf is
+                                        # a deliberate 68 mm bridge - see PED
+    "DB_top":        ("z", +1, None),   # header: flat, bearing face first
+    "DB_yoke_hub":   ("z", +1, 1400.0),  # the bearing eave, and nothing else
+    "DB_yoke_arm_L": ("y", +1, 150.0),   # on its -y face, one STL for both
+    "DB_yoke_arm_R": ("y", +1, 150.0),
+    "DB_cplr":       ("x", -1, 50.0),    # cap on the plate
+    "DB_pivot":      ("x", +1, 200.0),   # cap on the plate.  The collar's
+                                         # annulus is 148 of that and it is
+                                         # anchored right round its inner edge
+}
+SPIN_A = 20.0                   # degrees, and it has to beat the joint's
+                                # own backlash: 0.15 of fit on r3.85 is 2.2
+                                # deg of free travel, so 6 deg read a keyed
+                                # D as free and nearly shipped it
+SPIN_OK = 0.2                   # mm3.  Not CLASH_OK: that one is sized for
+                                # two flat faces meeting, and a shallow D
+                                # bites in single-figure mm3
+OVERHANG_A = 45.0               # steeper than this off the plate is free
+OVERHANG_ROOF = 75.0            # and shallower than this is a ROOF, which is
+                                # the number that actually decides a print.
+                                # Splitting the two is not cosmetic: a 3 mm
+                                # shell wall leaning at 24 deg reads as
+                                # 36,000 mm2 of "overhang" and prints fine,
+                                # because each layer still lands on 85% of
+                                # the one below.  The yoke's 6,021 mm2 were
+                                # at a dead 90 and landed on nothing
+OVERHANG_WARN = 250.0           # mm2 of ROOF worth mentioning
+
+
+def _overhang(ob, axis, sign, ok=OVERHANG_A):
+    """Downward-facing face area in this part's own print orientation.
+
+    Returns (roof, steep, first-layer contact, worst angle).
+
+    Two numbers, because one is not enough.  ROOF is area shallower than
+    OVERHANG_ROOF - the flat and near-flat stuff that lands on air.  STEEP is
+    45..75, which is a shell wall leaning over, and a shell wall at 24 deg
+    still puts each layer on 85% of the one below.  Reporting them together
+    called the dome unprintable and the yoke fine, which is backwards.
+
+    The first-layer number is the other half of the answer on its own: 6,021
+    mm2 of roof is survivable on a wide base and fatal on 135 mm2 of it, and
+    DB_yoke was the second.
+    """
+    up = {"x": Vector((sign, 0, 0)), "y": Vector((0, sign, 0)),
+          "z": Vector((0, 0, sign))}[axis]
+    bm = bmesh.new()
+    bm.from_mesh(ob.data)
+    bm.transform(ob.matrix_world)
+    h = [v.co.dot(up) for v in bm.verts]
+    floor = min(h)
+    roof, steep, plate, worst = 0.0, 0.0, 0.0, 0.0
+    for f in bm.faces:
+        d = f.normal.dot(up)
+        if d >= -1e-6:
+            continue
+        a = f.calc_area()
+        if sum(v.co.dot(up) for v in f.verts) / len(f.verts) - floor < 0.05:
+            plate += a
+            continue
+        # 90 is a flat roof, 0 is a vertical wall
+        over = 90.0 - math.degrees(math.acos(min(1.0, -d)))
+        if over > OVERHANG_ROOF:
+            roof += a
+            worst = max(worst, over)
+        elif over > ok:
+            steep += a
+            worst = max(worst, over)
+    bm.free()
+    return roof, steep, plate, worst
+
+
+# ------------------------------------------------------------- drive path
+def _spins(name, mate, deg=SPIN_A):
+    """Turn `name` about the nod axis and see whether `mate` stops it.
+
+    This is the eye-rig-01 lesson written as a function.  A round shaft in a
+    round bore measures a PERFECT clearance and transmits nothing, and no
+    amount of measuring gaps will ever say so - the joint that drives and the
+    joint that spins have identical margins.  Interference under rotation is
+    the difference between them, so that is what gets measured.
+
+    >0 mm3 means the pair is keyed.  0 means it spins.  Which of those is
+    right depends on the pair, so this reports and fits() judges.
+    """
+    a, b = bpy.data.objects.get(name), bpy.data.objects.get(mate)
+    if not a or not b:
+        return None
+    tmp = bpy.data.objects.new("_spin_tmp", a.data.copy())
+    bpy.context.scene.collection.objects.link(tmp)
+    tmp.matrix_world = (Matrix.Translation((0, 0, HEAD_Z))
+                        @ Matrix.Rotation(math.radians(deg), 4, "X")
+                        @ Matrix.Translation((0, 0, -HEAD_Z))
+                        @ a.matrix_world)
+    bpy.context.view_layer.update()
+    try:
+        v = _ivol(tmp, b)
+    finally:
+        d = tmp.data
+        bpy.data.objects.remove(tmp, do_unlink=True)
+        bpy.data.meshes.remove(d)
+    return v
+
+
 # --------------------------------------------------------------- clashes
 # The analytic wall test only ever looked at BOUGHT parts against the body
 # PROFILE.  It could not see one printed part cutting into another, and it
@@ -1288,6 +1671,15 @@ CLASH_PAIRS = (
     ("PX_pi5", "DB_chassis"), ("PX_pca9685", "DB_chassis"),
     ("PX_wm8960", "DB_chassis"), ("PX_sht41", "DB_chassis"),
     ("DB_shell", "DB_dome"), ("DB_top", "DB_dome"),
+    # the split yoke and the joint it drives.  Every one of these should be
+    # ZERO: the tongue is a slip fit in the socket, the arm foot only RESTS
+    # on the flange, and each insert is a slip fit in everything it touches.
+    # A number here is a part that cannot be assembled, not a tight fit.
+    ("DB_yoke_hub", "DB_top"), ("DB_yoke_hub", "DB_head"),
+    ("DB_yoke_hub", "DB_yoke_arm_L"), ("DB_yoke_hub", "DB_yoke_arm_R"),
+    ("DB_yoke_arm_L", "DB_head"), ("DB_yoke_arm_R", "DB_head"),
+    ("DB_cplr", "DB_head"), ("DB_cplr", "DB_yoke_arm_L"),
+    ("DB_pivot", "DB_head"), ("DB_pivot", "DB_yoke_arm_R"),
 )
 CLASH_OK = 2.0                  # mm3 - below this is two faces meeting
 
@@ -1496,16 +1888,106 @@ def fits(verbose=True):
         % (CH_MOUNT_AT * 2, len(_mb)))
 
     say("\n--- motion ---------------------------------------------------")
-    # The head is a sphere about the nod axis, so nod can never reach the
-    # body.  Its floor is fixed and the number is just the standoff.
-    say("   head bottom to DB_top, any nod%+7.1f"
-        % ((HEAD_Z - HEAD_R) - (TOP_Z[1] + 5.0)))
-    if (HEAD_Z - HEAD_R) - (TOP_Z[1] + 5.0) < 2.0:
-        bad.append("head fouls the yoke flange")
+    # The head is a sphere about the nod axis, so nothing under it moves with
+    # nod at all - which makes the standoff a fixed number, and the only
+    # honest way to get it is the worst CORNER rather than the head's bottom
+    # pole.  The pole is at z 126 and clears everything below it; the corner
+    # that binds is the arm foot's INBOARD top, out at |x| 29.
+    worst, at = 1e9, ""
+    for label, box in (
+            ("yoke arm foot", (YOKE_FOOT_X, YOKE_X[1], -YOKE_W, YOKE_W,
+                               YOKE_FLANGE_Z[1], YOKE_FOOT_Z)),
+            ("hub tongue   ", (YOKE_TONGUE_X[0], YOKE_TONGUE_X[1],
+                               -YOKE_TONGUE_Y, YOKE_TONGUE_Y,
+                               YOKE_TONGUE_Z[0], YOKE_TONGUE_Z[1]))):
+        x0, x1, y0, y1, z0, z1 = box
+        m = min(math.sqrt(x * x + y * y + (HEAD_Z - z) ** 2) - HEAD_R
+                for x in (x0, x1) for y in (y0, y1) for z in (z0, z1))
+        say("   head to the %s   %+7.1f" % (label, m))
+        if m < worst:
+            worst, at = m, label.strip()
+    if worst < 2.0:
+        bad.append("head fouls the %s by %.1f" % (at, 2.0 - worst))
     say("   head into the yoke gap        %+7.1f a side"
         % (YOKE_X[0] - HEAD_R))
     if YOKE_X[0] - HEAD_R < FIT_MIN:
         bad.append("head will not pass between the yoke arms")
+
+    say("\n--- the nod drive path ---------------------------------------")
+    # Clearance cannot answer this and never could.  Every pair below used to
+    # measure a perfect 0.15 slip fit, and the head still did not move.
+    for label, a, b, want in (
+            ("cplr keyed to the head?  no ", "DB_cplr", "DB_head", False),
+            ("cplr keyed to the yoke?  no ", "DB_cplr", "DB_yoke_arm_L",
+             False),
+            ("pivot keyed to the head? YES", "DB_pivot", "DB_head", True),
+            ("pivot keyed to the yoke? no ", "DB_pivot", "DB_yoke_arm_R",
+             False)):
+        v = _spins(a, b)
+        if v is None:
+            continue
+        keyed = v > SPIN_OK
+        say("   %s  %9.1f mm3 at %2.0f deg  %s"
+            % (label, v, SPIN_A, "keyed" if keyed else "free"))
+        if keyed != want:
+            bad.append("%s x %s comes out %s and must not"
+                       % (a, b, "keyed" if keyed else "free"))
+    # ...so the ONLY thing grounding the coupler is its two bolts.  They have
+    # to land in material at both ends and miss the bore, because if they do
+    # not, this joint is back to spinning in place with nothing to show it.
+    for label, have, need in (
+            ("M2 clears the nod bore     ", NOD_BOLT_R - M2_PILOT,
+             NOD_BORE / 2 + 0.5),
+            ("M2 inside the cap edge     ", NOD_CAP_R - NOD_BOLT_R, M2_CLEAR),
+            ("M2 inside the post end     ",
+             10.0 - NOD_BOLT_R - M2_PILOT, 1.0),
+            ("cap proud of the arm, a side",
+             YOKE_W - NOD_CAP_R, -2.0),
+            ("M2 thread in the yoke arm  ", YOKE_X[1] - YOKE_X[0], 4.0),
+            ("spline into the coupler    ", NOD_SPLINE[1] - NOD_SPLINE[0],
+             3.5),
+            ("D key into the head boss   ", NOD_KEY_X[1] - NOD_KEY_X[0], 5.0),
+            ("D flat depth               ", NOD_JNL - NOD_KEY, 0.5),
+            ("D wall left in the pivot   ", NOD_KEY - M3_CLEAR, 1.0),
+            ("M3 thread in the head boss ",
+             (NOD_KEY_X[0] - 0.5) - NOD_BOSS_X[0], 4.0),
+            ("boss inside the head shell ",
+             HEAD_R - math.hypot(NOD_BOSS_X[1], NOD_BOSS_R), 0.2),
+            ("spotface makes a real flat ",
+             math.sqrt(max(0.0, HEAD_R ** 2 - NOD_SPOT_R ** 2))
+             - NOD_SPOT_X, 0.1),
+            ("head end float, cap-collar ", NOD_FLOAT, 0.15)):
+        say("   %s%+7.1f" % (label, have - need))
+        if have - need < 0:
+            bad.append("nod drive: %s short by %.1f"
+                       % (label.strip(), need - have))
+    say("   M3 x 25 down the pivot, head at x -%.0f, driven along -x"
+        % (YOKE_X[1] + NOD_CAP_T))
+    say("   the head's RIGHT support is the servo's own output bearing:")
+    say("   _svpocket_ops opens the shell on that axis from x 31.7 out to 56,")
+    say("   so there is nothing left there to journal on.  0.6 N RADIAL,")
+    say("   which is not the thrust case this file refuses to put on a servo")
+
+    say("\n--- print orientation ----------------------------------------")
+    say("   part            up      plate      roof     steep   worst")
+    for name in sorted(PRINT_ORIENT):
+        ob = bpy.data.objects.get(name)
+        if not ob:
+            continue
+        axis, sign, budget = PRINT_ORIENT[name]
+        roof, steep, plate, wst = _overhang(ob, axis, sign)
+        over = budget is not None and roof > budget
+        flag = "!!" if over else ("  " if roof <= OVERHANG_WARN else " ~")
+        say("%s %-14s %s%s %9.1f %9.1f %9.1f %5.0f deg%s"
+            % (flag, name, "+" if sign > 0 else "-", axis, plate, roof, steep,
+               wst, "" if budget is None else "   budget %.0f" % budget))
+        if over:
+            bad.append("%s roofs %.0f mm2 printed %s%s, budget %.0f"
+                       % (name, roof, "+" if sign > 0 else "-", axis, budget))
+        elif budget is None and roof > OVERHANG_WARN:
+            warn.append("%s roofs %.0f mm2 printed %s%s - never sliced, so "
+                        "this is reported and not gated"
+                        % (name, roof, "+" if sign > 0 else "-", axis))
 
     worst = 1e9
     for a in range(int(ARM_RANGE[0]), int(ARM_RANGE[1]) + 1, 2):
@@ -1536,6 +2018,13 @@ def fits(verbose=True):
     say("   are what DB_chassis is built around - see MEASURE")
     say("   nothing here weighs anything, so no torque is checked")
     say("   no screw path, no loom volume, no heat")
+    say("   DB_head, DB_face and the two DB_arm have no declared print")
+    say("   orientation, so nothing counts their overhangs at all.  The four")
+    say("   with a budget in PRINT_ORIENT are the only ones being held to a")
+    say("   claim; the rest are reported on the header's word")
+    say("   the yoke arm foot sweeps the REAR at pan +-80, over the wire")
+    say("   slot at r 44.5 - the loom has to sit inboard of r 29 or")
+    say("   outboard of r 64, and nothing here measures that")
     say("   SHT41 hole SPACING is still a guess - the count is right now,")
     say("   the pitch is not confirmed")
     say("   the CQRobot module and the square one are still NOT in this -")
