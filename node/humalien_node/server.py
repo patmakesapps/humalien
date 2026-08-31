@@ -7,7 +7,11 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 
-HOST = "0.0.0.0"
+# Bind every interface, not just IPv4. The brain and the node have landed
+# on different DHCP scopes off the same access point more than once, and
+# IPv6 still reaches across that when 0.0.0.0 cannot. None binds both
+# families.
+HOST = None
 PORT = 8765
 
 ALSA_DEVICE = "hw:2,0"
@@ -28,7 +32,8 @@ def log(message):
 
 
 def show_listening():
-    log(f"NODE LISTENING — waiting for brain on ws://{HOST}:{PORT}")
+    where = HOST if HOST is not None else "*"
+    log(f"NODE LISTENING — waiting for brain on ws://{where}:{PORT}")
 
 
 def start_microphone():
