@@ -1,6 +1,8 @@
 import asyncio
 import time
 
+import numpy as np
+
 
 PI_SAMPLE_RATE = 48_000
 PI_CHANNELS = 2
@@ -16,6 +18,29 @@ LEAD_SECONDS = 0.15
 TAIL_SECONDS = 0.25
 
 
+def level(audio: bytes) -> float:
+    """Loudness of one chunk of PCM16, as 0.0 to 1.0.
+
+    Root mean square rather than peak: peak tracks the sharpest click in the
+    chunk, which makes an arm driven from it twitch on consonants instead of
+    following the shape of the sentence.
+    """
+
+    if len(audio) < 2:
+        return 0.0
+
+    samples = np.frombuffer(audio[: len(audio) // 2 * 2], dtype="<i2")
+
+    if samples.size == 0:
+        return 0.0
+
+    # float64 first: squaring int16 overflows, and a silent chunk squared in
+    # int16 is indistinguishable from a loud one.
+    rms = float(np.sqrt(np.mean(samples.astype(np.float64) ** 2)))
+
+    return min(1.0, rms / 32768.0)
+
+
 class PacedPlayback:
     """Release model audio to the node at the speed it is spoken.
 
@@ -29,10 +54,15 @@ class PacedPlayback:
     mean sound is coming out of the head.
     """
 
-    def __init__(self, websocket):
+    def __init__(self, websocket, on_level=None):
         self.websocket = websocket
         self.chunks = asyncio.Queue()
         self.playing_until = 0.0
+
+        # Called with the loudness of each chunk, 0.0 to 1.0, at the moment
+        # that chunk is released. See `is_speaking` for why this is the only
+        # place in the brain where the audio and the wall clock agree.
+        self.on_level = on_level
 
         # Bytes actually released to the node. Compared against the node's
         # own count, this says whether audio was lost in the brain, on the
@@ -91,6 +121,9 @@ class PacedPlayback:
             await self.websocket.send(audio)
 
             self.sent += len(audio)
+
+            if self.on_level is not None:
+                self.on_level(level(audio))
 
             # Stay a little ahead of the speaker, never further.
             ahead = self.playing_until - time.monotonic()

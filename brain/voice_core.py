@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 
 from audio_adapter import ModelToPiAudio, PiToModelAudio
+from gestures import Gestures
 from playback import BYTES_PER_SECOND as PI_BYTES_PER_SECOND
 from conversation import ConversationState
 from describe import OllamaDescriber
@@ -335,6 +336,7 @@ async def run_voice_core() -> None:
     vision = os.getenv("HUMALIEN_VISION", "realtime")
     show_video = os.getenv("HUMALIEN_SHOW_VIDEO", "0") == "1"
     greet_on_sight = os.getenv("HUMALIEN_GREET_ON_SIGHT", "1") == "1"
+    gesturing = os.getenv("HUMALIEN_GESTURES", "1") == "1"
     persona_file = os.getenv("HUMALIEN_PERSONA")
 
     if not api_key:
@@ -355,7 +357,12 @@ async def run_voice_core() -> None:
         async with websocket_connect(pi_url, max_size=None) as pi_websocket:
             log("Connected to Pi")
 
-            playback = PacedPlayback(pi_websocket)
+            gestures = Gestures(pi_websocket, log=log) if gesturing else None
+
+            playback = PacedPlayback(
+                pi_websocket,
+                on_level=gestures.feed if gestures else None,
+            )
             gate = build_mic_gate(gate_name, playback)
             state = ConversationState()
             robot = Robot(
@@ -398,6 +405,11 @@ async def run_voice_core() -> None:
                     asyncio.create_task(playback.run()),
                     asyncio.create_task(eyes.run()),
                 }
+
+                if gestures:
+                    tasks.add(asyncio.create_task(gestures.run()))
+                else:
+                    log("Gestures are off - the arms will not move")
 
                 if greet_on_sight:
                     tasks.add(

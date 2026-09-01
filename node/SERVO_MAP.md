@@ -20,5 +20,14 @@ uses positive pose angles for forward movement on both arms. The node must
 apply the opposite electrical signs shown above. Do not substitute the raw
 bench endpoints for the CAD range without completing mechanical calibration.
 
+`humalien_node.arms` holds this map for the two arm channels, and is the
+only place the sign inversion above is applied - everything upstream of it
+speaks in CAD degrees where positive is forward on both arms. Walk each arm
+with `python -m humalien_node.arm_bench` before letting the brain drive them.
+
+Channels 1 and 2 are deliberately absent from that module. An axis that
+cannot be addressed cannot be driven into a hard stop by a bug upstream;
+add them once the mechanical calibration this file asks for is done.
+
 `humalien_node.eyes_bench` targets the archived three-servo eye mechanism; it
 does not contain the desk bot's four-channel map.

@@ -1,10 +1,13 @@
 import asyncio
+import functools
 import json
 import subprocess
 from datetime import datetime
 
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
+
+from humalien_node.arms import Arms, Pca9685Driver
 
 
 # Bind every interface, not just IPv4. The brain and the node have landed
@@ -110,12 +113,52 @@ async def microphone_to_brain(websocket, microphone, counts):
         await websocket.send(chunk)
 
 
-async def brain_to_speaker(websocket, speaker, counts):
+def apply_control(arms, message):
+    """Act on one text frame from the brain.
+
+    Audio is bytes and motion is text, on one socket, because the two have
+    to stay in step: a gesture that arrives on a second connection would
+    drift against the speech it belongs to.
+    """
+
+    try:
+        event = json.loads(message)
+    except (ValueError, TypeError):
+        log(f"Ignoring unreadable control frame: {message[:80]!r}")
+        return
+
+    kind = event.get("type")
+
+    if kind == "pose":
+        if arms is None:
+            return
+
+        for axis, degrees in event.items():
+            if axis == "type":
+                continue
+
+            if not arms.set_target(axis, degrees):
+                log(f"Ignoring unknown axis {axis!r}")
+
+    elif kind == "limp":
+        if arms is not None:
+            arms.limp()
+            log("Arms limp on request")
+
+    else:
+        log(f"Ignoring control frame of type {kind!r}")
+
+
+async def brain_to_speaker(websocket, speaker, counts, arms=None):
     # Report roughly once per second of audio, so the log shows whether
     # speech arrives as a steady stream or in starved bursts.
     reported = 0
 
     async for message in websocket:
+        if isinstance(message, str):
+            apply_control(arms, message)
+            continue
+
         if isinstance(message, bytes):
             await asyncio.to_thread(
                 speaker.stdin.write,
@@ -169,7 +212,7 @@ async def send_node_ready(websocket):
     await websocket.send(json.dumps(message))
 
 
-async def handle_connection(websocket):
+async def handle_connection(websocket, arms=None):
     remote = websocket.remote_address
 
     log("=" * 60)
@@ -178,6 +221,7 @@ async def handle_connection(websocket):
     microphone = None
     speaker = None
     errors_task = None
+    motion_task = None
     counts = {"mic": 0, "speaker": 0}
 
     try:
@@ -197,12 +241,20 @@ async def handle_connection(websocket):
             report_errors(speaker, "aplay")
         )
 
+        if arms is not None:
+            # Limp until a brain is actually here to drive them. The arms
+            # come up at REST rather than wherever they were left.
+            arms.engage()
+            motion_task = asyncio.create_task(arms.run())
+
+            log("Arms engaged at rest")
+
         mic_task = asyncio.create_task(
             microphone_to_brain(websocket, microphone, counts)
         )
 
         speaker_task = asyncio.create_task(
-            brain_to_speaker(websocket, speaker, counts)
+            brain_to_speaker(websocket, speaker, counts, arms)
         )
 
         done, pending = await asyncio.wait(
@@ -235,6 +287,15 @@ async def handle_connection(websocket):
         if errors_task is not None:
             errors_task.cancel()
 
+        if motion_task is not None:
+            motion_task.cancel()
+
+        if arms is not None:
+            # Losing the brain must not leave a servo stalled holding an arm
+            # out. No pulse holds nothing and gets nothing hot.
+            arms.limp()
+            log("Arms limp")
+
         log(
             f"Session totals — mic {counts['mic'] / BYTES_PER_SECOND:.1f}s, "
             f"speaker {counts['speaker'] / BYTES_PER_SECOND:.1f}s"
@@ -262,8 +323,19 @@ async def main():
         f"{CHANNELS} ch / {FORMAT} / {ALSA_DEVICE}"
     )
 
+    arms = None
+
+    try:
+        arms = Arms(Pca9685Driver())
+        log("Arms ready on PCA9685 channels 0 (right) and 3 (left)")
+
+    except Exception as error:
+        # Audio is the point of this node; arms are an addition to it. A
+        # missing servo board must not cost the robot its voice.
+        log(f"No servo board, running without arms - {error}")
+
     async with serve(
-        handle_connection,
+        functools.partial(handle_connection, arms=arms),
         HOST,
         PORT,
         max_size=None,
