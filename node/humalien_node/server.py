@@ -25,6 +25,10 @@ CHUNK_SIZE = 3840
 BUFFER_TIME = 80_000
 PERIOD_TIME = 20_000
 
+# One second of audio in the wire format above. Byte counts mean nothing on
+# their own; seconds of speech can be compared against what was said.
+BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * 2
+
 
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -65,12 +69,33 @@ def start_speaker():
             "--period-time", str(PERIOD_TIME),
         ],
         stdin=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         bufsize=0,
     )
 
 
-async def microphone_to_brain(websocket, microphone):
+async def report_errors(process, name):
+    """Log what ALSA says instead of throwing it away.
+
+    aplay announces every buffer underrun on stderr. Sending that to
+    DEVNULL meant a starved speaker and a healthy one looked identical
+    from here, which cost an evening of looking at the wrong end of the
+    link.
+    """
+
+    while True:
+        line = await asyncio.to_thread(process.stderr.readline)
+
+        if not line:
+            return
+
+        text = line.decode("utf-8", "replace").strip()
+
+        if text:
+            log(f"{name}: {text}")
+
+
+async def microphone_to_brain(websocket, microphone, counts):
     while True:
         chunk = await asyncio.to_thread(
             microphone.stdout.read,
@@ -80,10 +105,16 @@ async def microphone_to_brain(websocket, microphone):
         if not chunk:
             return
 
+        counts["mic"] += len(chunk)
+
         await websocket.send(chunk)
 
 
-async def brain_to_speaker(websocket, speaker):
+async def brain_to_speaker(websocket, speaker, counts):
+    # Report roughly once per second of audio, so the log shows whether
+    # speech arrives as a steady stream or in starved bursts.
+    reported = 0
+
     async for message in websocket:
         if isinstance(message, bytes):
             await asyncio.to_thread(
@@ -94,6 +125,15 @@ async def brain_to_speaker(websocket, speaker):
             await asyncio.to_thread(
                 speaker.stdin.flush,
             )
+
+            counts["speaker"] += len(message)
+
+            if counts["speaker"] - reported >= BYTES_PER_SECOND:
+                reported = counts["speaker"]
+                log(
+                    f"Speaker fed {counts['speaker'] / BYTES_PER_SECOND:.1f}s "
+                    f"of audio ({counts['speaker']} bytes)"
+                )
 
 
 async def stop_process(process):
@@ -137,6 +177,8 @@ async def handle_connection(websocket):
 
     microphone = None
     speaker = None
+    errors_task = None
+    counts = {"mic": 0, "speaker": 0}
 
     try:
         # Tell the brain that the hardware node is alive and ready.
@@ -151,12 +193,16 @@ async def handle_connection(websocket):
         log("Speaker ONLINE")
         log("AUDIO LINK ACTIVE")
 
+        errors_task = asyncio.create_task(
+            report_errors(speaker, "aplay")
+        )
+
         mic_task = asyncio.create_task(
-            microphone_to_brain(websocket, microphone)
+            microphone_to_brain(websocket, microphone, counts)
         )
 
         speaker_task = asyncio.create_task(
-            brain_to_speaker(websocket, speaker)
+            brain_to_speaker(websocket, speaker, counts)
         )
 
         done, pending = await asyncio.wait(
@@ -186,6 +232,14 @@ async def handle_connection(websocket):
         log(f"CONNECTION ERROR — {exc}")
 
     finally:
+        if errors_task is not None:
+            errors_task.cancel()
+
+        log(
+            f"Session totals — mic {counts['mic'] / BYTES_PER_SECOND:.1f}s, "
+            f"speaker {counts['speaker'] / BYTES_PER_SECOND:.1f}s"
+        )
+
         if microphone is not None:
             await stop_process(microphone)
 

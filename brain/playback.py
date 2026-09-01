@@ -34,15 +34,28 @@ class PacedPlayback:
         self.chunks = asyncio.Queue()
         self.playing_until = 0.0
 
+        # Bytes actually released to the node. Compared against the node's
+        # own count, this says whether audio was lost in the brain, on the
+        # wire, or inside ALSA.
+        self.sent = 0
+
+    @property
+    def sent_seconds(self) -> float:
+        return self.sent / BYTES_PER_SECOND
+
     def push(self, audio: bytes) -> None:
         if audio:
             self.chunks.put_nowait(audio)
 
     def clear(self) -> None:
+        dropped = 0
+
         while not self.chunks.empty():
-            self.chunks.get_nowait()
+            dropped += len(self.chunks.get_nowait())
 
         self.playing_until = 0.0
+
+        return dropped
 
     @property
     def is_speaking(self) -> bool:
@@ -76,6 +89,8 @@ class PacedPlayback:
             self.playing_until += len(audio) / BYTES_PER_SECOND
 
             await self.websocket.send(audio)
+
+            self.sent += len(audio)
 
             # Stay a little ahead of the speaker, never further.
             ahead = self.playing_until - time.monotonic()

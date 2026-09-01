@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 
 from audio_adapter import ModelToPiAudio, PiToModelAudio
+from playback import BYTES_PER_SECOND as PI_BYTES_PER_SECOND
 from conversation import ConversationState
 from describe import OllamaDescriber
 from eyes import Eyes
@@ -134,9 +135,12 @@ async def realtime_to_pi(
             state.speech_stopped_at = None
 
             if playback.is_speaking:
-                log("Interrupted - dropping queued speech")
+                dropped = playback.clear()
 
-                playback.clear()
+                log(
+                    "Interrupted - dropping "
+                    f"{dropped / PI_BYTES_PER_SECOND:.1f}s of queued speech"
+                )
                 adapter = ModelToPiAudio()
                 answering = False
 
@@ -188,6 +192,8 @@ async def realtime_to_pi(
             playback.push(adapter.convert(b"", final=True))
 
             adapter = ModelToPiAudio()
+
+            log(f"Released {playback.sent_seconds:.1f}s of audio to the Pi")
 
             # "Answering" means the model has finished generating, not that
             # the head has finished talking. PacedPlayback is still draining
