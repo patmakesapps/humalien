@@ -57,7 +57,18 @@ LIMITS = (-20.0, 75.0)
 REST = -8.0
 
 CENTER_US = 1500                # electrical neutral, per SERVO_MAP.md
-US_PER_DEG = 1000.0 / 90.0      # MG90S: ~1000 us across 90 deg
+
+# Nominal for an MG90S: ~1000 us across 90 deg. NOT independently measured
+# on this mechanism. `arm_bench` has a `calc` command that derives the real
+# figure from two pulses and a protractor; paste the result here.
+US_PER_DEG = 1000.0 / 90.0
+
+# Per-arm neutral trim, in microseconds, added to CENTER_US. The horns were
+# re-indexed after the channel map was found, so the angle this code
+# commands and the pose the arm actually takes do not agree until these are
+# set. Discover them with `arm_bench`, then paste its `save` output here so
+# they survive a restart.
+TRIM = {"arm_r": 0, "arm_l": 0}
 
 # A backstop, not a travel limit. LIMITS is the real contract; this only
 # stops a trim value from walking the pulse somewhere the bench never went.
@@ -107,7 +118,7 @@ class Arms:
 
     def __init__(self, driver=None):
         self.driver = driver
-        self.trim = {axis: 0 for axis in CHANNELS}      # us, set at the bench
+        self.trim = dict(TRIM)
         self.target = {axis: REST for axis in CHANNELS}
         self.position = {axis: None for axis in CHANNELS}   # None = limp
 
@@ -119,6 +130,19 @@ class Arms:
         )
 
         return clamp(us, *PULSE_CLAMP)
+
+    def degrees_from(self, axis, microseconds):
+        """The angle a given pulse corresponds to. Inverse of microseconds().
+
+        The bench needs this: measuring US_PER_DEG means commanding pulses
+        directly, and an arm whose tracked position stopped matching the
+        hardware would lurch on the next slewed move.
+        """
+
+        return (
+            (microseconds - CENTER_US - self.trim[axis])
+            / (SIGN[axis] * US_PER_DEG)
+        )
 
     def _write(self, axis, degrees):
         self.position[axis] = degrees

@@ -86,6 +86,43 @@ class TestLimits(unittest.TestCase):
         self.assertNotIn("pan", arms.target)
 
 
+class TestCalibration(unittest.TestCase):
+    """Trim and the pulse inverse, which the bench depends on."""
+
+    def test_trim_shifts_neutral_without_moving_the_range(self):
+        arms = Arms()
+        plain = arms.microseconds("arm_r", 0.0)
+
+        arms.trim["arm_r"] = -40
+        self.assertAlmostEqual(arms.microseconds("arm_r", 0.0), plain - 40)
+
+    def test_trim_is_per_arm(self):
+        arms = Arms()
+        arms.trim["arm_r"] = -40
+
+        self.assertEqual(arms.microseconds("arm_l", 0.0), CENTER_US)
+
+    def test_pulse_and_degrees_are_exact_inverses(self):
+        arms = Arms()
+        arms.trim["arm_l"] = 35
+
+        for axis in CHANNELS:
+            for us in (900.0, 1200.0, CENTER_US, 1800.0, 2300.0):
+                degrees = arms.degrees_from(axis, us)
+
+                self.assertAlmostEqual(
+                    arms.microseconds(axis, degrees), us, places=6
+                )
+
+    def test_trim_does_not_escape_the_pulse_clamp(self):
+        arms = Arms()
+        arms.trim["arm_r"] = 5000
+
+        us = arms.microseconds("arm_r", LIMITS[1])
+
+        self.assertLessEqual(us, PULSE_CLAMP[1])
+
+
 class TestMotion(unittest.TestCase):
     def test_arms_start_limp(self):
         arms = Arms(FakeDriver())

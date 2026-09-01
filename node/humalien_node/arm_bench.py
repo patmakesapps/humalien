@@ -21,11 +21,15 @@ import time
 
 from humalien_node.arms import (
     Arms,
+    CENTER_US,
     CHANNELS,
     LIMITS,
+    PULSE_CLAMP,
     Pca9685Driver,
     REST,
     TICK,
+    US_PER_DEG,
+    clamp,
 )
 
 
@@ -39,8 +43,19 @@ HELP = """\
   wave             a few alternating beats, what a gesture looks like
   trim <r|l> <us>  shift an axis's neutral, e.g. `trim r -40`
   rest             back to REST
+  pulse <r|l> <us> drive a RAW pulse, for measuring - bypasses degrees
+  calc <us> <deg>  us of travel and the degrees you measured -> US_PER_DEG
+  save             print the lines to paste into arms.py
   off              go limp (no pulse, no holding torque)
   q                limp and quit
+
+FINDING THE TRIM
+  engage, then look at the arms. `rest` should be a natural hang. If an arm
+  sits high or low, `trim r -40` and look again. Repeat, then `save`.
+
+FINDING US_PER_DEG
+  `pulse r 1500`, mark where the arm points. `pulse r 2000`, measure the
+  angle it swept. `calc 500 <that angle>` prints the real figure.
 """ % REST
 
 
@@ -90,6 +105,55 @@ def wave(arms):
         arms.set_target("arm_l", left)
         arms.set_target("arm_r", right)
         settle(arms, 0.8)
+
+
+def pulse(arms, axis, microseconds):
+    """Drive a raw pulse, keeping the tracked position honest."""
+
+    if arms.position[axis] is None:
+        print("  REFUSED: %s is limp - `engage` first" % axis)
+        return
+
+    wanted = float(microseconds)
+    allowed = clamp(wanted, *PULSE_CLAMP)
+
+    if allowed != wanted:
+        print("  clamped to %.0f us (bench-proven band is %d..%d)"
+              % (allowed, *PULSE_CLAMP))
+
+    degrees = arms.degrees_from(axis, allowed)
+
+    arms.set_target(axis, degrees)
+    arms._write(axis, degrees)
+
+    print("  %s at %.0f us (= %+.1f deg by the current US_PER_DEG)"
+          % (axis, allowed, degrees))
+
+
+def calc(travel_us, measured_deg):
+    """Turn a measured swing into the US_PER_DEG that would have produced it."""
+
+    if measured_deg == 0:
+        print("  measured 0 degrees - nothing to divide by")
+        return
+
+    found = abs(float(travel_us)) / abs(float(measured_deg))
+
+    print("  measured %.1f deg across %.0f us" % (measured_deg, travel_us))
+    print("  US_PER_DEG = %.4f   (currently %.4f, %+.1f%%)"
+          % (found, US_PER_DEG, (found / US_PER_DEG - 1.0) * 100.0))
+    print("  paste into arms.py:  US_PER_DEG = %.4f" % found)
+
+
+def save(arms):
+    """Print the calibration as source, so it survives a restart."""
+
+    print("  paste into node/humalien_node/arms.py:")
+    print("")
+    print("TRIM = {\"arm_r\": %d, \"arm_l\": %d}"
+          % (arms.trim["arm_r"], arms.trim["arm_l"]))
+    print("")
+    print("  (US_PER_DEG is separate - use `calc` for that one.)")
 
 
 def main():
@@ -150,6 +214,15 @@ def main():
 
                 elif command == "wave":
                     wave(arms)
+
+                elif command == "pulse" and len(args) == 2:
+                    pulse(arms, AXES[args[0]], float(args[1]))
+
+                elif command == "calc" and len(args) == 2:
+                    calc(float(args[0]), float(args[1]))
+
+                elif command == "save":
+                    save(arms)
 
                 elif command == "trim" and len(args) == 2:
                     axis = AXES[args[0]]
