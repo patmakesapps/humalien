@@ -27,7 +27,23 @@ this pivot: the mechanism that killed eye rig 01 is deleted, not redesigned.
 
 Assembly order, which is the thing that has actually failed twice here:
 
-    1.  nod servo slides into its pocket in the head shell.
+    0.  the head tilt servo is FED UP the rear of the body with its lead
+        still plugged into the PCA9685 - up through the window in the pan
+        shelf and out of the dome's mouth.  Nothing on this run is ever
+        unplugged, which is the requirement the rest of it is shaped by: the
+        harness is built and dressed inside the shell before any shell
+        geometry closes.  Then DB_top drops on OVER THE LEAD, which enters
+        its slot sideways through the throat at 270.  That order is not a
+        preference - measured on the built mesh, the pass column runs 1,579
+        mm3 through DB_top's own annulus, so with the plate on there is no
+        way past it, and its free band is 10 mm against a servo needing
+        14.2.  See "feeding a SERVO up" for the envelope everything on this
+        run is sized from.
+    1.  nod servo goes up through the window in the head's underside, with
+        the head IN YOUR HANDS and its lead already hanging down the neck,
+        and then slides into its pocket in the head shell.  Also an order
+        and not a preference: with the head on the yoke that window sits 4.5
+        mm above the flange, against a servo 26.7 tall.  Before, not after.
     2.  bracket + servo go in through the O92 face opening and take two
         screws along +Y, driven straight through that same opening.  No
         screw in this build is driven along an axis you cannot see down.
@@ -170,10 +186,17 @@ TOP_R = (31.0, 52.0)            # ID 62 for the collar, OD 104
 # 270 deg to make room and now sits at 90/210/330.
 WIRE_R, WIRE_D = 44.5, 5.0
 WIRE_A = [math.radians(230.0 + 10.0 * i) for i in range(9)]
+# And the slot is open to the RIM at 270, through a throat narrower than
+# itself.  That one cut is what lets DB_top be threaded onto a lead that is
+# already plugged in at both ends - the plate drops over the loom sideways
+# instead of the loom being posted through it.  Narrower than the slot on
+# purpose: the loom presses in past 4.0 and then cannot walk back out under
+# the yoke arm foot, which sweeps this exact radius at pan +-80.
+WIRE_THROAT = 4.0
 # Out of the head at the REAR of its underside, onto the yoke flange.  The
 # flange turns WITH the head, so nothing in this run crosses the nod axis;
 # the only relative movement is at DB_top, and the slack there covers it.
-WIRE_HEAD_D, WIRE_HEAD_Y = 12.0, 18.0
+# The size of that opening is NOT a wire dimension any more - see below.
 
 # ------------------------------------------------------------- the servos
 # MG90S / SG90.  Local frame: origin on the output axis in the plane of the
@@ -182,6 +205,11 @@ SV_BODY_X, SV_BODY_Y, SV_BODY_Z = (-5.9, 16.9), (-6.1, 6.1), (-22.7, 0.0)
 SV_EAR_X, SV_EAR_Z = (-10.6, 21.6), (-7.67, -5.17)      # ears, 2.5 thick
 SV_HOLE_X = (-8.274, 19.726)    # 28.0 apart, the SG90 standard
 SV_HUB_D, SV_HUB_Z = 5.9, 4.0
+SV_REACH = 24.0                 # how far a pocket sweeps out of its open
+                                # side.  Named because the gate has to read
+                                # it: this sweep is the pan pocket's long
+                                # dimension, and that is the hole the head
+                                # tilt servo is fed through.
 SV_FIT = 0.6                    # slip fit round the case.  0.4 is inside
                                 # what this printer holds; a servo you have
                                 # to force into a pocket is a servo you
@@ -194,16 +222,191 @@ HORN_BORE = 4.95
 FIT_MIN = 0.15                  # 0.1 a side binds solid in PLA.  This is the
                                 # floor, and load-bearing joints want more.
 
+# ------------------------------------------------------- feeding a SERVO up
+# The harness is built first and it is never taken apart: Pi, PCA9685 and
+# every servo lead wired, dressed and run inside the shell on the bench,
+# which is the entire reason DB_chassis prints alone and first.  So the head
+# tilt servo does not arrive from the head end with a plug to push onto the
+# PCA afterwards.  It arrives from the BOTTOM, already plugged in, and has to
+# be fed up the rear of the robot into the head with its lead trailing.  One
+# servo, on its own, and only this one: the pan servo is set into the neck by
+# hand off the top, and neither arm servo ever leaves the dome.
+#
+# That makes every opening in the rear run a SERVO dimension, not a wire
+# dimension.  As drawn on 30 Aug none of them were: the shelf's hole was
+# O26, DB_top's slot 5.0 wide and the head's exit O12, against a servo that
+# needs 29.4 across its diagonal.  Three separate stops on a run that has to
+# be continuous, and nothing in fits() could say so, because everything here
+# had been sized for the 3-core lead and not for the thing on the end of it.
+#
+# Fed ON END - the case's long axis vertical, so the 32.2 mm ear span runs
+# ALONG the direction of travel and costs nothing - an MG90S shows its
+# smallest silhouette: the case across, by the case height plus the output
+# hub.  The horn comes off for the trip.  The hub does not.
+SV_PASS = (SV_BODY_Y[1] - SV_BODY_Y[0],                 # 12.2 across the case
+           SV_BODY_Z[1] - SV_BODY_Z[0] + SV_HUB_Z)      # 26.7, base to hub top
+PASS_CLR = 2.0                  # SV_FIT is 0.6 and that is a POCKET fit, on a
+                                # part you can see, hold square and press.
+                                # This is a blind push at arm's length up a
+                                # hole inside a closed body, so it gets 1 mm
+                                # a side.
+PASS_W, PASS_L = SV_PASS[0] + PASS_CLR, SV_PASS[1] + PASS_CLR
+
+# Both openings are STADIUMS, not round holes.  A round hole that swallows
+# that silhouette is O31.4 - the diagonal, plus the clearance - and neither
+# part has 31.4 to give away.  14.2 x 28.7 is the same passage in 60% of the
+# area, and the long axis then goes wherever the part can afford it:
+#
+#   shelf   long axis TANGENTIAL, at the existing (0, -38).  Radial does not
+#           work: the servo has to keep going straight up and out of the
+#           dome's own mouth, which is r 49 at z 112, and a radial window at
+#           r 38 puts its outer corner at 52.4 - into the dome's wall.
+#           Tangential puts that corner at 47.3.
+#   head    long axis RADIAL, so the opening reads 14 mm wide seen from
+#           behind instead of 29.  It is the only new hole in a surface
+#           anyone looks at, and the rear underside - under the head, over
+#           the neck - is the cheapest place in this robot to put one.
+#
+# So the servo takes a quarter turn on its own axis somewhere in the open
+# neck between them.  That is a two-handed motion in free air with the head
+# not yet on, and it is the price of not cutting a 29 mm slot across the
+# back of a sphere.
+PASS_SHELF_Y = -38.0            # tangential: PASS_L runs on X here
+PASS_HEAD_Y = -22.0             # radial: PASS_L runs on Y here.  -22 and not
+                                # -18, so the near edge stays off the head's
+                                # bottom pole and the whole window sits on
+                                # the part of the sphere that faces the neck
+
 # ---------------------------------------------------------------- the head
 HEAD_R = 56.0
 HEAD_WALL = 2.5
 HEAD_Z = 182.0                  # head centre == nod axis
 FACE_Y = 32.0                   # the flat, which is also the O92 face opening
-FACE_T = 4.5                    # 3.4 of ring pocket + 1.1 of diffuser
+FACE_T = 4.5                    # 3.2 of ring pocket + 1.3 of diffuser
+FACE_REBATE_R = 46.1            # the counterbore DB_face drops into
 YOKE_X = (58.0, 64.0)           # yoke arm inner and outer faces
 NOD_BORE = 8.0
 EYE_X, EYE_Z = 21.0, 6.0        # eyes set a little high reads friendly
 RING_OD, RING_ID, RING_T = 37.0, 23.3, 3.2      # NeoPixel Ring 12B
+
+# ------------------------------------------------------- seating a ring
+# The ring used to drop into a plain blind pocket and NOTHING held it there.
+# Three things were missing, and all three are assembly rather than
+# clearance, so no margin anywhere in fits() was ever going to report them:
+#   - no retention.  Push the face plate on and the rings fall out of it.
+#   - no room made for the lead.  A 12B has its pads on the BACK, so the
+#     wires leave through the one face the design had nothing to say about,
+#     and a tug on them lifts the ring straight out of its pocket.
+#   - no clocking.  Nothing said which way round a ring goes in, so the lead
+#     could end up on the far side of the plate from the wire pass.
+# So: the pocket is now EXACTLY RING_T deep, which puts the ring's back
+# flush with the plate's own back face and gives a flat bar something to lie
+# on; a scallop in the bore wall clocks the ring and carries the lead out
+# inboard-and-down, which is where the pass is; DB_eye_holder holds it in.
+RING_APER = 35.5                # The eyes are OPEN.  There used to be 1.3 of
+                                # PLA left across the front of each bore and
+                                # called a diffuser, which it only is if the
+                                # plate is printed in something that passes
+                                # light - otherwise the ring is simply walled
+                                # in.  A 12B's 5050s sit on a O30.5 pitch and
+                                # are 5 square, so they reach O35.5; anything
+                                # tighter than this clips them.  Against a
+                                # O37 ring that leaves 0.75 a side of
+                                # shoulder to seat on, and the clamp is what
+                                # pulls it up against that shoulder.
+RING_FIT = 0.3                  # per side, ring OD into its bore.  A drop
+                                # in, deliberately - a 12B is a routed PCB and
+                                # a press fit on one is a ring you cannot get
+                                # back out without levering on the LEDs
+RING_T_BAND = (2.9, 3.5)        # what a "3.2 thick" ring ACTUALLY measures.
+                                # 1.6 of PCB and a 1.6 LED, both with their
+                                # own tolerance, and clones are worse
+RING_SINK = 0.4                 # the bore is cut this much deeper than a
+                                # NOMINAL ring.  Without it the bore is
+                                # exactly RING_T and a ring on the thick side
+                                # of the band stands 0.3 proud of the plate's
+                                # own back face - so the holder lands on the
+                                # ring instead of on the plate and never
+                                # pulls down square.  Measured, not guessed:
+                                # see the grip check in fits()
+FACE_DIFF = FACE_T - RING_T - RING_SINK         # what is left in front of
+                                # the ring, and since RING_APER opens it,
+                                # all of it is the seating shoulder
+FACE_BACK = FACE_Y - FACE_T      # the plate's back face - what the holder
+                                 # seats on, which is NOT where the ring's
+                                 # back lands once RING_SINK is in
+RING_SEAT = FACE_Y - FACE_DIFF - RING_T         # where a NOMINAL ring's
+                                                # back lands: RING_SINK
+                                                # behind the plate's face
+RING_LEAD_A = 45.0              # the lead scallop, off straight down, inboard
+RING_LEAD_R = 3.0
+# ------------------------------------------------------------ the holder
+# A bar across the ring was the first go and it was the wrong shape.  Two
+# feet at 180 deg press a 1.6 mm PCB at two points, and they do nothing at
+# all about the other thing a bar cannot do: light.  The ring backs onto an
+# open head, so whatever does not leave through the front leaves into the
+# shell and comes back out of every other opening in the robot.
+#
+# So the holder is an ANNULUS with a raised land, and the land is the whole
+# design.  It bears on the PCB's outer rim the whole way round - even
+# pressure, a light seal, and the one band on the back of a 12B where there
+# is guaranteed to be no solder.  Everything inboard of HOLD_ID is simply
+# open, and that is where the lead goes: straight back into the head,
+# unbent and untouched by anything.  The four notches are for a ring whose
+# pads sit further out than they should, so the wire escapes UNDER the land
+# instead of being pinched by it.
+HOLD_OD = 40.0                  # capped by the OTHER eye: the centres are
+                                # 2 * EYE_X = 42 apart, so past 42 here and
+                                # the two holders foul each other
+HOLD_ID = 32.4                  # the open middle - the lead's way out
+HOLD_LAND_OD = 36.4             # the land is HOLD_ID -> here.  2 mm of it,
+                                # sat on the PCB rim inside its O36.8 edge
+HOLD_T = 2.5                    # body thickness, behind the plate
+HOLD_LIFT = 0.9                 # how far the land stands proud of the
+                                # holder's face.  This is the whole answer to
+                                # "too tight vs falls out": it has to reach
+                                # the THINNEST ring in RING_T_BAND, and it
+                                # only ever has to flex for the thickest.
+                                # Grip = t - (FACE_T - FACE_DIFF - HOLD_LIFT)
+                                # so it is positive across the whole band and
+                                # never asks the lugs for more than HOLD_LIFT
+HOLD_SCREW_R = 23.0             # the two M2.5, above and below the eye
+HOLD_TAB = (10.0, 15.0, 27.0)   # lug: wide, and from/to off the eye centre
+HOLD_TIE_Z, RING_TIE = 31.0, (7.0, 2.4)         # the strain relief, on the
+                                # LOWER lug only - which is why the two lugs
+                                # are different lengths and the part still
+                                # serves both eyes as one STL
+HOLD_NOTCH_R = 1.8              # four wire escapes through the land
+HOLD_NOTCH_A = (45.0, 135.0, 225.0, 315.0)
+M25_PILOT, M25_CLEAR = 1.10, 1.40       # radii, M2.5 into PLA
+
+# ---------------------------------------------------------- the camera pod
+# Every number in this first block came off forehead_casing - the part Pat
+# printed and actually fitted the camera to.  Read out of that mesh on
+# 1 Sep 2026.  They are measurements, not choices, and they do not get tidied:
+#     window   19.0 x 19.0, r2.0 corners, straight through
+#     pocket   39.0 x 39.0, r2.5 corners, 1.8 deep off the INNER face
+#     screws   O2.90 on a 28 x 28 square, 3.2 from the OUTER face down to the
+#              pocket floor - so they land in the board and the heads show
+# All four are concentric on one centre.  The plate is 5.0 thick and that IS
+# the stack: 3.2 of wall in front of the board, 1.8 of board recess behind.
+CAM_T = 5.0
+CAM_WIN, CAM_WIN_R = 19.0, 2.0
+CAM_POCK, CAM_POCK_R, CAM_POCK_D = 39.0, 2.5, 1.8
+CAM_SCREW, CAM_SCREW_R = 28.0, 1.45
+CAM_BOARD = (32.0, 32.0, 1.6)   # what goes in the pocket, and its lead
+
+# PARKED 1 Sep 2026.  The numbers above stay because they are the only
+# MEASURED ones there are; everything below them was wrong and is gone:
+#   - the camera is an Arducam UC-852 Rev.A, not the generic 32 x 32 board
+#     with an M12 holder CAM_BOARD guesses at.  It does not drop into a plain
+#     square recess, which is why the pocket is not the whole story: the TWO
+#     SLOTS in the tested part are load bearing, and they were thrown away as
+#     "the distance sensor" on the first pass through that mesh.
+#   - and the lens under the eyes read as a mouth, which is not wanted.
+# The tested shape is in the scene as ARDUCAM_Case (52.96 x 58 x 5) - the old
+# forehead_casing with the camera section booleaned out.  Start from THAT
+# mesh next time, slots and all, instead of rebuilding it from dimensions.
 
 # ------------------------------------------------------------ the nod joint
 # This joint had no drive path at all.  Measured 30 Aug 2026: EVERY mating
@@ -500,6 +703,61 @@ def _rodz(bm, r, z0, z1, cx, cy, segs=PILOT):
                               radius1=r, radius2=r, depth=abs(z1 - z0))["verts"]
     bmesh.ops.translate(bm, verts=v, vec=Vector((cx, cy, (z0 + z1) / 2)))
     return v
+
+
+def _stadz(bm, w, l, z0, z1, cx, cy, ang=0.0, segs=FINE):
+    """A stadium prism on Z: `w` across, `l` end to end, long axis on +-y
+    and then turned `ang` about its own centre.
+
+    Swept as ONE convex solid, the way _dx is, and not built as a box plus
+    two rods.  Three operands sharing two tangent faces is the exact shape of
+    every mesh bug in this file's history - see the note in _svpocket_ops
+    about what EXACT does with a pair of coincident cylinders.  A stadium is
+    convex, so it can be one operand, so it is one.
+    """
+    r, e = w / 2.0, max(0.0, (l - w) / 2.0)
+    m = max(6, segs // 2)
+    prof = [(r * math.cos(math.pi * i / m), e + r * math.sin(math.pi * i / m))
+            for i in range(m + 1)]
+    prof += [(r * math.cos(math.pi + math.pi * i / m),
+              -e + r * math.sin(math.pi + math.pi * i / m))
+             for i in range(m + 1)]
+    ca, sa = math.cos(ang), math.sin(ang)
+    prof = [(cx + x * ca - y * sa, cy + x * sa + y * ca) for x, y in prof]
+    a = [bm.verts.new((x, y, z0)) for x, y in prof]
+    b = [bm.verts.new((x, y, z1)) for x, y in prof]
+    for i in range(len(prof)):
+        j = (i + 1) % len(prof)
+        bm.faces.new((a[i], a[j], b[j], b[i]))
+    bm.faces.new(list(reversed(a)))
+    bm.faces.new(b)
+    return a + b
+
+
+def _rrecty(bm, w, h, r, y0, y1, cx, cz, segs=FINE):
+    """A rounded-rectangle prism swept on Y: `w` on x, `h` on z, corner
+    radius `r`.  Convex, so it is ONE operand - same reason as _stadz.
+
+    Everything the camera needs is this shape: forehead_casing's window, its
+    board pocket and the pad they sit in are all rounded rectangles cut and
+    swept along the lens axis, and that axis is +y here.
+    """
+    a, b = w / 2.0 - r, h / 2.0 - r
+    m = max(2, segs // 8)
+    prof = []
+    for ox, oz, a0 in ((a, b, 0.0), (-a, b, 90.0),
+                       (-a, -b, 180.0), (a, -b, 270.0)):
+        for i in range(m + 1):
+            t = math.radians(a0 + 90.0 * i / m)
+            prof.append((cx + ox + r * math.cos(t), cz + oz + r * math.sin(t)))
+    lo = [bm.verts.new((x, y0, z)) for x, z in prof]
+    hi = [bm.verts.new((x, y1, z)) for x, z in prof]
+    for i in range(len(prof)):
+        j = (i + 1) % len(prof)
+        bm.faces.new((lo[i], hi[i], hi[j], lo[j]))
+    bm.faces.new(list(reversed(lo)))
+    bm.faces.new(hi)
+    return lo + hi
 
 
 def _conez(bm, r0, r1, z0, z1, cx, cy, segs=PILOT):
@@ -898,6 +1156,10 @@ def _dome(coll, mat):
             SPLIT_Z, ARM_AZ + 2.0))
 
     bore = _svpocket_ops(_sv_m((0, 0, PAN_TOP), (0, 0, 1), (0, 1, 0)), "-y")
+    # Both stay O26.  DB_dome IS PRINTED - see "feeding a SERVO up" - and
+    # neither of these holes may grow, so the servo does not use them.  It
+    # goes up the pan servo's own pocket instead, which is already 37.4 x
+    # 24.0 through this same shelf and costs the part nothing.
     bore += [lambda bm: _rodz(bm, 13.0, SHELF_Z[0] - 1, SHELF_Z[1] + 1, 0, 38,
                               FINE),
              lambda bm: _rodz(bm, 13.0, SHELF_Z[0] - 1, SHELF_Z[1] + 1, 0, -38,
@@ -950,6 +1212,15 @@ def _top(coll, mat):
         cuts.append(lambda bm, a=a: _rodz(
             bm, WIRE_D / 2, TOP_Z[0] - 4, TOP_Z[1] + 1,
             WIRE_R * math.cos(a), WIRE_R * math.sin(a), FINE))
+    # and the throat out to the rim at 270, through the spigot as well as the
+    # plate.  THIS is why DB_top does not have to pass a servo: it is the one
+    # part on the run that is fitted after the servo is already up, so it
+    # threads onto the lead sideways.  Its free band is 6.5 mm - r 42 for the
+    # yoke flange's sweep, r 48.5 for the spigot - and a servo needs 14.2, so
+    # there was never a version of this plate with a hole big enough in it.
+    cuts.append(lambda bm: _boxr(bm, WIRE_R - WIRE_D / 2, TOP_R[1] + 2.0,
+                                 WIRE_THROAT / 2, TOP_Z[0] - 4, TOP_Z[1] + 1,
+                                 math.radians(270.0)))
     return _obj("DB_top", coll, parts, cuts, mat)
 
 
@@ -1035,12 +1306,16 @@ def _head(coll, mat):
     cuts += [
         lambda bm: _box(bm, -70, 70, FACE_Y, 90, HEAD_Z - 70, HEAD_Z + 70),
         # rebate the face plate in flush
-        lambda bm: _rody(bm, 46.1, FACE_Y - FACE_T, FACE_Y + 1,
+        lambda bm: _rody(bm, FACE_REBATE_R, FACE_Y - FACE_T, FACE_Y + 1,
                          0.0, HEAD_Z, SEGS),
-        # wire way out of the underside, at the REAR, in line with the slot
-        # in DB_top so the whole run is one straight drop behind the robot
-        lambda bm: _rodz(bm, WIRE_HEAD_D / 2, HEAD_Z - HEAD_R - 6.0,
-                         HEAD_Z - 34.0, 0.0, -WIRE_HEAD_Y, FINE)]
+        # The servo's door, out of the underside at the REAR and in line
+        # with the slot in DB_top, so the whole run is one drop behind the
+        # robot.  This was O12 and it was a wire hole; the servo it feeds
+        # could not get through it, so the head could only ever be built
+        # around a lead that was unplugged at the other end.  Long axis
+        # RADIAL: 14 mm wide seen from behind, not 29.
+        lambda bm: _stadz(bm, PASS_W, PASS_L, HEAD_Z - HEAD_R - 6.0,
+                          HEAD_Z - 34.0, 0.0, PASS_HEAD_Y)]
     for sx in (1, -1):
         cuts.append(lambda bm, s=sx: _rodx(
             bm, NOD_BORE / 2, s * 40.0, s * 70.0, 0.0, HEAD_Z, FINE))
@@ -1064,30 +1339,109 @@ def _head(coll, mat):
 
 
 def _face(coll, mat, lens):
-    """Face plate: two ring pockets, 1.1 mm of white PLA left in front of
-    each as the diffuser."""
-    plate = _obj("DB_face", coll,
-                 [lambda bm: _rody(bm, 45.9, FACE_Y - FACE_T, FACE_Y, 0.0,
-                                   HEAD_Z, SEGS)],
-                 [lambda bm, s=s: _rody(bm, (RING_OD + 0.6) / 2,
-                                        FACE_Y - FACE_T - 1, FACE_Y - 1.1,
-                                        s * EYE_X, HEAD_Z + EYE_Z, SEGS)
-                  for s in (1, -1)],
-                 mat, loc=(0, 0, HEAD_Z))
-    for s, tag in ((1, "L"), (-1, "R")):
+    """Face plate: one bore per eye, RING_T deep exactly, opened out to
+    RING_APER in front so the LEDs are not looking at a wall.
+
+    The ring goes in from BEHIND, LEDs first, and lands flush with the
+    plate's own back face - flush, so DB_eye_holder has a flat to sit on.
+    What it actually seats against is the shoulder RING_APER leaves, and
+    what holds it there is the holder's land.
+    """
+    bore_r = (RING_OD + 2 * RING_FIT) / 2
+    floor_y = FACE_Y - FACE_DIFF                    # the shoulder's back
+    back_y = FACE_Y - FACE_T                        # the plate's back face
+
+    parts = [lambda bm: _rody(bm, 45.9, back_y, FACE_Y, 0.0, HEAD_Z, SEGS)]
+    cuts, bore = [], []
+    for s_ in (1, -1):
+        ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
+        # the ring's bore, and then the eye itself, straight through
+        cuts.append(lambda bm, ex=ex, ez=ez: _rody(
+            bm, bore_r, back_y - 1.0, floor_y, ex, ez, SEGS))
+        cuts.append(lambda bm, ex=ex, ez=ez: _rody(
+            bm, RING_APER / 2, floor_y - 0.5, FACE_Y + 1.0, ex, ez, SEGS))
+        # a scallop in the bore wall.  It clocks the ring - there is one way
+        # round it will sit - and it is the escape for a lead that comes off
+        # the OUTER edge of the pads rather than the inner.  Mirrored, so
+        # both eyes send their leads inboard and down, toward the wire pass.
+        t = math.radians(270.0 - s_ * RING_LEAD_A)
+        cuts.append(lambda bm, ex=ex, ez=ez, t=t: _rody(
+            bm, RING_LEAD_R, back_y - 1.0, floor_y,
+            ex + bore_r * math.cos(t), ez + bore_r * math.sin(t), FINE))
+        # the two M2.5 the holder pulls down on.  BLIND from the back: 3.5 of
+        # thread with 1.0 of plate left in front, so nothing shows through
+        for dz in (HOLD_SCREW_R, -HOLD_SCREW_R):
+            bore.append(lambda bm, ex=ex, ez=ez, dz=dz: _rody(
+                bm, M25_PILOT, back_y - 1.0, back_y + 3.5, ex, ez + dz))
+    return _obj("DB_face", coll, parts, cuts, mat, loc=(0, 0, HEAD_Z),
+                bore=bore)
+
+
+def _eye_proxies(coll, lens):
+    """The ring where it ends up, and the light that comes out of the hole."""
+    for s_, tag in ((1, "L"), (-1, "R")):
+        ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
         _obj("PX_eye_" + tag, coll,
-             [lambda bm, s=s: _rody(bm, (RING_OD - 3.0) / 2, FACE_Y - 1.15,
-                                    FACE_Y + 0.05, s * EYE_X, HEAD_Z + EYE_Z,
-                                    SEGS)], [], lens, loc=(0, 0, HEAD_Z))
+             [lambda bm, ex=ex, ez=ez: _rody(
+                 bm, RING_APER / 2 - 0.2, RING_SEAT + RING_T - 0.2,
+                 RING_SEAT + RING_T, ex, ez, SEGS)], [], lens,
+             loc=(0, 0, HEAD_Z))
         _obj("PX_ring_" + tag, coll,
-             [lambda bm, s=s: _rody(bm, RING_OD / 2, FACE_Y - FACE_T,
-                                    FACE_Y - FACE_T + RING_T,
-                                    s * EYE_X, HEAD_Z + EYE_Z, SEGS)],
-             [lambda bm, s=s: _rody(bm, RING_ID / 2, FACE_Y - FACE_T - 1,
-                                    FACE_Y - FACE_T + RING_T + 1,
-                                    s * EYE_X, HEAD_Z + EYE_Z, SEGS)],
-             lens, loc=(0, 0, HEAD_Z))
-    return plate
+             [lambda bm, ex=ex, ez=ez: _rody(
+                 bm, RING_OD / 2, RING_SEAT, RING_SEAT + RING_T, ex, ez,
+                 SEGS)],
+             [lambda bm, ex=ex, ez=ez: _rody(
+                 bm, RING_ID / 2, RING_SEAT - 1.0, RING_SEAT + RING_T + 1.0,
+                 ex, ez, SEGS)], lens, loc=(0, 0, HEAD_Z))
+
+
+def _eye_holder(coll, mat, s_, tag):
+    """The annulus that holds one ring in.
+
+    Two M2.5 into the face plate, a land standing HOLD_LIFT proud that bears
+    on the PCB's outer rim all the way round, and an open middle the lead
+    goes straight out through.  The land is what preloads the ring, seals the
+    light and takes up the ring-to-ring thickness scatter; the body never
+    touches the PCB at all.
+
+    Both eyes take the SAME STL - the long lug goes down on each.
+    """
+    ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
+    y0 = FACE_BACK - HOLD_T
+    tw, t0, t1 = HOLD_TAB
+    parts = [lambda bm: _rody(bm, HOLD_OD / 2, y0, FACE_BACK, ex, ez, SEGS),
+             # the land runs BACK into the body rather than sitting on its
+             # face - flush it shares a whole plane with it and the part
+             # comes back non-manifold, which is what the lugs get right
+             lambda bm: _rody(bm, HOLD_LAND_OD / 2, FACE_BACK - HOLD_T / 2,
+                              FACE_BACK + HOLD_LIFT, ex, ez, SEGS)]
+    # the lugs.  They OVERLAP the disc from t0 rather than butting onto it -
+    # butting them on flush shares a whole face plane, which is what makes
+    # a part come back non-manifold - see the note in _stadz
+    for dz, end in ((1, t1), (-1, HOLD_TIE_Z)):
+        parts.append(lambda bm, dz=dz, end=end: _box(
+            bm, ex - tw / 2, ex + tw / 2, y0, FACE_BACK,
+            ez + dz * t0, ez + dz * end))
+    cuts = [lambda bm: _rody(bm, HOLD_ID / 2, y0 - 1.0,
+                             FACE_BACK + HOLD_LIFT + 1.0, ex, ez, SEGS)]
+    for dz in (HOLD_SCREW_R, -HOLD_SCREW_R):
+        cuts.append(lambda bm, dz=dz: _rody(
+            bm, M25_CLEAR, y0 - 1.0, FACE_BACK + 1.0, ex, ez + dz))
+    # the wire escapes, cut through the land at its own mid radius
+    mid = (HOLD_ID + HOLD_LAND_OD) / 4
+    for a in HOLD_NOTCH_A:
+        t = math.radians(a)
+        cuts.append(lambda bm, t=t: _rody(
+            bm, HOLD_NOTCH_R, FACE_BACK - 0.5, FACE_BACK + HOLD_LIFT + 0.5,
+            ex + mid * math.cos(t), ez + mid * math.sin(t), FINE))
+    # and the tie, on the long lug: the pull comes off four solder joints
+    tiw, tih = RING_TIE
+    cuts.append(lambda bm: _box(
+        bm, ex - tiw / 2, ex + tiw / 2, y0 - 1.0, FACE_BACK + 1.0,
+        ez - (HOLD_TIE_Z + HOLD_SCREW_R) / 2 - tih / 2,
+        ez - (HOLD_TIE_Z + HOLD_SCREW_R) / 2 + tih / 2))
+    return _obj("DB_eye_holder_" + tag, coll, parts, cuts, mat,
+                loc=(0, 0, HEAD_Z))
 
 
 def _arm(coll, mat, sx, tag):
@@ -1120,7 +1474,7 @@ def _svboss(bm, m, pad=3.0, back=7.0, front=1.0):
     bmesh.ops.transform(bm, matrix=m, verts=v)
 
 
-def _svpocket_ops(m, open_dir, reach=24.0, through=1.0):
+def _svpocket_ops(m, open_dir, reach=SV_REACH, through=1.0):
     """A servo holder with ONE open side.
 
     Two nested boxes, not one, and the difference matters:
@@ -1395,6 +1749,9 @@ def build():
     yoke += [_yoke_arm(coll, accent, s, t) for s, t in ((1, "L"), (-1, "R"))]
     head = _head(coll, shell)
     face = _face(coll, shell, lens)
+    _eye_proxies(coll, lens)
+    hold = {t: _eye_holder(coll, accent, s, t)
+            for s, t in ((1, "L"), (-1, "R"))}
     _chassis(coll, accent)
     arms = {t: _arm(coll, shell, s, t) for s, t in ((1, "L"), (-1, "R"))}
     sv = _servos(coll, horn)
@@ -1468,7 +1825,8 @@ def build():
     # anything, because the rig will be asserting the answer again.
     for ob in yoke + [e_nod, cplr]:
         kid(ob, e_pan)
-    for ob in (head, face, sv["SV_nod"], bpy.data.objects["PX_ring_L"],
+    for ob in (head, face, hold["L"], hold["R"], sv["SV_nod"],
+               bpy.data.objects["PX_ring_L"],
                bpy.data.objects["PX_ring_R"], bpy.data.objects["PX_eye_L"],
                bpy.data.objects["PX_eye_R"],
                bpy.data.objects["DB_pivot"]):
@@ -1680,6 +2038,14 @@ CLASH_PAIRS = (
     ("DB_yoke_arm_L", "DB_head"), ("DB_yoke_arm_R", "DB_head"),
     ("DB_cplr", "DB_head"), ("DB_cplr", "DB_yoke_arm_L"),
     ("DB_pivot", "DB_head"), ("DB_pivot", "DB_yoke_arm_R"),
+    # everything that lives behind the face plate.  These were built without
+    # being in this list, so nothing was measuring them - and the head is the
+    # most crowded volume in the robot: a O91.8 plate with two O37.6 bores,
+    # two clamp bars, a camera mount and a servo all inside r 53.5.
+    ("DB_eye_holder_L", "DB_face"), ("DB_eye_holder_R", "DB_face"),
+    ("DB_eye_holder_L", "DB_head"), ("DB_eye_holder_R", "DB_head"),
+    ("DB_eye_holder_L", "DB_eye_holder_R"),
+    ("DB_face", "DB_head"),
 )
 CLASH_OK = 2.0                  # mm3 - below this is two faces meeting
 
@@ -2009,6 +2375,157 @@ def fits(verbose=True):
     if tip < 5.0:
         bad.append("arm hits the desk at %.0f deg" % ARM_RANGE[0])
 
+    say("")
+    say("--- feeding the head tilt servo up the rear -------------------")
+    # Not a clearance check on a static part: a REACHABILITY check on a
+    # motion.  Every stop on this run passed a clearance test happily,
+    # because a 5 mm slot is beautifully clear of everything near it and says
+    # nothing at all about the 12.2 x 26.7 object that has to go through it.
+    # That is eye rig 01 again, one part further up the robot.
+    pw, pl = SV_PASS
+    say("   an MG90S on end, hub in, horn off      %5.1f x %5.1f" % (pw, pl))
+    for nm, w, l in (("DB_dome shelf window", PASS_L, PASS_W),
+                     ("DB_head underside window", PASS_W, PASS_L)):
+        say("   %-25s %5.1f x %5.1f   %+6.2f"
+            % (nm, w, l, min(max(w, l) - pl, min(w, l) - pw)))
+        if min(w, l) < pw or max(w, l) < pl:
+            bad.append("%s will not pass an MG90S: %.1f x %.1f into %.1f x %.1f"
+                       % (nm, pw, pl, w, l))
+
+    # straight up out of the shelf window and out through the dome's mouth.
+    # The window is tangential precisely so this number stays positive.
+    mouth = INNER_PROF[-1][0]
+    corner = math.hypot(PASS_L / 2, abs(PASS_SHELF_Y) + PASS_W / 2)
+    say("   shelf window corner r %.1f, dome mouth r %.1f   %+6.2f"
+        % (corner, mouth, mouth - corner))
+    if mouth - corner < 1.0:
+        bad.append("the servo cannot rise straight out of the shelf window: "
+                   "its corner is at r %.1f, the dome mouth is r %.1f"
+                   % (corner, mouth))
+    ped = abs(PASS_SHELF_Y) - PASS_W / 2 - abs(PED_Y[0])
+    say("   shelf window to the pan pedestal             %+6.2f" % ped)
+    if ped < 2.0:
+        bad.append("the shelf window breaks into the pan pedestal (%.1f)" % ped)
+
+    # the head window has to cut CLEAN THROUGH.  A vertical slot in a sphere
+    # runs out of sphere fast at the back, and this cut stops at z 148
+    far = math.hypot(PASS_W / 2, abs(PASS_HEAD_Y) + PASS_L / 2)
+    say("   head window far corner r %.1f of %.1f           %+6.2f"
+        % (far, HEAD_R, HEAD_R - far))
+    zin = HEAD_Z - math.sqrt(max(0.0, (HEAD_R - HEAD_WALL) ** 2 - far ** 2))
+    say("   ... cavity reached at z %.1f, cut ends at %.1f" % (zin, HEAD_Z - 34.0))
+    if far > HEAD_R - 4.0 or zin > HEAD_Z - 34.0:
+        bad.append("the head window does not break right through the shell at "
+                   "its far end (r %.1f, cavity at z %.1f)" % (far, zin))
+    # and it must miss the nod servo's boss.  They DO overlap in y - the
+    # boss runs back to y -13.6 and the window's near edge is at -7.65 - so
+    # the only thing keeping them apart is x, which is what gets measured.
+    # Reporting the y gap here would have read +6 and meant nothing.
+    boss_x = (YOKE_X[0] - 3.0) + (SV_EAR_Z[0] - 7.0)    # _svboss back=7.0
+    nx = boss_x - PASS_W / 2
+    say("   head window to the nod servo boss, in x      %+6.2f" % nx)
+    if nx < 2.0:
+        bad.append("the head window runs into the nod servo boss (%.1f)" % nx)
+
+    # DB_top is the one part on this run that is NOT a pass, and cannot be
+    say("   DB_top threads ON over the lead: %.1f throat, %.1f slot"
+        % (WIRE_THROAT, WIRE_D))
+    if WIRE_THROAT > WIRE_D:
+        bad.append("DB_top's throat (%.1f) is wider than its slot (%.1f) - the "
+                   "loom walks back out under the yoke sweep"
+                   % (WIRE_THROAT, WIRE_D))
+    if WIRE_THROAT < 3.0:
+        bad.append("DB_top's throat (%.1f) will not pass a 3-core servo lead"
+                   % WIRE_THROAT)
+    band = TOP_R[1] - YOKE_FLANGE_R[1]
+    say("   ... and it never could be one: free band %.1f, servo needs %.1f"
+        % (band, PASS_W))
+
+    # ORDER, not clearance.  Both of these came off the mesh, and both are
+    # why steps 0 and 1 in the header read the way they do.  Neither is a
+    # failure: they are the reason the two parts are fitted when they are.
+    hz = HEAD_Z - math.sqrt(HEAD_R ** 2 - (PASS_HEAD_Y + PASS_L / 2) ** 2)
+    say("   head window clears the yoke flange by %.1f, servo is %.1f tall"
+        % (hz - YOKE_FLANGE_Z[1], pl))
+    say("   -> the servo goes into the head BEFORE the head goes on the yoke,")
+    say("      and DB_top goes on AFTER the servo is up.  Fit them the other")
+    say("      way round and neither one can be done at all.")
+    if band >= PASS_W:
+        warn.append("DB_top's free band is %.1f now - it COULD take a servo "
+                    "window, and the throat is no longer the only option"
+                    % band)
+
+    say("")
+    say("--- seating the NeoPixel rings --------------------------------")
+    bore_r = (RING_OD + 2 * RING_FIT) / 2
+    land_in, land_out = HOLD_ID / 2, HOLD_LAND_OD / 2
+    for label, have, need in (
+            ("bore over the ring OD, a side", RING_FIT, 0.2),
+            ("bore deeper than a nominal   ",
+             FACE_T - FACE_DIFF - RING_T, 0.2),
+            ("aperture clears the 5050s    ", RING_APER - 35.0, 0.0),
+            ("shoulder the ring seats on   ", (RING_OD - RING_APER) / 2, 0.5),
+            ("... and the ledge it is cut in", bore_r - RING_APER / 2, 0.8),
+            ("land inside the PCB rim      ", RING_OD / 2 - land_out, 0.2),
+            ("land clear of the bore wall  ", bore_r - land_out, 0.3),
+            ("land width on the PCB        ", land_out - land_in, 1.5),
+            ("holder preload on the ring   ", HOLD_LIFT, 0.3),
+            ("open middle for the lead     ", HOLD_ID, 20.0),
+            ("wire escapes under the land  ", HOLD_NOTCH_R * 2 - 2.0, 1.0),
+            ("holder body on the plate     ", HOLD_OD / 2 - bore_r, 0.5),
+            ("screw into solid plate       ",
+             HOLD_SCREW_R - bore_r - M25_PILOT, 2.5),
+            ("lead scallop takes a 3-core  ", RING_LEAD_R * 2 - 4.0, 1.0),
+            ("tie slot on the long lug     ", RING_TIE[1], 1.6),
+            ("holder to the other holder   ", 2 * EYE_X - HOLD_OD, 1.0)):
+        say("   %-29s %+7.2f  (needs %.1f)" % (label, have, need))
+        if have < need:
+            bad.append("eye seat: %s is %.2f, needs %.1f"
+                       % (label.strip(), have, need))
+    # TOO TIGHT vs FALLS OUT, which is the whole question on this part and
+    # is not answered by any single clearance.  The ring seats FRONT face
+    # against the shoulder, so where its back ends up depends on how thick
+    # that particular ring is - and "3.2" is a nominal, not a measurement.
+    # Grip is what the land still has left after the thinnest ring in the
+    # band; flex is what the lugs are asked for by the thickest.
+    t_lo, t_hi = RING_T_BAND
+    depth = FACE_T - FACE_DIFF
+    say("   ring thickness taken as %.1f .. %.1f, bore %.1f deep"
+        % (t_lo, t_hi, depth))
+    for label, have, need in (
+            ("bore swallows the thickest   ", depth - t_hi, 0.0),
+            ("grip left on the THINNEST    ",
+             t_lo - (depth - HOLD_LIFT), 0.15),
+            ("grip on a nominal ring       ",
+             RING_T - (depth - HOLD_LIFT), 0.3)):
+        say("   %-29s %+7.2f  (needs %.1f)" % (label, have, need))
+        if have < need:
+            bad.append("eye seat: %s is %.2f, needs %.1f"
+                       % (label.strip(), have, need))
+    say("   %-29s %+7.2f  (worst case)" % ("flex asked of the two lugs   ",
+                                           HOLD_LIFT))
+    if HOLD_LIFT > 1.2:
+        warn.append("the holder has to flex %.1f for a thick ring - that is "
+                    "a lot to ask of two M2.5 in PLA" % HOLD_LIFT)
+
+    # and neither holder may run off the edge of the plate it screws to.
+    # The disc and the lugs have to be measured separately: their bounding
+    # box has a corner at r 52.6 that no part of the holder occupies, and
+    # taking that as the answer condemns a part with 3.9 mm to spare.
+    _tw, _t0, _t1 = HOLD_TAB
+    far = max([math.hypot(EYE_X, EYE_Z) + HOLD_OD / 2]
+              + [math.hypot(EYE_X + dx, EYE_Z + dz)
+                 for dx in (_tw / 2, -_tw / 2)
+                 for dz in (_t1, -HOLD_TIE_Z)])
+    say("   %-29s %+7.2f  (needs %.1f)"
+        % ("holder inside the plate edge ", 45.9 - far, 1.5))
+    if 45.9 - far < 1.5:
+        bad.append("DB_eye_holder overhangs DB_face by %.2f" % (far - 45.9))
+    say("   the eye is OPEN at O%.1f - the ring seats on the %.2f shoulder,"
+        % (RING_APER, (RING_OD - RING_APER) / 2))
+    say("   the land presses its rim all round, and the lead leaves straight")
+    say("   back out through the O%.1f middle, bent round nothing" % HOLD_ID)
+
     say("\n--- printed parts cutting into each other ---------------------")
     for v, an, bn in clashes(verbose):
         bad.append("%s cuts %.0f mm3 into %s" % (an, v, bn))
@@ -2022,6 +2539,8 @@ def fits(verbose=True):
     say("   orientation, so nothing counts their overhangs at all.  The four")
     say("   with a budget in PRINT_ORIENT are the only ones being held to a")
     say("   claim; the rest are reported on the header's word")
+    say("   the servo run is checked as OPENINGS, not as a swept path -")
+    say("   nothing here walks an MG90S up it and watches what it hits")
     say("   the yoke arm foot sweeps the REAR at pan +-80, over the wire")
     say("   slot at r 44.5 - the loom has to sit inboard of r 29 or")
     say("   outboard of r 64, and nothing here measures that")
