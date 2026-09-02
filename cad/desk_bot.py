@@ -286,98 +286,157 @@ FACE_T = 4.5                    # 3.2 of ring pocket + 1.3 of diffuser
 FACE_REBATE_R = 46.1            # the counterbore DB_face drops into
 YOKE_X = (58.0, 64.0)           # yoke arm inner and outer faces
 NOD_BORE = 8.0
-EYE_X, EYE_Z = 21.0, 6.0        # eyes set a little high reads friendly
-RING_OD, RING_ID, RING_T = 37.0, 23.3, 3.2      # NeoPixel Ring 12B
+EYE_X, EYE_Z = 22.0, 6.0        # eyes set a little high reads friendly.  21
+                                # was as wide as the OLD washer-shaped holder
+                                # allowed; a case that a ring goes INSIDE is
+                                # bigger than one that clamps on top of it,
+                                # so the centres had to open up with it
 
-# ------------------------------------------------------- seating a ring
-# The ring used to drop into a plain blind pocket and NOTHING held it there.
-# Three things were missing, and all three are assembly rather than
-# clearance, so no margin anywhere in fits() was ever going to report them:
-#   - no retention.  Push the face plate on and the rings fall out of it.
-#   - no room made for the lead.  A 12B has its pads on the BACK, so the
-#     wires leave through the one face the design had nothing to say about,
-#     and a tug on them lifts the ring straight out of its pocket.
-#   - no clocking.  Nothing said which way round a ring goes in, so the lead
-#     could end up on the far side of the plate from the wire pass.
-# So: the pocket is now EXACTLY RING_T deep, which puts the ring's back
-# flush with the plate's own back face and gives a flat bar something to lie
-# on; a scallop in the bore wall clocks the ring and carries the lead out
-# inboard-and-down, which is where the pass is; DB_eye_holder holds it in.
-RING_APER = 35.5                # The eyes are OPEN.  There used to be 1.3 of
-                                # PLA left across the front of each bore and
-                                # called a diffuser, which it only is if the
-                                # plate is printed in something that passes
-                                # light - otherwise the ring is simply walled
-                                # in.  A 12B's 5050s sit on a O30.5 pitch and
-                                # are 5 square, so they reach O35.5; anything
-                                # tighter than this clips them.  Against a
-                                # O37 ring that leaves 0.75 a side of
-                                # shoulder to seat on, and the clamp is what
-                                # pulls it up against that shoulder.
-RING_FIT = 0.3                  # per side, ring OD into its bore.  A drop
-                                # in, deliberately - a 12B is a routed PCB and
-                                # a press fit on one is a ring you cannot get
-                                # back out without levering on the LEDs
-RING_T_BAND = (2.9, 3.5)        # what a "3.2 thick" ring ACTUALLY measures.
-                                # 1.6 of PCB and a 1.6 LED, both with their
-                                # own tolerance, and clones are worse
-RING_SINK = 0.4                 # the bore is cut this much deeper than a
-                                # NOMINAL ring.  Without it the bore is
-                                # exactly RING_T and a ring on the thick side
-                                # of the band stands 0.3 proud of the plate's
-                                # own back face - so the holder lands on the
-                                # ring instead of on the plate and never
-                                # pulls down square.  Measured, not guessed:
-                                # see the grip check in fits()
-FACE_DIFF = FACE_T - RING_T - RING_SINK         # what is left in front of
-                                # the ring, and since RING_APER opens it,
-                                # all of it is the seating shoulder
-FACE_BACK = FACE_Y - FACE_T      # the plate's back face - what the holder
-                                 # seats on, which is NOT where the ring's
-                                 # back lands once RING_SINK is in
-RING_SEAT = FACE_Y - FACE_DIFF - RING_T         # where a NOMINAL ring's
-                                                # back lands: RING_SINK
-                                                # behind the plate's face
-RING_LEAD_A = 45.0              # the lead scallop, off straight down, inboard
-RING_LEAD_R = 3.0
-# ------------------------------------------------------------ the holder
-# A bar across the ring was the first go and it was the wrong shape.  Two
-# feet at 180 deg press a 1.6 mm PCB at two points, and they do nothing at
-# all about the other thing a bar cannot do: light.  The ring backs onto an
-# open head, so whatever does not leave through the front leaves into the
-# shell and comes back out of every other opening in the robot.
+# ------------------------------------------------------ the NeoPixel ring
+# Adafruit 1643, the 12 x 5050 ring.  Their own page: O36.8 outer, O23.3
+# inner - and a thickness of 6.7, which is NOT the board.  1.6 of PCB and a
+# 1.6 LED is 3.2; everything past that is what is soldered to the BACK.
+# Pat's rings have leads on them, so 6.7 is the honest number and the 3.2
+# this file used to design to was never the one that mattered.
 #
-# So the holder is an ANNULUS with a raised land, and the land is the whole
-# design.  It bears on the PCB's outer rim the whole way round - even
-# pressure, a light seal, and the one band on the back of a 12B where there
-# is guaranteed to be no solder.  Everything inboard of HOLD_ID is simply
-# open, and that is where the lead goes: straight back into the head,
-# unbent and untouched by anything.  The four notches are for a ring whose
-# pads sit further out than they should, so the wire escapes UNDER the land
-# instead of being pinched by it.
-HOLD_OD = 40.0                  # capped by the OTHER eye: the centres are
-                                # 2 * EYE_X = 42 apart, so past 42 here and
-                                # the two holders foul each other
-HOLD_ID = 32.4                  # the open middle - the lead's way out
-HOLD_LAND_OD = 36.4             # the land is HOLD_ID -> here.  2 mm of it,
-                                # sat on the PCB rim inside its O36.8 edge
-HOLD_T = 2.5                    # body thickness, behind the plate
-HOLD_LIFT = 0.9                 # how far the land stands proud of the
-                                # holder's face.  This is the whole answer to
-                                # "too tight vs falls out": it has to reach
-                                # the THINNEST ring in RING_T_BAND, and it
-                                # only ever has to flex for the thickest.
-                                # Grip = t - (FACE_T - FACE_DIFF - HOLD_LIFT)
-                                # so it is positive across the whole band and
-                                # never asks the lugs for more than HOLD_LIFT
-HOLD_SCREW_R = 23.0             # the two M2.5, above and below the eye
-HOLD_TAB = (10.0, 15.0, 27.0)   # lug: wide, and from/to off the eye centre
-HOLD_TIE_Z, RING_TIE = 31.0, (7.0, 2.4)         # the strain relief, on the
+# So nothing below is a nominal any more.  Every dimension the print has to
+# clear is a BAND, and the band is what gets designed to - the big end for
+# anything that has to fit OVER the ring, the small end for anything that
+# has to reach IN and touch it.
+RING_OD_BAND = (36.3, 37.4)     # Adafruit is 36.8.  Clones land either side
+                                # and a routed PCB edge is not a precise one
+RING_T_BAND = (2.9, 3.5)        # the BOARD only: front glass to bare back
+                                # face.  1.6 of PCB and a 1.6 LED, both
+                                # toleranced, and clones are worse
+RING_ID = 23.3
+RING_RIM = 1.5                  # the bare band round the OUTER edge of the
+                                # board's back.  The pads are inboard of it,
+                                # so this is the only annulus anything is
+                                # allowed to touch - and it is what the three
+                                # barbs land on.  An ASSUMPTION, stated here
+                                # so fits() can hold the barbs to it
+RING_BACK = 6.0                 # how far SOLDER and LEADS stand off the back
+                                # of the board.  This is the number the old
+                                # design did not have at all, and it is the
+                                # whole reason the eyes would not go
+                                # together: nothing may be within this of the
+                                # ring's back face, which is why the case is
+                                # simply OPEN behind it
+RING_OD, RING_T = RING_OD_BAND[1], RING_T_BAND[1]
+
+# --------------------------------------------------------- the eye case
+# What used to be here was DB_eye_holder: a O40 washer with a O32.4 hole
+# through the middle, that trapped a ring already sitting in a pocket in
+# DB_face.  Two things were wrong with it and only one of them was geometry:
+#   - a ring cannot go INTO it.  O32.4 against a O36.8 board.  It was never
+#     meant to - but it is disc shaped and eye sized and it shipped as an
+#     STL next to nothing that said otherwise, so of course it got tried.
+#   - it made the eyes untestable alone.  To put a NeoPixel anywhere at all
+#     you first had to print the entire face plate.
+# DB_eye_case is a CUP.  The ring drops in from BEHIND, clicks past three
+# snap fingers and seats LEDs-first on a shoulder at the front.  It holds a
+# ring with no face plate, no screws and no second part - and the face plate
+# is then two M2.5 away.  The back is open, all of it, because that is where
+# Pat's solder joints and leads are.
+CASE_FIT = 0.4                  # per side, over the BIG end of RING_OD_BAND.
+                                # Pat's printer binds solid at 0.1 a side and
+                                # 0.15 is its floor, so this is not a press
+                                # fit on anything in the band - deliberately.
+                                # A ring you have to force in is a ring you
+                                # get out by levering on the LEDs
+CASE_BORE = RING_OD_BAND[1] + 2 * CASE_FIT
+CASE_WALL = 1.6
+CASE_OD = CASE_BORE + 2 * CASE_WALL
+CASE_APER = 35.5                # the eye itself.  A 12B's 5050s sit on a
+                                # O30.5 pitch and are 5 square, so they reach
+                                # O35.5 - anything tighter than this clips
+                                # them.  Against the SMALL end of the OD band
+                                # that still leaves 0.4 a side of shoulder
+CASE_LIP = 1.2                  # the flange the ring seats against, and the
+                                # front face of the whole eye
+CASE_RIM = 3.3                  # the spigot that registers into DB_face, so
+                                # the two parts are concentric before either
+                                # screw is started
+CASE_D = 12.0                   # body depth behind the face: RING_T at the
+                                # top of its band, plus RING_BACK of solder
+                                # and lead, and then room to route
+
+# The fingers.  Three, and NOT one at the bottom - the bottom is the wire
+# slot.  They do the job the old design needed a whole separate part and two
+# screws for, and they do the OTHER job nothing did before: a ring at the
+# small end of the band would rattle in a 38.2 hole, and these close it down.
+CASE_FING_A = (0.0, 130.0, 230.0)       # three, clear of both lugs
+CASE_FING_W = 2.4               # the relief slot cut either side of a finger
+CASE_FING_HW = 3.5              # and the half width of what is left between
+                                # them, measured at the bore
+CASE_BARB_R = 1.6               # the barb is a BALL, not a shoulder.  A ball
+                                # leads in on the way past AND on the way
+                                # back out, so a ring can be got out again
+                                # without levering on the LEDs - that is the
+                                # eye rig 01 mistake, one part up the robot
+CASE_BARB_IN = 1.1              # how far it reaches into the bore.  It lands
+                                # on the bare outer EDGE of the board, which
+                                # is the one band on the back of a 12B where
+                                # there is guaranteed to be no solder
+CASE_RELIEF = 0.9               # a groove round the whole back of the bore,
+                                # so a lead that crosses the board's EDGE
+                                # anywhere at all is not trapped between the
+                                # board and the wall
+
+# NOTE there is deliberately no wire slot cut through the wall.  The first
+# draft of this part had one, and it was answering a question the open back
+# already answers: the bore runs straight out of the back of the case at full
+# O38.2, so a soldered bundle leaves the way it is already pointing, bent
+# round nothing.  Dropping it also made the two eyes the SAME part - there is
+# nothing left in here that has a handedness - so DB_eye_case_L.stl and
+# DB_eye_case_R.stl are one print, twice.
+CASE_SCREW_R = 23.0             # the two M2.5 into DB_face, above and below
+CASE_TAB = (10.0, 15.0, 27.0)   # lug: wide, and from/to off the eye centre
+CASE_TIE_Z, RING_TIE = 31.0, (7.0, 2.4)         # the strain relief, on the
                                 # LOWER lug only - which is why the two lugs
-                                # are different lengths and the part still
-                                # serves both eyes as one STL
-HOLD_NOTCH_R = 1.8              # four wire escapes through the land
-HOLD_NOTCH_A = (45.0, 135.0, 225.0, 315.0)
+                                # are different lengths, and why the part
+                                # still serves both eyes as one mirrored pair
+
+# The Y planes, once, so no builder re-derives them and drifts.  Depth runs
+# +y forward; FACE_Y is the outside of the face plate.
+CASE_WALL = 2.0                 # over-riding the 1.6 above: the back of the
+                                # bore is relieved by CASE_RELIEF for the
+                                # leads, and 1.6 - 0.9 leaves a wall that is
+                                # two perimeters of nothing
+CASE_OD = CASE_BORE + 2 * CASE_WALL             # 42.2
+CASE_REG = CASE_OD - 0.8        # the spigot, into DB_face's counterbore
+FACE_BACK = FACE_Y - FACE_T                     # 27.5, the plate's back face
+CASE_FRONT = FACE_BACK + CASE_RIM               # 30.8, the spigot's top
+CASE_SEAT = CASE_FRONT - CASE_LIP               # 29.6, the plane the ring's
+                                                # LED face lands on
+CASE_Y0 = FACE_BACK - CASE_D                    # 15.5, the open back
+RING_BACK_Y = CASE_SEAT - RING_T_BAND[1]        # 26.1, where the THICKEST
+                                                # board's bare back face
+                                                # ends up.  The barbs sit on
+                                                # this plane and everything
+                                                # behind it is open air
+CASE_FING_L = RING_BACK_Y - CASE_Y0             # 10.6.  The finger is rooted
+                                                # exactly where the board's
+                                                # back face lands, so the
+                                                # relief slots never breach
+                                                # the lit part of the bore
+CASE_BARB_Y = RING_BACK_Y - 1.0                 # the ball's centre sits BEHIND
+                                                # that plane, so a board that
+                                                # is home has clicked past the
+                                                # crown rather than resting on
+                                                # it
+CASE_CENTRE = CASE_BORE - 2 * CASE_BARB_IN      # 36.0, what the three fingers
+                                                # close the bore down to.
+                                                # UNDER the small end of
+                                                # RING_OD_BAND, so the barbs
+                                                # touch every ring in the band
+                                                # - a small one is centred and
+                                                # held instead of rattling in
+                                                # a O38.2 hole, and a big one
+                                                # only ever springs them 0.7.
+                                                # One feature, and it is the
+                                                # answer to both "too small"
+                                                # and "too large"
 M25_PILOT, M25_CLEAR = 1.10, 1.40       # radii, M2.5 into PLA
 
 # ---------------------------------------------------------- the camera pod
@@ -664,7 +723,8 @@ REAR_X, REAR_Z = 44.0, (7.0, 64.0)          # was 34, which put two thirds
 
 TRAY_Z = (4.0, 8.0)
 
-HEAD_PX = ("PX_ring", "PX_eye")  # ride the nod axis, not the body shell
+HEAD_PX = ("PX_ring", "PX_eye", "PX_lead")   # ride the nod axis, not
+                                 # the body shell
 # The speakers are SUPPOSED to come through the wall - that is what the baffle
 # opening is.  Testing them against the round profile just reports the design
 # working.  They get their own check instead, against the hole and the tabs.
@@ -1338,110 +1398,162 @@ def _head(coll, mat):
                 add=add, bore=bore)
 
 
-def _face(coll, mat, lens):
-    """Face plate: one bore per eye, RING_T deep exactly, opened out to
-    RING_APER in front so the LEDs are not looking at a wall.
+def _boxe(bm, r0, r1, half_w, y0, y1, ang, ex, ez):
+    """A block along the RADIAL direction of an EYE, r0 out to r1.
 
-    The ring goes in from BEHIND, LEDs first, and lands flush with the
-    plate's own back face - flush, so DB_eye_holder has a flat to sit on.
-    What it actually seats against is the shoulder RING_APER leaves, and
-    what holds it there is the holder's land.
+    The eyes lie in the XZ plane with their depth on y, so _boxr and _rodr -
+    both of which are built around the Z axis, for the shell joint - are the
+    wrong helpers here, and rotating one of those into place is worse than
+    ten lines.
     """
-    bore_r = (RING_OD + 2 * RING_FIT) / 2
-    floor_y = FACE_Y - FACE_DIFF                    # the shoulder's back
-    back_y = FACE_Y - FACE_T                        # the plate's back face
+    v = _box(bm, r0, r1, y0, y1, -half_w, half_w)
+    bmesh.ops.rotate(bm, verts=v, cent=(0, 0, 0),
+                     matrix=Matrix.Rotation(-ang, 3, "Y"))
+    bmesh.ops.translate(bm, verts=v, vec=Vector((ex, 0.0, ez)))
+    return v
 
-    parts = [lambda bm: _rody(bm, 45.9, back_y, FACE_Y, 0.0, HEAD_Z, SEGS)]
+
+def _face(coll, mat, lens):
+    """Face plate: a counterbore per eye for DB_eye_case to register into,
+    and the eye itself straight out through the front of it.
+
+    The ring is not in this part any more.  It used to sit in a pocket here
+    and be trapped from behind by a washer, and the cost of that was not
+    geometry - it was that no NeoPixel could be fitted to ANYTHING until the
+    whole face plate had been printed.  The ring lives in DB_eye_case now;
+    this plate locates two of them and lets the light out.
+    """
+    reg_r = (CASE_REG + 0.6) / 2                    # 0.3 a side on the spigot
+    parts = [lambda bm: _rody(bm, 45.9, FACE_BACK, FACE_Y, 0.0, HEAD_Z, SEGS)]
     cuts, bore = [], []
     for s_ in (1, -1):
         ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
-        # the ring's bore, and then the eye itself, straight through
+        # the counterbore the case's spigot drops into - concentric before
+        # either screw is started, which is the whole job of a register
         cuts.append(lambda bm, ex=ex, ez=ez: _rody(
-            bm, bore_r, back_y - 1.0, floor_y, ex, ez, SEGS))
+            bm, reg_r, FACE_BACK - 1.0, CASE_FRONT, ex, ez, SEGS))
+        # and the eye
         cuts.append(lambda bm, ex=ex, ez=ez: _rody(
-            bm, RING_APER / 2, floor_y - 0.5, FACE_Y + 1.0, ex, ez, SEGS))
-        # a scallop in the bore wall.  It clocks the ring - there is one way
-        # round it will sit - and it is the escape for a lead that comes off
-        # the OUTER edge of the pads rather than the inner.  Mirrored, so
-        # both eyes send their leads inboard and down, toward the wire pass.
-        t = math.radians(270.0 - s_ * RING_LEAD_A)
-        cuts.append(lambda bm, ex=ex, ez=ez, t=t: _rody(
-            bm, RING_LEAD_R, back_y - 1.0, floor_y,
-            ex + bore_r * math.cos(t), ez + bore_r * math.sin(t), FINE))
-        # the two M2.5 the holder pulls down on.  BLIND from the back: 3.5 of
+            bm, CASE_APER / 2, CASE_FRONT - 0.5, FACE_Y + 1.0, ex, ez, SEGS))
+        # the two M2.5 the case pulls down on.  BLIND from the back: 3.5 of
         # thread with 1.0 of plate left in front, so nothing shows through
-        for dz in (HOLD_SCREW_R, -HOLD_SCREW_R):
+        for dz in (CASE_SCREW_R, -CASE_SCREW_R):
             bore.append(lambda bm, ex=ex, ez=ez, dz=dz: _rody(
-                bm, M25_PILOT, back_y - 1.0, back_y + 3.5, ex, ez + dz))
+                bm, M25_PILOT, FACE_BACK - 1.0, FACE_BACK + 3.5, ex, ez + dz))
     return _obj("DB_face", coll, parts, cuts, mat, loc=(0, 0, HEAD_Z),
                 bore=bore)
 
 
 def _eye_proxies(coll, lens):
-    """The ring where it ends up, and the light that comes out of the hole."""
+    """The board where it ends up, the light that comes out of the hole, and
+    - new, and the reason the eyes would not go together - the SOLDER and the
+    leads, standing RING_BACK off the back of it.
+
+    That last one is a proxy with a job.  It goes in PAIRS, so anything this
+    file ever puts behind an eye gets measured against the wires rather than
+    against a bare board.
+    """
     for s_, tag in ((1, "L"), (-1, "R")):
         ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
+        back = CASE_SEAT - RING_T
         _obj("PX_eye_" + tag, coll,
              [lambda bm, ex=ex, ez=ez: _rody(
-                 bm, RING_APER / 2 - 0.2, RING_SEAT + RING_T - 0.2,
-                 RING_SEAT + RING_T, ex, ez, SEGS)], [], lens,
-             loc=(0, 0, HEAD_Z))
+                 bm, CASE_APER / 2 - 0.2, CASE_SEAT - 0.2, CASE_SEAT,
+                 ex, ez, SEGS)], [], lens, loc=(0, 0, HEAD_Z))
         _obj("PX_ring_" + tag, coll,
-             [lambda bm, ex=ex, ez=ez: _rody(
-                 bm, RING_OD / 2, RING_SEAT, RING_SEAT + RING_T, ex, ez,
-                 SEGS)],
-             [lambda bm, ex=ex, ez=ez: _rody(
-                 bm, RING_ID / 2, RING_SEAT - 1.0, RING_SEAT + RING_T + 1.0,
+             [lambda bm, ex=ex, ez=ez, back=back: _rody(
+                 bm, RING_OD / 2, back, CASE_SEAT, ex, ez, SEGS)],
+             [lambda bm, ex=ex, ez=ez, back=back: _rody(
+                 bm, RING_ID / 2, back - 1.0, CASE_SEAT + 1.0, ex, ez, SEGS)],
+             lens, loc=(0, 0, HEAD_Z))
+        # what Pat actually soldered.  A full ring of it, right out to the
+        # board's edge, because a hand-soldered lead does not stay where a
+        # datasheet says the pad is
+        _obj("PX_lead_" + tag, coll,
+             [lambda bm, ex=ex, ez=ez, back=back: _rody(
+                 bm, RING_OD / 2 - RING_RIM, back - RING_BACK, back,
+                 ex, ez, SEGS)],
+             [lambda bm, ex=ex, ez=ez, back=back: _rody(
+                 bm, RING_ID / 2, back - RING_BACK - 1.0, back + 1.0,
                  ex, ez, SEGS)], lens, loc=(0, 0, HEAD_Z))
 
 
-def _eye_holder(coll, mat, s_, tag):
-    """The annulus that holds one ring in.
+def _eye_case(coll, mat, s_, tag):
+    """The cup one NeoPixel ring lives in.
 
-    Two M2.5 into the face plate, a land standing HOLD_LIFT proud that bears
-    on the PCB's outer rim all the way round, and an open middle the lead
-    goes straight out through.  The land is what preloads the ring, seals the
-    light and takes up the ring-to-ring thickness scatter; the body never
-    touches the PCB at all.
+    The ring goes in from the BACK, LEDs first, springs past three barbs and
+    seats on the CASE_LIP flange at the front.  The case holds it there on
+    its own - no face plate, no screws, no second part - which is the entire
+    point of the rework: an eye can be wired and lit on the bench, and the
+    part that looks like an eye case IS one.
 
-    Both eyes take the SAME STL - the long lug goes down on each.
+    Everything behind the board is open.  Pat's rings are soldered, so the
+    back of every one of them carries blobs and leads, and the one thing
+    this part must never do is touch them.  The only things reaching inboard
+    of the wall are the three barbs; they sit on CASE_BARB_Y, behind the
+    board entirely, and they land on its bare outer EDGE - the one band on
+    the back of a 12B where there is guaranteed to be no solder.
+
+    Nothing in here has a handedness, so L and R are one STL printed twice.
     """
     ex, ez = s_ * EYE_X, HEAD_Z + EYE_Z
-    y0 = FACE_BACK - HOLD_T
-    tw, t0, t1 = HOLD_TAB
-    parts = [lambda bm: _rody(bm, HOLD_OD / 2, y0, FACE_BACK, ex, ez, SEGS),
-             # the land runs BACK into the body rather than sitting on its
-             # face - flush it shares a whole plane with it and the part
-             # comes back non-manifold, which is what the lugs get right
-             lambda bm: _rody(bm, HOLD_LAND_OD / 2, FACE_BACK - HOLD_T / 2,
-                              FACE_BACK + HOLD_LIFT, ex, ez, SEGS)]
-    # the lugs.  They OVERLAP the disc from t0 rather than butting onto it -
-    # butting them on flush shares a whole face plane, which is what makes
-    # a part come back non-manifold - see the note in _stadz
-    for dz, end in ((1, t1), (-1, HOLD_TIE_Z)):
+    tw, t0, t1 = CASE_TAB
+    bore_r, out_r = CASE_BORE / 2, CASE_OD / 2
+    parts = [
+        lambda bm: _rody(bm, out_r, CASE_Y0, FACE_BACK, ex, ez, SEGS),
+        # the spigot overlaps the body by 0.5 rather than butting onto it -
+        # see the note in _stadz about what EXACT does with two operands that
+        # share a whole face plane
+        lambda bm: _rody(bm, CASE_REG / 2, FACE_BACK - 0.5, CASE_FRONT,
+                         ex, ez, SEGS)]
+    for dz, end in ((1, t1), (-1, CASE_TIE_Z)):
         parts.append(lambda bm, dz=dz, end=end: _box(
-            bm, ex - tw / 2, ex + tw / 2, y0, FACE_BACK,
+            bm, ex - tw / 2, ex + tw / 2, CASE_Y0, FACE_BACK,
             ez + dz * t0, ez + dz * end))
-    cuts = [lambda bm: _rody(bm, HOLD_ID / 2, y0 - 1.0,
-                             FACE_BACK + HOLD_LIFT + 1.0, ex, ez, SEGS)]
-    for dz in (HOLD_SCREW_R, -HOLD_SCREW_R):
+    cuts = [
+        # the bore the ring drops down, open all the way out of the back
+        lambda bm: _rody(bm, bore_r, CASE_Y0 - 1.0, CASE_SEAT, ex, ez, SEGS),
+        # the eye
+        lambda bm: _rody(bm, CASE_APER / 2, CASE_SEAT - 0.5,
+                         CASE_FRONT + 1.0, ex, ez, SEGS),
+        # and the relief.  Behind the board's back face the bore opens out,
+        # so a lead that crosses the board's EDGE - and a hand-soldered one
+        # goes where it likes - has somewhere to be, instead of being trapped
+        # between the board and the wall
+        lambda bm: _rody(bm, bore_r + CASE_RELIEF, CASE_Y0 - 1.0,
+                         RING_BACK_Y, ex, ez, SEGS)]
+    for dz in (CASE_SCREW_R, -CASE_SCREW_R):
         cuts.append(lambda bm, dz=dz: _rody(
-            bm, M25_CLEAR, y0 - 1.0, FACE_BACK + 1.0, ex, ez + dz))
-    # the wire escapes, cut through the land at its own mid radius
-    mid = (HOLD_ID + HOLD_LAND_OD) / 4
-    for a in HOLD_NOTCH_A:
+            bm, M25_CLEAR, CASE_Y0 - 1.0, FACE_BACK + 1.0, ex, ez + dz))
+    # the fingers.  A relief slot either side of each, so what is left is a
+    # cantilever CASE_FING_L long instead of a piece of a stiff tube - a
+    # short finger in PLA does not flex, it snaps
+    off = math.atan2(CASE_FING_HW + CASE_FING_W / 2, bore_r)
+    for a in CASE_FING_A:
+        for d in (1, -1):
+            t = math.radians(a) + d * off
+            cuts.append(lambda bm, t=t: _boxe(
+                bm, bore_r - 1.5, out_r + 2.0, CASE_FING_W / 2,
+                CASE_Y0 - 1.0, CASE_Y0 + CASE_FING_L, t, ex, ez))
+    # the barbs go in AFTER the bore is cut.  A feature unioned before the
+    # cavity it stands in is simply deleted by it - that is the note on _obj,
+    # and it is what `add` is for
+    rp = bore_r + CASE_BARB_R - CASE_BARB_IN
+    add = []
+    for a in CASE_FING_A:
         t = math.radians(a)
-        cuts.append(lambda bm, t=t: _rody(
-            bm, HOLD_NOTCH_R, FACE_BACK - 0.5, FACE_BACK + HOLD_LIFT + 0.5,
-            ex + mid * math.cos(t), ez + mid * math.sin(t), FINE))
-    # and the tie, on the long lug: the pull comes off four solder joints
+        add.append(lambda bm, t=t: _ball(
+            bm, CASE_BARB_R, ex + rp * math.cos(t), CASE_BARB_Y,
+            ez + rp * math.sin(t), 24))
+    # and the tie, on the long lug: the pull comes off four solder joints, so
+    # the strain relief is not optional
     tiw, tih = RING_TIE
-    cuts.append(lambda bm: _box(
-        bm, ex - tiw / 2, ex + tiw / 2, y0 - 1.0, FACE_BACK + 1.0,
-        ez - (HOLD_TIE_Z + HOLD_SCREW_R) / 2 - tih / 2,
-        ez - (HOLD_TIE_Z + HOLD_SCREW_R) / 2 + tih / 2))
-    return _obj("DB_eye_holder_" + tag, coll, parts, cuts, mat,
-                loc=(0, 0, HEAD_Z))
+    bore = [lambda bm: _box(
+        bm, ex - tiw / 2, ex + tiw / 2, CASE_Y0 - 1.0, FACE_BACK + 1.0,
+        ez - (CASE_TIE_Z + CASE_SCREW_R) / 2 - tih / 2,
+        ez - (CASE_TIE_Z + CASE_SCREW_R) / 2 + tih / 2)]
+    return _obj("DB_eye_case_" + tag, coll, parts, cuts, mat,
+                loc=(0, 0, HEAD_Z), add=add, bore=bore)
 
 
 def _arm(coll, mat, sx, tag):
@@ -1750,7 +1862,7 @@ def build():
     head = _head(coll, shell)
     face = _face(coll, shell, lens)
     _eye_proxies(coll, lens)
-    hold = {t: _eye_holder(coll, accent, s, t)
+    hold = {t: _eye_case(coll, accent, s, t)
             for s, t in ((1, "L"), (-1, "R"))}
     _chassis(coll, accent)
     arms = {t: _arm(coll, shell, s, t) for s, t in ((1, "L"), (-1, "R"))}
@@ -1918,6 +2030,19 @@ PRINT_ORIENT = {
     "DB_pivot":      ("x", +1, 200.0),   # cap on the plate.  The collar's
                                          # annulus is 148 of that and it is
                                          # anchored right round its inner edge
+    "DB_eye_case_L": ("y", +1, 350.0),   # OPEN BACK DOWN on the plate, so the
+    "DB_eye_case_R": ("y", +1, 350.0),   # whole back face and both lugs are
+                                         # first layer and the bore goes up.
+                                         # The roof is the seating flange and
+                                         # the lead relief, and both bridge;
+                                         # the barbs are BALLS, so their
+                                         # undersides are 45 deg and want no
+                                         # support.  It also lays the fingers
+                                         # so they bend ALONG the layers
+                                         # rather than across them, which is
+                                         # the difference between a snap
+                                         # finger that springs and one that
+                                         # peels off at the root
 }
 SPIN_A = 20.0                   # degrees, and it has to beat the joint's
                                 # own backlash: 0.15 of fit on r3.85 is 2.2
@@ -2040,11 +2165,14 @@ CLASH_PAIRS = (
     ("DB_pivot", "DB_head"), ("DB_pivot", "DB_yoke_arm_R"),
     # everything that lives behind the face plate.  These were built without
     # being in this list, so nothing was measuring them - and the head is the
-    # most crowded volume in the robot: a O91.8 plate with two O37.6 bores,
-    # two clamp bars, a camera mount and a servo all inside r 53.5.
-    ("DB_eye_holder_L", "DB_face"), ("DB_eye_holder_R", "DB_face"),
-    ("DB_eye_holder_L", "DB_head"), ("DB_eye_holder_R", "DB_head"),
-    ("DB_eye_holder_L", "DB_eye_holder_R"),
+    # most crowded volume in the robot: a O91.8 plate with two O42.0 counterbores,
+    # two eye cases, a camera mount and a servo all inside r 53.5.
+    ("DB_eye_case_L", "DB_face"), ("DB_eye_case_R", "DB_face"),
+    ("DB_eye_case_L", "DB_head"), ("DB_eye_case_R", "DB_head"),
+    ("DB_eye_case_L", "DB_eye_case_R"),
+    # the SOLDER, not the bare board.  PX_lead is the reason these are here
+    ("PX_lead_L", "DB_eye_case_L"), ("PX_lead_R", "DB_eye_case_R"),
+    ("PX_lead_L", "DB_head"), ("PX_lead_R", "DB_head"),
     ("DB_face", "DB_head"),
 )
 CLASH_OK = 2.0                  # mm3 - below this is two faces meeting
@@ -2456,75 +2584,89 @@ def fits(verbose=True):
                     % band)
 
     say("")
-    say("--- seating the NeoPixel rings --------------------------------")
-    bore_r = (RING_OD + 2 * RING_FIT) / 2
-    land_in, land_out = HOLD_ID / 2, HOLD_LAND_OD / 2
-    for label, have, need in (
-            ("bore over the ring OD, a side", RING_FIT, 0.2),
-            ("bore deeper than a nominal   ",
-             FACE_T - FACE_DIFF - RING_T, 0.2),
-            ("aperture clears the 5050s    ", RING_APER - 35.0, 0.0),
-            ("shoulder the ring seats on   ", (RING_OD - RING_APER) / 2, 0.5),
-            ("... and the ledge it is cut in", bore_r - RING_APER / 2, 0.8),
-            ("land inside the PCB rim      ", RING_OD / 2 - land_out, 0.2),
-            ("land clear of the bore wall  ", bore_r - land_out, 0.3),
-            ("land width on the PCB        ", land_out - land_in, 1.5),
-            ("holder preload on the ring   ", HOLD_LIFT, 0.3),
-            ("open middle for the lead     ", HOLD_ID, 20.0),
-            ("wire escapes under the land  ", HOLD_NOTCH_R * 2 - 2.0, 1.0),
-            ("holder body on the plate     ", HOLD_OD / 2 - bore_r, 0.5),
-            ("screw into solid plate       ",
-             HOLD_SCREW_R - bore_r - M25_PILOT, 2.5),
-            ("lead scallop takes a 3-core  ", RING_LEAD_R * 2 - 4.0, 1.0),
-            ("tie slot on the long lug     ", RING_TIE[1], 1.6),
-            ("holder to the other holder   ", 2 * EYE_X - HOLD_OD, 1.0)):
-        say("   %-29s %+7.2f  (needs %.1f)" % (label, have, need))
-        if have < need:
-            bad.append("eye seat: %s is %.2f, needs %.1f"
-                       % (label.strip(), have, need))
-    # TOO TIGHT vs FALLS OUT, which is the whole question on this part and
-    # is not answered by any single clearance.  The ring seats FRONT face
-    # against the shoulder, so where its back ends up depends on how thick
-    # that particular ring is - and "3.2" is a nominal, not a measurement.
-    # Grip is what the land still has left after the thinnest ring in the
-    # band; flex is what the lugs are asked for by the thickest.
-    t_lo, t_hi = RING_T_BAND
-    depth = FACE_T - FACE_DIFF
-    say("   ring thickness taken as %.1f .. %.1f, bore %.1f deep"
-        % (t_lo, t_hi, depth))
-    for label, have, need in (
-            ("bore swallows the thickest   ", depth - t_hi, 0.0),
-            ("grip left on the THINNEST    ",
-             t_lo - (depth - HOLD_LIFT), 0.15),
-            ("grip on a nominal ring       ",
-             RING_T - (depth - HOLD_LIFT), 0.3)):
-        say("   %-29s %+7.2f  (needs %.1f)" % (label, have, need))
-        if have < need:
-            bad.append("eye seat: %s is %.2f, needs %.1f"
-                       % (label.strip(), have, need))
-    say("   %-29s %+7.2f  (worst case)" % ("flex asked of the two lugs   ",
-                                           HOLD_LIFT))
-    if HOLD_LIFT > 1.2:
-        warn.append("the holder has to flex %.1f for a thick ring - that is "
-                    "a lot to ask of two M2.5 in PLA" % HOLD_LIFT)
+    say("--- the eye cases ---------------------------------------------")
+    # Every one of these is against a BAND, not a nominal.  The old block
+    # here checked a O37.0 ring against a O37.6 bore and passed, because the
+    # ring it was checking was a number in this file rather than the thing
+    # in Pat's hand.  Anything that has to fit OVER a ring is measured
+    # against the big end of the band; anything that has to reach IN and
+    # touch one is measured against the small end.
+    lo_od, hi_od = RING_OD_BAND
+    lo_t, hi_t = RING_T_BAND
+    bore_r = CASE_BORE / 2
+    barb_r = bore_r - CASE_BARB_IN          # what the three barbs close to
+    for label, v, need in (
+            ("bore over the BIGGEST ring   ", (CASE_BORE - hi_od) / 2, 0.25),
+            ("... and over the smallest    ", (CASE_BORE - lo_od) / 2, 0.25),
+            ("barbs reach the SMALLEST ring", lo_od / 2 - barb_r, 0.10),
+            ("barbs clear of the lit hole  ", barb_r - CASE_APER / 2, 0.15),
+            ("aperture clears the 5050s    ", CASE_APER - 35.0, 0.0),
+            ("shoulder the smallest sits on", (lo_od - CASE_APER) / 2, 0.30),
+            ("open air behind the board    ", RING_BACK_Y - CASE_Y0,
+             RING_BACK),
+            ("relief round the board edge  ", CASE_RELIEF, 0.5),
+            ("wall left over that relief   ", CASE_WALL - CASE_RELIEF, 0.8),
+            ("spigot into the face plate   ", CASE_RIM, 2.0),
+            ("case to the OTHER case       ", 2 * EYE_X - CASE_OD, 1.0),
+            ("screw clear of the bore      ",
+             CASE_SCREW_R - bore_r - M25_CLEAR, 1.5),
+            ("tie slot on the long lug     ", RING_TIE[1], 1.6)):
+        say("   %s %6.2f  (needs %.2f)" % (label, v, need))
+        if v < need:
+            bad.append("eye case: %s is %.2f, needs %.2f"
+                       % (label.strip(), v, need))
 
-    # and neither holder may run off the edge of the plate it screws to.
-    # The disc and the lugs have to be measured separately: their bounding
-    # box has a corner at r 52.6 that no part of the holder occupies, and
-    # taking that as the answer condemns a part with 3.9 mm to spare.
-    _tw, _t0, _t1 = HOLD_TAB
-    far = max([math.hypot(EYE_X, EYE_Z) + HOLD_OD / 2]
+    # The one thing no clearance can see.  A snap finger that is too short
+    # does not flex - it breaks - and that is a STRAIN, not a gap.  Cantilever
+    # with an end deflection: peak surface strain is 3*t*d / 2*L^2.
+    spring = hi_od / 2 - barb_r
+    strain = 1.5 * CASE_WALL * spring / CASE_FING_L ** 2
+    say("   the fingers spring %.2f for the biggest ring in the band,"
+        % spring)
+    say("   over %.1f of cantilever - %.2f%% surface strain at the root"
+        % (CASE_FING_L, strain * 100.0))
+    if strain > 0.022:
+        bad.append("eye case: the fingers take %.2f%% strain for the biggest "
+                   "ring - PLA gives up around 2.5%%, so they will break off "
+                   "rather than spring" % (strain * 100.0))
+    foot = hi_od / 2 - barb_r           # how far a barb sits over the board
+    say("   a barb covers %.2f of the board's edge, and the bare rim is %.1f"
+        % (foot, RING_RIM))
+    if foot > RING_RIM:
+        bad.append("eye case: a barb reaches %.2f over the board, past the "
+                   "%.1f bare rim - it is sitting on solder" % (foot, RING_RIM))
+    if lo_od / 2 - barb_r > CASE_BARB_IN:
+        bad.append("eye case: the barbs stand further into the bore than the "
+                   "smallest ring can push past")
+
+    # and the axial slop, which is the OTHER half of "too small or too
+    # large": the board is caught between the front flange and the barbs, and
+    # the barbs are set for the thickest board in the band, so a thin one has
+    # this much to rattle in.  A ball crown takes most of it up by wedging.
+    slop = hi_t - lo_t
+    say("   a board at the thin end of the band has %.2f of axial slop,"
+        % slop)
+    say("   which the ball crowns wedge out rather than leave rattling")
+    if slop > 1.0:
+        warn.append("the ring thickness band is %.1f wide - the barbs cannot "
+                    "wedge that out and a thin ring will rattle" % slop)
+
+    _tw, _t0, _t1 = CASE_TAB
+    far = max([math.hypot(EYE_X, EYE_Z) + CASE_OD / 2]
               + [math.hypot(EYE_X + dx, EYE_Z + dz)
-                 for dx in (_tw / 2, -_tw / 2)
-                 for dz in (_t1, -HOLD_TIE_Z)])
-    say("   %-29s %+7.2f  (needs %.1f)"
-        % ("holder inside the plate edge ", 45.9 - far, 1.5))
+                 for dx in (-_tw / 2, _tw / 2)
+                 for dz in (_t1, -CASE_TIE_Z)])
+    say("   %s %6.2f  (needs %.2f)"
+        % ("case inside the plate edge   ", 45.9 - far, 1.5))
     if 45.9 - far < 1.5:
-        bad.append("DB_eye_holder overhangs DB_face by %.2f" % (far - 45.9))
-    say("   the eye is OPEN at O%.1f - the ring seats on the %.2f shoulder,"
-        % (RING_APER, (RING_OD - RING_APER) / 2))
-    say("   the land presses its rim all round, and the lead leaves straight")
-    say("   back out through the O%.1f middle, bent round nothing" % HOLD_ID)
+        bad.append("DB_eye_case overhangs DB_face by %.2f" % (far - 45.9))
+    say("   the ring drops in from the BACK, past three barbs, and seats")
+    say("   LEDs-first on the O%.1f flange.  The case holds it with no face"
+        % CASE_APER)
+    say("   plate and no screws - so an eye can be wired and lit on a bench.")
+    say("   Behind the board is %.1f of open bore and nothing else: that is"
+        % (RING_BACK_Y - CASE_Y0))
+    say("   where the solder and the leads are, and nothing touches them.")
 
     say("\n--- printed parts cutting into each other ---------------------")
     for v, an, bn in clashes(verbose):
