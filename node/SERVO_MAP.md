@@ -16,8 +16,10 @@ limits. The horns were re-indexed afterward, so commanded servo angle and
 physical arm pose still need calibration.
 
 The neck was electrically centered at 1500 µs, then tested without observed
-binding to 2000 µs (+45°, left) and 1000 µs (−45°, right). These are
-bench-proven electrical limits only; runtime pan control is not implemented.
+binding to 2000 µs (+45°, left) and 1000 µs (−45°, right). Those are
+bench-proven electrical limits only. Runtime `pan` is deliberately held to
+the much narrower 1340–1660 µs envelope observed on the assembled robot —
+see below.
 
 ## Head motion verified on the assembled robot
 
@@ -61,55 +63,127 @@ protractor.
   to +40 degrees, while equivalent downward travel has **not** been approved.
   Do not turn the CAD value into a symmetric runtime limit.
 
-## Speech and arm-motion integration handoff
+## Speech and body-motion integration — done 2026-09-03
 
-The synchronization path already exists. `brain/playback.py` computes the RMS
-level of each audio chunk when that chunk is actually released to the hardware
-node. `brain/voice_core.py` sends that level to `Gestures.feed`, and
-`brain/gestures.py` turns the smoothed envelope into arm poses. Add head motion
-to that same `Gestures` instance; do not drive it from Realtime API audio-delta
-events, which run ahead of audible speech.
+All four axes are now driven. The handoff that used to live here is
+implemented; what follows is what was built, so the next person does not have
+to read the code to find out what is enforced where.
 
-The wire format can carry all four axes in one frame:
+`brain/playback.py` computes the RMS level of each audio chunk at the moment
+that chunk is released to the hardware node. `brain/voice_core.py` fans that
+one envelope out to `brain/gestures.py`, which shapes all four axes, and to
+`brain/mood.py`, which drives the eyes. It is deliberately not taken from
+Realtime API audio-delta events, which run ahead of audible speech.
+
+### The wire
+
+One socket carries audio as bytes and everything else as text, so motion
+cannot drift against the speech it belongs to.
 
 ```json
 {"type":"pose","arm_l":12.0,"arm_r":8.0,"pan":4.0,"nod":2.0}
+{"type":"eyes","mood":"listening","level":0.31}
+{"type":"limp"}
 ```
 
-Implementation constraints for the pairing work:
+Any subset of axes may appear in a `pose`. An unknown axis or mood is logged
+and ignored rather than taking the connection down.
 
-1. Extend the node-side controller in `humalien_node/arms.py` with per-axis
-   channel, center, sign, limits, trim, and slew configuration. The current
-   arm-wide constants are not sufficient for the narrower head envelopes.
-2. Enforce the head limits on the Pi, not only in `brain/gestures.py`. Use
-   `pan` ±14.4 degrees and `nod` -3.6 to +40 degrees as the observed local
-   safety limits, backed by the raw pulse ranges above. Keep ordinary speech
-   nods inside the much smaller -3.6 to +3.6 degree envelope initially.
-3. Keep the head subtler than the arms. Reuse the playback envelope, but use a
-   slower/low-amplitude phase for pan and nod so the head follows phrases rather
-   than individual syllables.
-4. Return both head targets to zero after speech. On disconnect or explicit
-   `limp`, release all four channels; holding at zero should be an intentional
-   pose, not the failure mode.
-5. Update `node/tests/test_arms.py`, `node/tests/test_control.py`, and
-   `brain/tests/test_gestures.py` before enabling head axes in normal runtime.
+### What the node enforces
 
-The active geometry in `cad/desk_bot.py` defines `ARM_RANGE = (-20, 75)` and
-uses positive pose angles for forward movement on both arms. The node must
-apply the opposite electrical signs shown above. Do not substitute the raw
-bench endpoints for the CAD range without completing mechanical calibration.
+`humalien_node/arms.py` carries a per-axis table — channel, sign, limits,
+rest, speed, acceleration, trim and its own pulse clamp. The head limits are
+the pulses observed above, not the CAD ranges:
 
-`humalien_node.arms` holds this map for the two arm channels, and is the
-only place the sign inversion above is applied - everything upstream of it
-speaks in CAD degrees where positive is forward on both arms. Walk each arm
-with `python -m humalien_node.arm_bench` before letting the brain drive them.
+| axis | limits | pulses | top speed | acceleration |
+| --- | --- | --- | --- | --- |
+| `arm_l` / `arm_r` | -20..+75 deg | 600..2400 us | 100 deg/s | 600 deg/s² |
+| `pan` | ±14.4 deg | 1340..1660 us | 18 deg/s | 55 deg/s² |
+| `nod` | -3.6..+40 deg | 1056..1540 us | 10 deg/s | 30 deg/s² |
 
-Channels 1 and 2 are deliberately absent from that module. Channel 1 has a
-bench-proven center, sign, and electrical range. Channel 2 now has a verified
-direction, an upward maximum, and only a small approved downward envelope;
-full downward travel remains uncalibrated. Neither has a runtime controller
-yet. An axis that cannot be addressed cannot be driven into a hard stop by a
-bug upstream; add each only with the local clamps and tests described above.
+The pulse clamp is per axis on purpose: a bad trim or a recalibrated
+`US_PER_DEG` cannot walk the neck out into an arm's pulse range.
 
-`humalien_node.eyes_bench` targets the archived three-servo eye mechanism; it
-does not contain the desk bot's four-channel map.
+### Acceleration, and why it is not just a speed limit
+
+The NeoPixel eyes are wired through the neck — power and data run from the Pi
+up past the nod joint into the head. A pure speed limit still steps velocity
+from zero to the cap in one frame, so the axis leaves and arrives with a snap
+however low the cap is. Every axis is therefore acceleration-limited as well,
+with a discrete braking curve that arrives at rest instead of being stopped
+dead on the last frame.
+
+At these figures the head reaches its top speed in a third of a second, pan
+crosses its whole 28.8 degree range in 1.9 s, and nod crosses its 43.6
+degrees in 4.7 s. `head_bench`'s `profile` command prints this before
+anything moves.
+
+The head is also **parked at neutral before it is released** — on disconnect,
+on `limp`, and on the way out of both benches. An axis released off-centre
+has to be jumped back the next time it engages, because a limp servo has no
+known position to slew from, and that jump is the one move the eye wiring
+cannot afford.
+
+### The rates are the part that is still unobserved
+
+The pulse *endpoints* above were watched on the assembled robot. The *rates*
+were not: SERVO_MAP's earlier "proven slow rate" of 3.6 deg/s is what the old
+bench script ramped at, and a full pan sweep at that rate takes eight
+seconds. The figures in the table are the first ones fast enough to hold a
+conversation with.
+
+**Walk them with `python -m humalien_node.head_bench` before letting the
+brain drive the head unattended.** `profile`, then `nod`, `pan`, `sweep` and
+`talk`. If anything looks harsh, lower the acceleration first and the speed
+second, in `arms.py`.
+
+### What the brain shapes
+
+`brain/gestures.py` keeps ordinary speech motion far inside those limits: pan
+±4.5 degrees and nod ±2.4 on the speech envelope, on a beat of 0.17 Hz
+against the arms' 0.45 Hz, so the head follows phrases rather than syllables.
+It runs the head on its own slower envelope (`HEAD_ATTACK`) for the same
+reason — the arms' 50 ms attack, applied to a neck, asks for twenty degrees a
+second the instant anybody starts talking.
+
+Face tracking adds to that: up to 65% of the way toward whoever is being
+talked to, and up to 6 degrees of looking **up** to meet a face above the
+camera. That upward figure is the one number here that exceeds this
+document's earlier "keep speech nods inside ±3.6 initially" — it is in the
+only direction that was ever walked (up, to +40, under observation), it is a
+seventh of that travel, and `NOD_TRACK_UP = 0` in `gestures.py` switches it
+off without touching anything else.
+
+Nothing ever stops moving completely: with no face and no speech the head
+drifts on two incommensurate slow sines, because a head parked dead centre
+reads as switched off.
+
+### Who to look at, when there is more than one
+
+`brain/attention.py`. Picking the largest face every frame — which is what
+`gaze.select_primary_face` does — flips several times a second between two
+people sitting at the same desk, because their measured areas cross over on
+detector noise. A neck driven from that hunts between them for as long as
+they both stay in the room.
+
+So the target is held by position, not area; a challenger must be 1.35× the
+size for 1.2 s, and no switch may happen within 2.5 s of the last one.
+`brain/tests/test_attention.py` reproduces the flicker with the naive rule
+and asserts zero hunting with the real one.
+
+Every 9-22 seconds, with somebody else present, the head deliberately glances
+at them for 1.6 s and comes back. That is a decision on a slow timer, not
+frame-by-frame flicker, and it is the difference between looking around a
+room and twitching.
+
+### Calibration still owed
+
+`TRIM` is still all zeroes and `US_PER_DEG` is still the nominal MG90S
+1000 us per 90 degrees, unmeasured on this mechanism. The arm horns were
+re-indexed after the channel map was found, so commanded angle and physical
+pose do not yet agree. Both benches have `trim`, `pulse`, `calc` and `save`
+for exactly this; `save` prints the line to paste back.
+
+Walk each arm with `python -m humalien_node.arm_bench` and the head with
+`python -m humalien_node.head_bench` before letting the brain drive them. The
+two tools no longer touch each other's channels.

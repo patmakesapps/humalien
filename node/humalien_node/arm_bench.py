@@ -20,6 +20,7 @@ import sys
 import time
 
 from humalien_node.arms import (
+    ARM_AXES,
     Arms,
     CENTER_US,
     CHANNELS,
@@ -166,7 +167,11 @@ def main():
 
     arms = Arms(driver)
 
-    print("arm bench. channels: %s" % CHANNELS)
+    # The head has its own bench. Driving it from here would move axes this
+    # tool has no commands for and no limits printed in its help.
+    print("arm bench. channels: %s"
+          % {name: CHANNELS[name] for name in ARM_AXES})
+    print("the head is humalien_node.head_bench, not this one.")
     print("all limp.\n%s" % HELP)
 
     try:
@@ -186,15 +191,15 @@ def main():
                     break
 
                 elif command == "engage":
-                    arms.engage()
+                    arms.engage(ARM_AXES)
                     print("  engaged at REST %.0f deg. Arms are live." % REST)
 
                 elif command == "off":
-                    arms.limp()
+                    arms.limp(ARM_AXES)
                     print("  limp: all")
 
                 elif command == "rest":
-                    for axis in CHANNELS:
+                    for axis in ARM_AXES:
                         goto(arms, axis, REST, seconds=0.9)
 
                 elif command in AXES and args:
@@ -203,7 +208,7 @@ def main():
                 elif command == "both" and args:
                     degrees = float(args[0])
 
-                    for axis in CHANNELS:
+                    for axis in ARM_AXES:
                         arms.set_target(axis, degrees)
 
                     settle(arms, 1.2)
@@ -239,8 +244,8 @@ def main():
                 print(HELP)
 
     finally:
-        arms.limp()
-        print("all limp. good bench.")
+        arms.limp(ARM_AXES)
+        print("arms limp. good bench.")
 
     return 0
 

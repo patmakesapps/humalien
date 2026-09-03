@@ -54,3 +54,59 @@ the initial chain test because it was not independently powered; it is being
 resoldered before the next test. Do not record left/right order from that
 failed test.
 
+
+## Runtime driver — added 2026-09-03
+
+`humalien_node/pixels.py` renders the eyes; `humalien_node/pixel_bench.py`
+walks them by hand. The post-solder test above is `order` in that bench.
+
+### The brain sends a mood, not pixels
+
+The animation runs on the Pi at 40 Hz. The brain sends one small message
+whenever the answer changes, on the same websocket as the audio:
+
+```json
+{"type":"eyes","mood":"listening","level":0.31,"brightness":0.2}
+```
+
+Rendered frames over the wire would put 40 messages a second of pixel data
+next to the speech and hand every one of them a chance to stutter. A mood
+stays true until it changes; a frame is perishable. `brightness` is optional
+and is sent once, on the first frame, so a value being tuned at the bench is
+not overwritten twenty times a second.
+
+The moods are `idle`, `listening`, `thinking`, `speaking`, `excited`,
+`happy`, `curious`, `surprised`, `confused`, `sleepy` and `off`.
+`brain/mood.py` picks between them; `brain/tests/test_mood.py` asserts the
+two lists have not drifted apart, because the node silently ignores a mood it
+does not know.
+
+`listening` and `speaking` scale with `level` — the microphone's loudness and
+the robot's own playback envelope respectively. The node smooths that between
+messages and decays it after half a second of silence, so a brain that dies
+mid-word cannot leave an eye stuck at full brightness.
+
+The eyes blink on their own, every 2.6–7 s, as a lid sweeping down the ring
+and back. It is not driven from the brain and it does not need to be.
+
+### Brightness and current
+
+`BRIGHTNESS` starts at 0.20 and is hard-capped at 0.60 whatever the brain
+asks for. Above that sits a current budget: any frame that would draw more
+than 900 mA is scaled down **as a whole**, so its shape survives — clipping
+the brightest pixels would change which mood you are looking at, and dimming
+does not.
+
+At the default no mood comes close: the brightest, `excited`, draws about
+180 mA of the 900. Raise it with `bright` at the bench and paste back what
+looks right through the diffusers. The 48-per-channel figure above was
+measured on a bare ring and is not the same thing.
+
+### Still to record
+
+- Which physical eye is logical pixels 0–11. Run `order` and set
+  `FIRST_RING_IS_LEFT` in `pixels.py`. Getting it wrong only mirrors the
+  animation, so it is not urgent — but it is still unrecorded.
+- Where pixel 0 sits on the face. Run `clock` and set `PIXEL_ZERO_DEGREES`.
+  Everything angular — the blink, the `happy` squint, the rotating arcs —
+  is measured clockwise from twelve o'clock and assumes that value.

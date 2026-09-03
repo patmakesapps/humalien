@@ -1,9 +1,10 @@
 """What Humalien can do besides talk.
 
-Three tools, deliberately. Looking is slow and costs money, so the model
+Four tools, deliberately. Looking is slow and costs money, so the model
 decides when it is worth it. Recognition is free and already running, so
 asking who is here is cheap. Remembering a name writes immediately, because
-the rest of the conversation depends on it.
+the rest of the conversation depends on it. Feeling something is instant and
+changes only how the eyes look.
 
 Each tool declares its schema next to its handler. See tool_registry.py.
 """
@@ -14,6 +15,7 @@ from dataclasses import dataclass, field
 from conversation import ConversationState
 from describe import OllamaDescriber, to_jpeg
 from eyes import Eyes
+from mood import FEELINGS
 from people import PeopleStore
 from tool_registry import ToolError, ToolRegistry
 
@@ -45,6 +47,7 @@ class Robot:
     describer: OllamaDescriber
     state: ConversationState = field(default_factory=ConversationState)
     realtime: object | None = None
+    mood: object | None = None
     vision: str = REALTIME
 
     # The picture currently in front of the model, if any. Only ever one.
@@ -194,3 +197,34 @@ async def remember_name(robot: Robot, name: str) -> dict:
     log(f"remember_name -> {person.name} (#{person.id})")
 
     return {"saved": person.name}
+
+
+@tools.tool(
+    "feel",
+    "Show an emotion in your eyes. Instant, silent, and free - call it "
+    "whenever what you are about to say has a feeling attached, and keep "
+    "talking. Your eyes already handle listening, thinking and talking on "
+    "their own; this is only for the feeling underneath. Do not mention it "
+    "or describe your eyes out loud.",
+    properties={
+        "feeling": {
+            "type": "string",
+            "enum": list(FEELINGS),
+            "description": "How you feel right now.",
+        }
+    },
+    required=["feeling"],
+)
+async def feel(robot: Robot, feeling: str) -> dict:
+    if robot.mood is None:
+        # No eyes on this robot. Not worth an error the model has to
+        # apologise for - it simply does not show.
+        return {"shown": None}
+
+    if not robot.mood.feel(feeling):
+        raise ToolError(
+            f"{feeling!r} is not something you can show. Choose one of: "
+            + ", ".join(FEELINGS)
+        )
+
+    return {"shown": feeling}

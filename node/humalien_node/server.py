@@ -7,7 +7,8 @@ from datetime import datetime
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from humalien_node.arms import Arms, Pca9685Driver
+from humalien_node.arms import ARM_AXES, Arms, HEAD_AXES, Pca9685Driver
+from humalien_node.pixels import Pixels, Pi5NeoPixelWrite
 
 
 # Bind every interface, not just IPv4. The brain and the node have landed
@@ -31,6 +32,11 @@ PERIOD_TIME = 20_000
 # One second of audio in the wire format above. Byte counts mean nothing on
 # their own; seconds of speech can be compared against what was said.
 BYTES_PER_SECOND = SAMPLE_RATE * CHANNELS * 2
+
+# How long to spend bringing the head home before releasing it anyway. Long
+# enough to cross the whole nod range at the gentle rate humalien_node.arms
+# uses, short enough that a jammed axis cannot hold the server open.
+PARK_TIMEOUT = 6.0
 
 
 def log(message):
@@ -113,12 +119,12 @@ async def microphone_to_brain(websocket, microphone, counts):
         await websocket.send(chunk)
 
 
-def apply_control(arms, message):
+def apply_control(arms, message, pixels=None):
     """Act on one text frame from the brain.
 
-    Audio is bytes and motion is text, on one socket, because the two have
-    to stay in step: a gesture that arrives on a second connection would
-    drift against the speech it belongs to.
+    Audio is bytes and motion is text, on one socket, because the three have
+    to stay in step: a gesture or an eye colour that arrived on a second
+    connection would drift against the speech it belongs to.
     """
 
     try:
@@ -140,6 +146,18 @@ def apply_control(arms, message):
             if not arms.set_target(axis, degrees):
                 log(f"Ignoring unknown axis {axis!r}")
 
+    elif kind == "eyes":
+        # The brain sends a mood, not pixels. humalien_node.pixels says why.
+        if pixels is None:
+            return
+
+        if not pixels.set(
+            mood=event.get("mood"),
+            level=event.get("level"),
+            brightness=event.get("brightness"),
+        ):
+            log(f"Ignoring unknown eye mood {event.get('mood')!r}")
+
     elif kind == "limp":
         if arms is not None:
             arms.limp()
@@ -149,14 +167,14 @@ def apply_control(arms, message):
         log(f"Ignoring control frame of type {kind!r}")
 
 
-async def brain_to_speaker(websocket, speaker, counts, arms=None):
+async def brain_to_speaker(websocket, speaker, counts, arms=None, pixels=None):
     # Report roughly once per second of audio, so the log shows whether
     # speech arrives as a steady stream or in starved bursts.
     reported = 0
 
     async for message in websocket:
         if isinstance(message, str):
-            apply_control(arms, message)
+            apply_control(arms, message, pixels)
             continue
 
         if isinstance(message, bytes):
@@ -212,7 +230,7 @@ async def send_node_ready(websocket):
     await websocket.send(json.dumps(message))
 
 
-async def handle_connection(websocket, arms=None):
+async def handle_connection(websocket, arms=None, pixels=None):
     remote = websocket.remote_address
 
     log("=" * 60)
@@ -222,6 +240,7 @@ async def handle_connection(websocket, arms=None):
     speaker = None
     errors_task = None
     motion_task = None
+    pixel_task = None
     counts = {"mic": 0, "speaker": 0}
 
     try:
@@ -242,19 +261,27 @@ async def handle_connection(websocket, arms=None):
         )
 
         if arms is not None:
-            # Limp until a brain is actually here to drive them. The arms
-            # come up at REST rather than wherever they were left.
+            # Limp until a brain is actually here to drive them. The arms and
+            # head come up at rest rather than wherever they were left.
             arms.engage()
             motion_task = asyncio.create_task(arms.run())
 
-            log("Arms engaged at rest")
+            log("Arms and head engaged at rest")
+
+        if pixels is not None:
+            # The eyes come up alive before the brain says anything, so a
+            # booting robot looks awake rather than broken.
+            pixels.set(mood="idle", level=0.0)
+            pixel_task = asyncio.create_task(pixels.run())
+
+            log("Eyes on")
 
         mic_task = asyncio.create_task(
             microphone_to_brain(websocket, microphone, counts)
         )
 
         speaker_task = asyncio.create_task(
-            brain_to_speaker(websocket, speaker, counts, arms)
+            brain_to_speaker(websocket, speaker, counts, arms, pixels)
         )
 
         done, pending = await asyncio.wait(
@@ -290,11 +317,33 @@ async def handle_connection(websocket, arms=None):
         if motion_task is not None:
             motion_task.cancel()
 
+        if pixel_task is not None:
+            pixel_task.cancel()
+
         if arms is not None:
-            # Losing the brain must not leave a servo stalled holding an arm
-            # out. No pulse holds nothing and gets nothing hot.
+            # The arms can simply stop. No pulse holds nothing and gets
+            # nothing hot, and an unpowered arm hangs where it was.
+            arms.limp(ARM_AXES)
+
+            # The head cannot. Releasing it wherever it happened to be means
+            # the next engage jumps it there and back, and the eye wiring
+            # runs through the nod joint. Bring it home under acceleration
+            # control first, then let go - but never wait forever for a
+            # mechanism that may be jammed.
+            if await arms.park(HEAD_AXES, timeout=PARK_TIMEOUT):
+                log("Head parked at neutral")
+            else:
+                log("Head did not reach neutral in time - releasing anyway")
+
             arms.limp()
-            log("Arms limp")
+            log("Arms and head limp")
+
+        if pixels is not None:
+            # NeoPixels latch: stopping the render loop would leave the last
+            # frame lit forever. A robot with no brain must not sit there
+            # staring at an empty room.
+            pixels.clear()
+            log("Eyes dark")
 
         log(
             f"Session totals — mic {counts['mic'] / BYTES_PER_SECOND:.1f}s, "
@@ -324,18 +373,26 @@ async def main():
     )
 
     arms = None
+    pixels = None
 
     try:
         arms = Arms(Pca9685Driver())
-        log("Arms ready on PCA9685 channels 0 (right) and 3 (left)")
+        log("Servos ready: arms on 0/3, neck on 1, nod on 2")
 
     except Exception as error:
-        # Audio is the point of this node; arms are an addition to it. A
+        # Audio is the point of this node; motion is an addition to it. A
         # missing servo board must not cost the robot its voice.
-        log(f"No servo board, running without arms - {error}")
+        log(f"No servo board, running without arms or head - {error}")
+
+    try:
+        pixels = Pixels(Pi5NeoPixelWrite())
+        log("Eyes ready on GPIO13, 24 pixels")
+
+    except Exception as error:
+        log(f"No NeoPixels, running blind-faced - {error}")
 
     async with serve(
-        functools.partial(handle_connection, arms=arms),
+        functools.partial(handle_connection, arms=arms, pixels=pixels),
         HOST,
         PORT,
         max_size=None,

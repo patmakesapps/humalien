@@ -7,16 +7,19 @@ from pathlib import Path
 from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 
+from attention import Attention
 from audio_adapter import ModelToPiAudio, PiToModelAudio
+from gaze import GazeController, HOLDING, TRACKING
 from gestures import Gestures
 from playback import BYTES_PER_SECOND as PI_BYTES_PER_SECOND
 from conversation import ConversationState
 from describe import OllamaDescriber
 from eyes import Eyes
 from mic_gate import HALF_DUPLEX, build_mic_gate
+from mood import Mood
 from people import PeopleStore
 from perception import Perception
-from playback import PacedPlayback
+from playback import PacedPlayback, level as loudness_of
 from realtime_client import RealtimeClient, load_persona
 from robot_tools import Robot, tools
 
@@ -32,6 +35,10 @@ FORGET_PRESENCE_AFTER = 60.0
 # them again. Detection drops out for a frame all the time; without this,
 # a flicker makes it introduce itself over and over.
 RE_OFFER_AFTER = 20.0
+
+# How often the head reconsiders where to look. Faster than recognition runs,
+# because the smoothing wants a steady clock more than it wants new data.
+TRACK_INTERVAL = 0.1
 
 
 def log(message: str) -> None:
@@ -56,7 +63,12 @@ def looks_like_image_trouble(event: dict) -> bool:
     )
 
 
-async def pi_to_realtime(pi_websocket, realtime: RealtimeClient, gate) -> None:
+async def pi_to_realtime(
+    pi_websocket,
+    realtime: RealtimeClient,
+    gate,
+    mood: Mood | None = None,
+) -> None:
     adapter = PiToModelAudio()
     listening = True
 
@@ -75,6 +87,12 @@ async def pi_to_realtime(pi_websocket, realtime: RealtimeClient, gate) -> None:
             if not listening:
                 listening = True
                 log("Microphone open")
+
+            # The eyes answer the room's voice while it is listening. Taken
+            # from the raw microphone rather than the resampled copy, so a
+            # converter that drops a chunk cannot flatten the reaction.
+            if mood is not None:
+                mood.hearing(loudness_of(message))
 
             converted_audio = adapter.convert(message)
 
@@ -117,6 +135,7 @@ async def realtime_to_pi(
     playback: PacedPlayback,
     robot: Robot,
     state: ConversationState,
+    mood: Mood | None = None,
 ) -> None:
     adapter = ModelToPiAudio()
     answering = False
@@ -162,8 +181,17 @@ async def realtime_to_pi(
         elif event_type == "response.created":
             state.response_active = True
 
+            # The eyes go to work the moment the model does. This is the gap
+            # people read as the robot having heard them, and leaving it
+            # blank is what makes a slow answer feel like a broken one.
+            if mood is not None:
+                mood.thinking(True)
+
         elif event_type == "response.done":
             state.response_active = False
+
+            if mood is not None:
+                mood.thinking(False)
 
         elif event_type == "response.function_call_arguments.done":
             # Deliberately not awaited. Looking takes several seconds, and
@@ -219,6 +247,70 @@ async def realtime_to_pi(
             # it goes to Ollama instead.
             if looks_like_image_trouble(event):
                 robot.fall_back_to_ollama("the session rejected an image")
+
+
+async def follow_faces(
+    eyes: Eyes,
+    gestures: Gestures | None,
+    mood: Mood | None,
+) -> None:
+    """Point the head at whoever is being talked to.
+
+    Three layers, and each exists because the one below it is not enough:
+
+      attention.Attention  picks WHICH face, and commits to it. Two people at
+                           a desk measure within a few percent of each other,
+                           so "the biggest face" alternates several times a
+                           second and the neck would hunt between them.
+      gaze.GazeController  smooths the chosen face and decides what a lost
+                           detection means - hold briefly, then give up.
+      gestures.Gestures    turns that into degrees, slowly, and mixes it with
+                           the speech motion and the idle drift.
+
+    Nothing here talks to a servo. The head can be wrong about who it is
+    looking at; it cannot be wrong about how far it may turn.
+    """
+
+    attention = Attention()
+    controller = GazeController()
+    had_somebody = False
+
+    while True:
+        await asyncio.sleep(TRACK_INTERVAL)
+
+        frame = eyes.frame
+
+        if frame is None:
+            continue
+
+        height, width = frame.shape[:2]
+        now = time.monotonic()
+
+        attended = attention.update(
+            [sighting.detection.box for sighting in eyes.sightings],
+            frame_width=width,
+            now=now,
+        )
+
+        target = controller.update(
+            attended.face if attended is not None else None,
+            frame_width=width,
+            frame_height=height,
+            now=now,
+        )
+
+        if gestures is not None:
+            if target.state in (TRACKING, HOLDING):
+                gestures.look_at(target.x, target.y)
+            else:
+                # Recentering or idle. Let go rather than pinning the head
+                # to dead ahead - the drift in Gestures is better company.
+                gestures.stop_looking()
+
+        if mood is not None and attended is not None:
+            mood.seen(new=not had_somebody)
+
+        had_somebody = attended is not None
 
 
 async def watch_the_room(
@@ -337,7 +429,14 @@ async def run_voice_core() -> None:
     show_video = os.getenv("HUMALIEN_SHOW_VIDEO", "0") == "1"
     greet_on_sight = os.getenv("HUMALIEN_GREET_ON_SIGHT", "1") == "1"
     gesturing = os.getenv("HUMALIEN_GESTURES", "1") == "1"
+    expressive = os.getenv("HUMALIEN_EYES", "1") == "1"
+    tracking = os.getenv("HUMALIEN_TRACK_FACES", "1") == "1"
     persona_file = os.getenv("HUMALIEN_PERSONA")
+
+    # Overrides the node's own default. Set it once from the bench, in
+    # brain/.env, rather than editing the Pi.
+    eye_brightness = os.getenv("HUMALIEN_EYE_BRIGHTNESS")
+    eye_brightness = float(eye_brightness) if eye_brightness else None
 
     if not api_key:
         raise RuntimeError(f"OPENAI_API_KEY was not found in {ENV_FILE}")
@@ -358,11 +457,27 @@ async def run_voice_core() -> None:
             log("Connected to Pi")
 
             gestures = Gestures(pi_websocket, log=log) if gesturing else None
-
-            playback = PacedPlayback(
-                pi_websocket,
-                on_level=gestures.feed if gestures else None,
+            mood = (
+                Mood(pi_websocket, log=log, brightness=eye_brightness)
+                if expressive
+                else None
             )
+
+            def on_level(level: float) -> None:
+                """One playback envelope, two things driving off it.
+
+                Both the body and the eyes have to move with the speech that
+                is actually audible, and this is the only moment the audio
+                and the wall clock agree. See PacedPlayback.is_speaking.
+                """
+
+                if gestures is not None:
+                    gestures.feed(level)
+
+                if mood is not None:
+                    mood.speaking(level)
+
+            playback = PacedPlayback(pi_websocket, on_level=on_level)
             gate = build_mic_gate(gate_name, playback)
             state = ConversationState()
             robot = Robot(
@@ -370,6 +485,7 @@ async def run_voice_core() -> None:
                 store=store,
                 describer=describer,
                 state=state,
+                mood=mood,
                 vision=vision,
             )
 
@@ -397,10 +513,10 @@ async def run_voice_core() -> None:
 
                 tasks = {
                     asyncio.create_task(
-                        pi_to_realtime(pi_websocket, realtime, gate)
+                        pi_to_realtime(pi_websocket, realtime, gate, mood)
                     ),
                     asyncio.create_task(
-                        realtime_to_pi(realtime, playback, robot, state)
+                        realtime_to_pi(realtime, playback, robot, state, mood)
                     ),
                     asyncio.create_task(playback.run()),
                     asyncio.create_task(eyes.run()),
@@ -409,7 +525,19 @@ async def run_voice_core() -> None:
                 if gestures:
                     tasks.add(asyncio.create_task(gestures.run()))
                 else:
-                    log("Gestures are off - the arms will not move")
+                    log("Gestures are off - the arms and head will not move")
+
+                if mood:
+                    tasks.add(asyncio.create_task(mood.run()))
+                else:
+                    log("Eye moods are off - the eyes will sit at idle")
+
+                if tracking:
+                    tasks.add(
+                        asyncio.create_task(follow_faces(eyes, gestures, mood))
+                    )
+                else:
+                    log("Face tracking is off - the head drifts on its own")
 
                 if greet_on_sight:
                     tasks.add(

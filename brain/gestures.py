@@ -1,4 +1,4 @@
-"""Arm motion that follows what the robot is actually saying.
+"""Body motion that follows what the robot is actually saying.
 
 The shape of the idea is in PacedPlayback.is_speaking: the model finishes
 generating a response about ten times sooner than the speaker finishes
@@ -6,19 +6,34 @@ playing it, so anything driven from `response.output_audio.delta` gestures
 through a sentence the head has not said yet and then stops dead while it
 keeps talking. The only place the audio and the wall clock agree is the
 moment a chunk is released to the node, so that is where the envelope is
-taken and that is what drives these arms.
+taken and that is what drives all four axes.
 
 WHO ENFORCES WHAT
 -----------------
-This file SHAPES motion. node/humalien_node/arms.py ENFORCES it - the
-range clamp, the electrical sign flip, and the slew rate all live down
-there, on the machine holding the servos. A bug here can make the robot
-gesture badly. It cannot make it drive an arm into a hard stop, and that
-separation is deliberate: the brain is the part that talks to the network
-and the part most likely to be wrong.
+This file SHAPES motion. node/humalien_node/arms.py ENFORCES it - the range
+clamp, the electrical sign flips, and the slew rates all live down there, on
+the machine holding the servos. A bug here can make the robot gesture badly.
+It cannot make it drive the neck into a hard stop, and that separation is
+deliberate: the brain is the part that talks to the network and the part most
+likely to be wrong.
 
-The limits below are copies of cad/desk_bot.py, used to keep generated
+The limits below are copies of what the node enforces, used to keep generated
 poses sensible before they are sent. They are not the safety boundary.
+
+WHY THE HEAD IS NOT JUST SMALLER ARMS
+-------------------------------------
+The arms beat on the syllables. The head runs at about a third of that rate
+and a fraction of the amplitude, because a neck that keeps time with speech
+reads as a metronome wearing a face. Three things are summed into it:
+
+  1. A slow sway and nod on the speech envelope - the head follows phrases.
+  2. Where the face it is talking to actually is, via `look_at`. Gently:
+     TRACK_GAIN is well under 1, so the robot turns TOWARD somebody rather
+     than locking onto them like a gun turret.
+  3. A very slow idle drift on two incommensurate periods, so a robot that
+     is neither speaking nor tracking still looks like it is inhabited.
+
+Nothing here ever stops moving completely. That is the point.
 """
 
 import asyncio
@@ -27,10 +42,20 @@ import math
 import time
 
 
-# From cad/desk_bot.py. Positive is FORWARD on both arms; the node deals
-# with the fact that the two channels are wired in opposite directions.
+# From cad/desk_bot.py. Positive is FORWARD on both arms; the node deals with
+# the fact that the two channels are wired in opposite directions.
 ARM_RANGE = (-20.0, 75.0)
 ARM_REST = -8.0
+
+# Mirrors node/humalien_node/arms.py, which mirrors what was observed on the
+# assembled robot. See node/SERVO_MAP.md. Positive pan is the robot's own
+# LEFT; positive nod is UP.
+PAN_RANGE = (-14.4, 14.4)
+
+# SERVO_MAP.md allows the node down to -3.6 and up to +40. Ordinary speech
+# motion is deliberately kept inside the small symmetric envelope it asks
+# for; only deliberate looking-up borrows any of the rest.
+NOD_RANGE = (-3.6, 8.0)
 
 # How loud a chunk has to be to earn a full-sized gesture. Speech sits well
 # below full scale, so an envelope used raw barely moves the arms at all.
@@ -42,30 +67,114 @@ LEVEL_REFERENCE = 0.12
 ATTACK = 0.05
 RELEASE = 0.30
 
-# Silence, in seconds without a released chunk, before the arms go home.
+# Silence, in seconds without a released chunk, before the body goes home.
 SILENCE_AFTER = 0.25
 
-# The gesture itself. LIFT is how far both arms come up when talking at a
-# normal volume; SWING is how far they then move against each other.
+# The arm gesture. LIFT is how far both arms come up when talking at a normal
+# volume; SWING is how far they then move against each other.
 LIFT = 26.0
 SWING = 14.0
 
-# Beat rate of the alternation, in hertz. Slower than speech on purpose:
-# this is the rhythm of somebody moving their hands while making a point,
-# not one gesture per syllable.
+# Beat rate of the alternation, in hertz. Slower than speech on purpose: this
+# is the rhythm of somebody moving their hands while making a point, not one
+# gesture per syllable.
 BEAT_HZ = 0.45
 
 # Radians of phase between the arms. Deliberately not pi - exact opposition
 # reads as a mechanism keeping time rather than a person talking.
 PHASE = 2.2
 
-# How often a pose goes to the node. The node slews at 50 Hz between
-# whatever targets it has, so sending faster than this buys nothing.
+# ----------------------------------------------------------------- the head
+
+# The head's own beat, well under the arms'. Phrases, not syllables.
+HEAD_BEAT_HZ = 0.17
+
+# The head's own envelope, well slower than the arms'. ATTACK of 0.05 s is
+# right for a hand that lands with the syllable, and wrong for a neck: the
+# head's amplitudes all scale with the envelope, so an envelope that snaps
+# from 0 to 1 in fifty milliseconds asks the neck for twenty degrees a second
+# the instant anybody starts talking. The node would refuse it - it is
+# acceleration-limited - but a refused request is a head visibly lagging its
+# own gestures. Easing in over a third of a second asks for what it can have.
+HEAD_ATTACK = 0.45
+HEAD_RELEASE = 0.70
+
+# How far the head moves on the speech envelope, in degrees, at full volume.
+# Small on purpose: this rides on top of wherever the robot is already
+# looking, and the sum still has to fit inside PAN_RANGE.
+PAN_SPEECH = 4.5
+NOD_SPEECH = 2.4
+
+# The head lifts very slightly while speaking, the way people do.
+NOD_SPEAKING_BIAS = 0.8
+
+# Idle drift. Two periods that do not divide into each other, so the wander
+# never repeats visibly. Amplitudes in degrees.
+PAN_IDLE = 3.2
+NOD_IDLE = 0.7
+PAN_IDLE_PERIOD = 11.3
+NOD_IDLE_PERIOD = 17.9
+
+# ------------------------------------------------------------- the tracking
+
+# How much of the way to a face the head actually turns. Under 1 on purpose:
+# a robot that centres a face perfectly looks like a security camera. This
+# turns toward somebody and lets the rest be implied.
+TRACK_GAIN = 0.65
+
+# Which way a face on the right of the CAMERA IMAGE moves the neck.
+#
+# gaze.py hands over x in [-1, 1], increasing left to right across the image.
+# A forward-facing camera sees the room the way the robot does, so a face at
+# x > 0 is to the robot's RIGHT, and the robot turns right, which is NEGATIVE
+# pan. If the head turns AWAY from the person on the bench, flip this sign -
+# and flip it here, not by negating x somewhere upstream.
+PAN_FROM_GAZE = -1.0
+
+# How far up the head is allowed to look to meet a face, in degrees.
+#
+# SERVO_MAP.md asks for ordinary speech nods inside +-3.6 "initially". This
+# exceeds that, in the one direction the mechanism was actually walked (up,
+# to +40, under direct observation), and by a fifth of the travel that was
+# approved. It is what lets a desk bot raise its face to somebody standing
+# over it instead of talking to their belt. Set it to 0 to switch looking-up
+# off entirely without touching anything else.
+NOD_TRACK_UP = 6.0
+
+# How long a gaze target stays interesting after the last face update. The
+# vision loop drops frames constantly; without this the head would snap back
+# to centre between detections.
+GAZE_STALE_AFTER = 1.5
+
+# How fast the head's own idea of where to look catches up with the tracker,
+# in seconds. This is a second, slower smoothing on top of GazeController's,
+# and it is what stops the neck reacting to a head turning in a chair.
+GAZE_TAU = 0.9
+
+# ------------------------------------------------------------------ the wire
+
+# How often a pose goes to the node. The node slews at 50 Hz between whatever
+# targets it has, so sending faster than this buys nothing.
 TICK = 0.05
 
 # Degrees of change worth a message. Holding still should be silent on the
 # wire rather than 20 identical poses a second.
 DEADBAND = 0.4
+
+# The head moves through much smaller angles than the arms, so the arms'
+# deadband would swallow its motion entirely.
+HEAD_DEADBAND = 0.15
+
+AXES = ("arm_l", "arm_r", "pan", "nod")
+
+DEADBANDS = {
+    "arm_l": DEADBAND,
+    "arm_r": DEADBAND,
+    "pan": HEAD_DEADBAND,
+    "nod": HEAD_DEADBAND,
+}
+
+REST_POSE = {"arm_l": ARM_REST, "arm_r": ARM_REST, "pan": 0.0, "nod": 0.0}
 
 
 def clamp(value, low, high):
@@ -73,9 +182,10 @@ def clamp(value, low, high):
 
 
 class Gestures:
-    """Turns the playback envelope into arm targets and sends them.
+    """Turns the playback envelope into body targets and sends them.
 
-    Feed it loudness from PacedPlayback; run() does the rest.
+    Feed it loudness from PacedPlayback and faces from the vision loop; run()
+    does the rest.
     """
 
     def __init__(self, websocket, log=None):
@@ -84,16 +194,32 @@ class Gestures:
 
         self.raw = 0.0
 
-        # Seconds since the last chunk was released, advanced by pose() on
-        # the same clock it uses for everything else. Reading the wall clock
-        # in here instead would leave the one path that matters - what the
-        # arms do when the talking stops - impossible to test.
+        # Seconds since the last chunk was released, advanced by pose() on the
+        # same clock it uses for everything else. Reading the wall clock in
+        # here instead would leave the one path that matters - what the body
+        # does when the talking stops - impossible to test.
         self.since_audio = SILENCE_AFTER
 
         self.level = 0.0
+
+        # The same envelope, followed slowly. See HEAD_ATTACK.
+        self.head_level = 0.0
+
         self.phase = 0.0
+        self.clock = 0.0
+
+        # Where the tracker last saw a face, in camera coordinates, and how
+        # long ago. None means nothing has ever been seen.
+        self.gaze = None
+        self.since_gaze = GAZE_STALE_AFTER
+
+        # The head's own smoothed idea of where to look, in degrees.
+        self.aim_pan = 0.0
+        self.aim_nod = 0.0
 
         self.last_sent = None
+
+    # ------------------------------------------------------------- the input
 
     def feed(self, loudness: float) -> None:
         """Called as each chunk of speech is released to the node."""
@@ -101,10 +227,63 @@ class Gestures:
         self.raw = loudness
         self.since_audio = 0.0
 
-    def pose(self, elapsed: float):
-        """Advance the envelope and the beat, and return (arm_l, arm_r)."""
+    def look_at(self, x: float, y: float) -> None:
+        """Called with a smoothed face position in camera coordinates.
+
+        x and y are gaze.GazeTarget's, in [-1, 1]: x increases left to right
+        across the image, y increases downward. Turning those into degrees is
+        this file's job, and turning degrees into pulses is the node's.
+        """
+
+        self.gaze = (clamp(float(x), -1.0, 1.0), clamp(float(y), -1.0, 1.0))
+        self.since_gaze = 0.0
+
+    def stop_looking(self) -> None:
+        """Forget the face. The head drifts back to its own devices."""
+
+        self.gaze = None
+        self.since_gaze = GAZE_STALE_AFTER
+
+    # -------------------------------------------------------------- the pose
+
+    def _aim(self, elapsed: float):
+        """Where the head wants to point, before speech is added.
+
+        Returns degrees. A stale or absent face aims at the idle drift rather
+        than at dead centre, so losing somebody does not freeze the neck.
+        """
+
+        drift_pan = PAN_IDLE * math.sin(2.0 * math.pi * self.clock / PAN_IDLE_PERIOD)
+        drift_nod = NOD_IDLE * math.sin(2.0 * math.pi * self.clock / NOD_IDLE_PERIOD)
+
+        if self.gaze is not None and self.since_gaze < GAZE_STALE_AFTER:
+            x, y = self.gaze
+
+            wanted_pan = PAN_FROM_GAZE * x * TRACK_GAIN * PAN_RANGE[1]
+
+            # y increases downward, so a face high in the frame is a negative
+            # y and wants a positive (upward) nod. Only upward: the mechanism
+            # has no approved downward travel to spend.
+            wanted_nod = max(0.0, -y) * NOD_TRACK_UP
+        else:
+            wanted_pan = drift_pan
+            wanted_nod = drift_nod
+
+        # Second-stage smoothing. GazeController already removes detector
+        # jitter; this removes the difference between a glance and a move.
+        catch_up = 1.0 - math.exp(-elapsed / GAZE_TAU)
+
+        self.aim_pan += (wanted_pan - self.aim_pan) * catch_up
+        self.aim_nod += (wanted_nod - self.aim_nod) * catch_up
+
+        return self.aim_pan, self.aim_nod
+
+    def pose(self, elapsed: float) -> dict:
+        """Advance the envelope and the beats, and return every axis."""
 
         self.since_audio += elapsed
+        self.since_gaze += elapsed
+        self.clock += elapsed
 
         speaking = self.since_audio < SILENCE_AFTER
         target = clamp(self.raw / LEVEL_REFERENCE, 0.0, 1.0) if speaking else 0.0
@@ -114,45 +293,67 @@ class Gestures:
         tau = ATTACK if target > self.level else RELEASE
         self.level += (target - self.level) * (1.0 - math.exp(-elapsed / tau))
 
-        # The beat only advances while there is something to gesture about,
-        # so speech always starts from the same place in the cycle rather
-        # than wherever a free-running clock happened to be.
+        head_tau = HEAD_ATTACK if target > self.head_level else HEAD_RELEASE
+        self.head_level += (target - self.head_level) * (
+            1.0 - math.exp(-elapsed / head_tau)
+        )
+
+        # The beat only advances while there is something to gesture about, so
+        # speech always starts from the same place in the cycle rather than
+        # wherever a free-running clock happened to be.
         if self.level > 0.01:
             self.phase += 2.0 * math.pi * BEAT_HZ * elapsed
 
         base = ARM_REST + LIFT * self.level
         swing = SWING * self.level
 
-        return (
-            clamp(base + swing * math.sin(self.phase), *ARM_RANGE),
-            clamp(base + swing * math.sin(self.phase + PHASE), *ARM_RANGE),
+        aim_pan, aim_nod = self._aim(elapsed)
+
+        # The head rides the same envelope at its own, much slower rate. The
+        # phases are offset from each other so pan and nod do not trace a
+        # single diagonal line.
+        head_phase = self.phase * (HEAD_BEAT_HZ / BEAT_HZ)
+
+        pan = aim_pan + PAN_SPEECH * self.head_level * math.sin(head_phase)
+        nod = (
+            aim_nod
+            + NOD_SPEAKING_BIAS * self.head_level
+            + NOD_SPEECH * self.head_level * math.sin(head_phase * 1.7 + 0.9)
         )
 
-    def worth_sending(self, arm_l, arm_r) -> bool:
+        return {
+            "arm_l": clamp(base + swing * math.sin(self.phase), *ARM_RANGE),
+            "arm_r": clamp(base + swing * math.sin(self.phase + PHASE), *ARM_RANGE),
+            "pan": clamp(pan, *PAN_RANGE),
+            "nod": clamp(nod, *NOD_RANGE),
+        }
+
+    # -------------------------------------------------------------- the wire
+
+    def worth_sending(self, pose: dict) -> bool:
         if self.last_sent is None:
             return True
 
-        return (
-            abs(arm_l - self.last_sent[0]) >= DEADBAND
-            or abs(arm_r - self.last_sent[1]) >= DEADBAND
+        return any(
+            abs(pose[axis] - self.last_sent[axis]) >= DEADBANDS[axis]
+            for axis in AXES
         )
 
-    async def send(self, arm_l, arm_r) -> None:
-        await self.websocket.send(
-            json.dumps({"type": "pose", "arm_l": arm_l, "arm_r": arm_r})
-        )
+    async def send(self, pose: dict) -> None:
+        await self.websocket.send(json.dumps({"type": "pose", **pose}))
 
-        self.last_sent = (arm_l, arm_r)
+        self.last_sent = dict(pose)
 
     async def rest(self) -> None:
-        """Put the arms down. Worth doing before the socket closes."""
+        """Put the body down. Worth doing before the socket closes."""
 
         self.level = 0.0
-        await self.send(ARM_REST, ARM_REST)
+        self.head_level = 0.0
+        await self.send(dict(REST_POSE))
 
     async def run(self) -> None:
         if self.log:
-            self.log("Gestures on - arms follow the speech")
+            self.log("Gestures on - arms and head follow the speech")
 
         last = time.monotonic()
 
@@ -162,7 +363,7 @@ class Gestures:
             now = time.monotonic()
             elapsed, last = now - last, now
 
-            arm_l, arm_r = self.pose(min(elapsed, TICK * 4))
+            pose = self.pose(min(elapsed, TICK * 4))
 
-            if self.worth_sending(arm_l, arm_r):
-                await self.send(arm_l, arm_r)
+            if self.worth_sending(pose):
+                await self.send(pose)
