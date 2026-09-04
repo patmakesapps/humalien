@@ -151,12 +151,11 @@ def apply_control(arms, message, pixels=None):
         if pixels is None:
             return
 
-        if not pixels.set(
-            mood=event.get("mood"),
-            level=event.get("level"),
-            brightness=event.get("brightness"),
-        ):
-            log(f"Ignoring unknown eye mood {event.get('mood')!r}")
+        fields = ("mood", "level", "brightness", "color", "gaze", "effect")
+        update = {name: event[name] for name in fields if name in event}
+
+        if not pixels.set(**update):
+            log(f"Ignoring invalid eye update {update!r}")
 
     elif kind == "limp":
         if arms is not None:

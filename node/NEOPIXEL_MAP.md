@@ -98,7 +98,7 @@ The animation runs on the Pi at 40 Hz. The brain sends one small message
 whenever the answer changes, on the same websocket as the audio:
 
 ```json
-{"type":"eyes","mood":"listening","level":0.31,"brightness":0.2}
+{"type":"eyes","mood":"listening","level":0.31,"color":"green","gaze":-0.4,"brightness":0.2}
 ```
 
 Rendered frames over the wire would put 40 messages a second of pixel data
@@ -107,19 +107,44 @@ stays true until it changes; a frame is perishable. `brightness` is optional
 and is sent once, on the first frame, so a value being tuned at the bench is
 not overwritten twenty times a second.
 
+`color` selects one shared base color for both eyes. Purple is the factory
+default; supported choices are purple, red, amber, yellow, green, teal, cyan,
+blue, pink, and white. Changes crossfade over roughly 300 ms on the node. A
+saved default lives in the brain's SQLite database, while a temporary choice
+lasts for the current brain run. Independent left/right colors are
+intentionally not part of the protocol yet.
+
+`gaze` is a normalised horizontal target from -1 to 1, or `null` when no face
+is being tracked. It shifts only a subtle highlight; head movement remains the
+primary gaze cue. One-shot local effects use an `effect` object:
+
+```json
+{"type":"eyes","effect":{"name":"wink","eye":"left"}}
+{"type":"eyes","effect":{"name":"celebrate","style":"rainbow"}}
+```
+
+Left/right are the robot's own sides. Celebration styles are `gold` and
+`rainbow`; both animate the two eyes and expire locally without more traffic.
+
 The moods are `idle`, `listening`, `thinking`, `speaking`, `excited`,
-`happy`, `curious`, `surprised`, `confused`, `sleepy` and `off`.
+`happy`, `curious`, `surprised`, `confused`, `angry`, `sleepy` and `off`.
 `brain/mood.py` picks between them; `brain/tests/test_mood.py` asserts the
 two lists have not drifted apart, because the node silently ignores a mood it
 does not know.
+
+`angry` temporarily forces a red palette. When that short feeling expires,
+the renderer crossfades back to the selected shared color.
 
 `listening` and `speaking` scale with `level` — the microphone's loudness and
 the robot's own playback envelope respectively. The node smooths that between
 messages and decays it after half a second of silence, so a brain that dies
 mid-word cannot leave an eye stuck at full brightness.
 
-The eyes blink on their own, every 2.6–7 s, as a lid sweeping down the ring
+The eyes blink on their own, every 5.5–13 s, as a lid sweeping down the ring
 and back. It is not driven from the brain and it does not need to be.
+
+The bench accepts `color <name>`, `wink <left|right>`, and
+`celebrate <gold|rainbow>` in addition to moods and brightness.
 
 ### Brightness and current
 

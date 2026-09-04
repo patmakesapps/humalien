@@ -174,6 +174,34 @@ class TestControlPath(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(mood, "excited")
 
+    async def test_an_eyes_frame_carries_appearance_and_gaze(self):
+        await self.talk(
+            send=[
+                {
+                    "type": "eyes",
+                    "color": "green",
+                    "gaze": -0.6,
+                    "effect": {"name": "wink", "eye": "right"},
+                }
+            ]
+        )
+
+        self.assertEqual(self.pixels.color, "green")
+        self.assertEqual(self.pixels.gaze, -0.6)
+        # The animation may finish while the socket closes; acceptance of
+        # the semantic fields above is what this end-to-end test protects.
+
+    async def test_a_null_gaze_releases_the_highlight(self):
+        self.pixels.set(gaze=0.7)
+
+        server.apply_control(
+            self.arms,
+            json.dumps({"type": "eyes", "gaze": None}),
+            self.pixels,
+        )
+
+        self.assertIsNone(self.pixels.gaze)
+
     async def test_the_eyes_are_lit_before_the_brain_says_anything(self):
         await self.talk()
 

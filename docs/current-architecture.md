@@ -37,7 +37,7 @@ One ordered connection carries:
 - microphone PCM from the node to the brain;
 - speaker PCM from the brain to the node;
 - servo pose messages;
-- eye mood, level, and brightness messages;
+- eye mood, shared color, gaze, one-shot effect, level, and brightness messages;
 - node readiness and control messages such as `limp`.
 
 Keeping speech, movement, and expression on one ordered connection prevents
@@ -50,7 +50,7 @@ can remove the Pi-to-laptop hop; it does not remove the Realtime connection.
 
 ## Model-callable tools
 
-Tubby currently exposes nine tools from
+Tubby currently exposes twelve tools from
 [`brain/robot_tools.py`](../brain/robot_tools.py):
 
 | Tool | Purpose |
@@ -59,6 +59,9 @@ Tubby currently exposes nine tools from
 | `who_is_here()` | Privately inspect recognised people and strangers in view. |
 | `remember_name(name)` | Associate an introduced name with a visible unfamiliar face. |
 | `feel(feeling)` | Temporarily express an emotion through the eyes. |
+| `set_eye_color(color, save_as_default?)` | Change both eyes together, optionally persisting the default. |
+| `wink(eye)` | Briefly wink the robot's own left or right eye. |
+| `celebrate(style?)` | Play a brief gold or rainbow effect across both eyes. |
 | `remember(fact, about?)` | Persist a personal or general memory. |
 | `recall(about?)` | Retrieve memories, optionally narrowed by text. |
 | `revise(id, fact)` | Replace an existing memory. |
@@ -67,6 +70,12 @@ Tubby currently exposes nine tools from
 
 Listening, speech playback, face tracking, conversational eye states, and
 automatic gesturing are continuous capabilities rather than callable tools.
+
+The node owns the 40 Hz eye renderer. Purple remains the factory default;
+chosen colors crossfade over about 300 ms, anger temporarily forces red, and
+face tracking moves a subtle highlight with the head's gaze. Both eyes always
+share one base color in the current design. Saved defaults are stored in the
+`robot_settings` table beside the robot's other SQLite-backed state.
 
 ## Tool code boundaries
 
@@ -95,4 +104,3 @@ The planned solution is a small `clock()` tool returning timezone-aware local
 and UTC timestamps. A connection-start timestamp may also be added to session
 instructions for general orientation, but the tool remains the source of truth
 for exact time and scheduling.
-

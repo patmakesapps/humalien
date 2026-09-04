@@ -86,7 +86,16 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.store.close()
 
-    def build(self, *, realtime=None, vision=OLLAMA, state=None, **kwargs):
+    def build(
+        self,
+        *,
+        realtime=None,
+        vision=OLLAMA,
+        state=None,
+        mood=None,
+        appearance=None,
+        **kwargs,
+    ):
         self.eyes = FakeEyes(self.store, **kwargs)
 
         return Robot(
@@ -95,6 +104,8 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
             describer=self.describer,
             state=state or ConversationState(),
             realtime=realtime,
+            mood=mood,
+            appearance=appearance,
             vision=vision,
         )
 
@@ -304,8 +315,90 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.people(), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
+class FakeMood:
+    def __init__(self):
+        self.colors = []
+        self.winks = []
+        self.celebrations = []
+
+    def set_color(self, color):
+        self.colors.append(color)
+        return True
+
+    def wink(self, eye):
+        self.winks.append(eye)
+        return True
+
+    def celebrate(self, style):
+        self.celebrations.append(style)
+        return True
+
+
+class FakeAppearance:
+    def __init__(self):
+        self.saved = []
+
+    def set_default_eye_color(self, color):
+        self.saved.append(color)
+
+
+class EyeToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.store = PeopleStore(":memory:")
+        self.mood = FakeMood()
+        self.appearance = FakeAppearance()
+        self.robot = Robot(
+            eyes=FakeEyes(self.store),
+            store=self.store,
+            describer=None,
+            mood=self.mood,
+            appearance=self.appearance,
+        )
+
+    def tearDown(self):
+        self.store.close()
+
+    async def test_color_changes_both_eyes_without_saving_by_default(self):
+        result = await tools.execute(
+            self.robot,
+            "set_eye_color",
+            json.dumps({"color": "green"}),
+        )
+
+        self.assertTrue(json.loads(result)["success"])
+        self.assertEqual(self.mood.colors, ["green"])
+        self.assertEqual(self.appearance.saved, [])
+
+    async def test_default_color_is_saved_only_when_explicit(self):
+        await tools.execute(
+            self.robot,
+            "set_eye_color",
+            json.dumps({"color": "blue", "save_as_default": True}),
+        )
+
+        self.assertEqual(self.mood.colors, ["blue"])
+        self.assertEqual(self.appearance.saved, ["blue"])
+
+    async def test_wink_and_celebrate_reach_the_mood_controller(self):
+        await tools.execute(
+            self.robot, "wink", json.dumps({"eye": "left"})
+        )
+        await tools.execute(
+            self.robot, "celebrate", json.dumps({"style": "rainbow"})
+        )
+
+        self.assertEqual(self.mood.winks, ["left"])
+        self.assertEqual(self.mood.celebrations, ["rainbow"])
+
+    async def test_invalid_colors_are_rejected_by_the_tool_schema(self):
+        result = await tools.execute(
+            self.robot,
+            "set_eye_color",
+            json.dumps({"color": "infrared"}),
+        )
+
+        self.assertFalse(json.loads(result)["success"])
+        self.assertEqual(self.mood.colors, [])
 
 
 class FakeGestures:

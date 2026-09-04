@@ -1,5 +1,6 @@
 """The eyes must say what is actually happening, and then stop saying it."""
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from mood import (
     MOODS,
     SLEEPY_AFTER,
     Mood,
+    EYE_COLORS,
 )
 
 
@@ -54,6 +56,14 @@ class TestTheVocabulary(unittest.TestCase):
         from humalien_node.pixels import MOODS as RENDERED
 
         self.assertEqual(set(MOODS), set(RENDERED))
+
+    def test_the_brain_and_node_agree_on_color_names(self):
+        node = Path(__file__).resolve().parents[2] / "node"
+        sys.path.insert(0, str(node))
+
+        from humalien_node.pixels import EYE_COLORS as RENDERED_COLORS
+
+        self.assertEqual(set(EYE_COLORS), set(RENDERED_COLORS))
 
     def test_the_model_cannot_fake_a_fact(self):
         """speaking and listening are observed. off is a hardware state."""
@@ -183,25 +193,80 @@ class TestFeeling(unittest.TestCase):
 class TestTheWire(unittest.TestCase):
     def test_holding_still_is_silent(self):
         mood = Mood(None)
-        mood.last_sent = ("idle", 0.0)
+        mood.last_sent = ("idle", 0.0, "purple", None)
 
         self.assertFalse(mood.worth_sending("idle", 0.0))
 
     def test_a_changed_mood_is_always_worth_sending(self):
         mood = Mood(None)
-        mood.last_sent = ("idle", 0.0)
+        mood.last_sent = ("idle", 0.0, "purple", None)
 
         self.assertTrue(mood.worth_sending("excited", 0.0))
 
     def test_a_small_level_change_is_not_worth_sending(self):
         mood = Mood(None)
-        mood.last_sent = ("speaking", 0.5)
+        mood.last_sent = ("speaking", 0.5, "purple", None)
 
         self.assertFalse(
             mood.worth_sending("speaking", 0.5 + LEVEL_DEADBAND / 2)
         )
         self.assertTrue(
             mood.worth_sending("speaking", 0.5 + LEVEL_DEADBAND * 2)
+        )
+
+    def test_a_color_change_is_worth_sending(self):
+        mood = Mood(None)
+        mood.last_sent = ("idle", 0.0, "purple", None)
+
+        mood.set_color("green")
+
+        self.assertTrue(mood.worth_sending("idle", 0.0))
+
+    def test_tiny_gaze_jitter_is_silent(self):
+        mood = Mood(None)
+        mood.last_sent = ("idle", 0.0, "purple", 0.4)
+        mood.look_at(0.43)
+
+        self.assertFalse(mood.worth_sending("idle", 0.0))
+
+
+class FakeSocket:
+    def __init__(self):
+        self.messages = []
+
+    async def send(self, message):
+        self.messages.append(json.loads(message))
+
+
+class TestAppearanceOnTheWire(unittest.IsolatedAsyncioTestCase):
+    async def test_color_and_gaze_travel_with_the_mood(self):
+        socket = FakeSocket()
+        mood = Mood(socket, color="green")
+        mood.look_at(-0.75)
+
+        await mood.send("idle", 0.0)
+
+        self.assertEqual(socket.messages[-1]["color"], "green")
+        self.assertEqual(socket.messages[-1]["gaze"], -0.75)
+
+    async def test_winks_and_celebrations_are_one_shot_events(self):
+        socket = FakeSocket()
+        mood = Mood(socket)
+        mood.wink("left")
+        mood.celebrate("gold")
+
+        await mood.send("idle", 0.0)
+        await mood.send("idle", 0.0)
+        await mood.send("idle", 0.0)
+
+        effects = [message.get("effect") for message in socket.messages]
+        self.assertEqual(
+            effects,
+            [
+                {"name": "wink", "eye": "left"},
+                {"name": "celebrate", "style": "gold"},
+                None,
+            ],
         )
 
 

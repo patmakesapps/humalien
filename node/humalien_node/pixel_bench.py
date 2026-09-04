@@ -30,6 +30,7 @@ from humalien_node.pixels import (
     BRIGHTNESS_CEILING,
     CURRENT_BUDGET_MA,
     FIRST_RING_IS_LEFT,
+    EYE_COLORS,
     MILLIAMPS_PER_CHANNEL,
     MOODS,
     PIXELS_PER_EYE,
@@ -44,13 +45,20 @@ HELP = """\
   <mood>            show one: %s
   level <0..1>      how loud the robot is pretending to be
   bright <0..%.2f>  the whole frame, live
+  color <name>      shared eye color: %s
+  wink <eye>        wink the robot's own left or right eye
+  celebrate <kind> brief gold or rainbow ripple
   cycle             every mood in turn, a few seconds each
   order             NEOPIXEL_MAP.md's post-solder test - which eye is first
   clock             light one pixel at a time, to find PIXEL_ZERO_DEGREES
   draw              what the current mood is drawing, per pixel, as numbers
   off               all 24 pixels dark
   q                 clear and quit
-""" % (", ".join(name for name in MOODS if name != "off"), BRIGHTNESS_CEILING)
+""" % (
+    ", ".join(name for name in MOODS if name != "off"),
+    BRIGHTNESS_CEILING,
+    ", ".join(EYE_COLORS),
+)
 
 
 def play(pixels, seconds):
@@ -124,8 +132,8 @@ def draw(pixels):
 
     data = pixels.encode(pixels.frame(TICK))
 
-    print("  mood %s, level %.2f, brightness %.2f"
-          % (pixels.mood, pixels.level, pixels.brightness))
+    print("  mood %s, color %s, level %.2f, brightness %.2f"
+          % (pixels.mood, pixels.color, pixels.level, pixels.brightness))
     print("  eye  px   G   R   B")
 
     for index in range(PIXEL_COUNT):
@@ -208,6 +216,24 @@ def main():
                           % pixels.brightness)
                     print("  BRIGHTNESS = %.3f" % pixels.brightness)
                     play(pixels, 1.0)
+
+                elif command == "color" and args and args[0] in EYE_COLORS:
+                    pixels.set(color=args[0])
+                    print("  both eyes -> %s" % args[0])
+                    play(pixels, 1.0)
+
+                elif command == "wink" and args and args[0] in ("left", "right"):
+                    pixels.set(effect={"name": "wink", "eye": args[0]})
+                    play(pixels, 0.5)
+
+                elif command == "celebrate" and args and args[0] in (
+                    "gold",
+                    "rainbow",
+                ):
+                    pixels.set(
+                        effect={"name": "celebrate", "style": args[0]}
+                    )
+                    play(pixels, 2.0)
 
                 elif command == "cycle":
                     cycle(pixels)

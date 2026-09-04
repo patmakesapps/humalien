@@ -14,7 +14,8 @@ would be a chance for network jitter to turn a smooth breath into a stutter.
 A mood is one small message that stays true until it changes; a frame is
 perishable. So the wire carries
 
-    {"type": "eyes", "mood": "listening", "level": 0.3}
+    {"type": "eyes", "mood": "listening", "level": 0.3,
+     "color": "green", "gaze": -0.4}
 
 and everything below is local.
 
@@ -47,9 +48,11 @@ letting a bright mood pull more than the supply is rated for.
 """
 
 import asyncio
+import colorsys
 import math
 import random
 import time
+from dataclasses import dataclass
 
 
 # ------------------------------------------------------------- the hardware
@@ -75,20 +78,31 @@ TICK = 0.025
 
 # --------------------------------------------------------------- the colours
 
-# The brand, and the only hue on this robot. Every mood is a move along ONE
-# axis - dark violet, brand purple, lavender - and never off it.
-#
-# An earlier version travelled to cyan for listening and magenta for
-# excitement. It read as a novelty light rather than as one product: the eyes
-# stopped being Humalien's colour and started being whatever the mood was.
-# Brightness, saturation and how much of the ring is lit carry the difference
-# instead, which is more work per mood and worth it.
+# Purple remains the factory identity. A person can now choose one shared hue
+# for both eyes; the renderer keeps the animation language consistent instead
+# of turning every conversational state into a different status-light color.
 PURPLE = (0.58, 0.18, 1.00)
 
 EMBER = (0.16, 0.02, 0.38)      # the bottom of a breath, barely on
 DEEP = (0.30, 0.05, 0.75)       # resting purple
 PALE = (0.80, 0.60, 1.00)       # a lit highlight, still unmistakably violet
 FLARE = (0.93, 0.86, 1.00)      # the top of a reaction. Never a resting state
+
+COLOR_VALUES = {
+    "purple": PURPLE,
+    "red": (1.00, 0.03, 0.01),
+    "amber": (1.00, 0.32, 0.01),
+    "yellow": (1.00, 0.72, 0.02),
+    "green": (0.02, 1.00, 0.10),
+    "teal": (0.02, 0.85, 0.55),
+    "cyan": (0.02, 0.72, 1.00),
+    "blue": (0.03, 0.16, 1.00),
+    "pink": (1.00, 0.10, 0.55),
+    "white": (1.00, 1.00, 1.00),
+}
+
+EYE_COLORS = tuple(COLOR_VALUES)
+DEFAULT_COLOR = "purple"
 
 # Scales the whole frame. NEOPIXEL_MAP.md's bench note is the reason this is
 # low: raise it with `bright` on the bench, then paste what you land on here.
@@ -142,6 +156,19 @@ RIPPLE_SECONDS = 0.85
 RIPPLE_WIDTH = 60.0
 RIPPLE_GAIN = 0.55
 
+# Appearance changes are meant to feel like the same face changing its mind,
+# not a GPIO value snapping from one state to another.
+COLOR_TRANSITION_SECONDS = 0.30
+
+MANUAL_WINK_SECONDS = 0.24
+CELEBRATE_SECONDS = 1.60
+CELEBRATE_WIDTH = 72.0
+
+# Face tracking moves this highlight, not the whole eye. It is deliberately
+# small enough that gaze is felt before it is noticed.
+GAZE_SHIFT_DEGREES = 58.0
+GAZE_GAIN = 0.16
+
 # Moods that must not blink: one is off, and the other is a face frozen
 # mid-reaction.
 NEVER_BLINKS = ("off", "surprised")
@@ -161,6 +188,41 @@ def mix(a, b, amount):
 
 def scale(color, amount):
     return tuple(channel * amount for channel in color)
+
+
+@dataclass(frozen=True)
+class Palette:
+    ember: tuple
+    deep: tuple
+    base: tuple
+    pale: tuple
+    flare: tuple
+
+
+def make_palette(base):
+    return Palette(
+        ember=scale(base, 0.16),
+        deep=scale(base, 0.48),
+        base=base,
+        pale=mix(base, (1.0, 1.0, 1.0), 0.48),
+        flare=mix(base, (1.0, 1.0, 1.0), 0.82),
+    )
+
+
+def mix_palette(a, b, amount):
+    return Palette(
+        ember=mix(a.ember, b.ember, amount),
+        deep=mix(a.deep, b.deep, amount),
+        base=mix(a.base, b.base, amount),
+        pale=mix(a.pale, b.pale, amount),
+        flare=mix(a.flare, b.flare, amount),
+    )
+
+
+PALETTES = {name: make_palette(color) for name, color in COLOR_VALUES.items()}
+
+# Preserve the hand-tuned purple ramp exactly when no preference was chosen.
+PALETTES["purple"] = Palette(EMBER, DEEP, PURPLE, PALE, FLARE)
 
 
 def angle_of(index):
@@ -235,11 +297,11 @@ def ripple_at(index, age):
 
 # ----------------------------------------------------------------- the moods
 #
-# Each takes the time the mood has been running, the smoothed level, and which
-# eye it is drawing (-1 for the robot's left, +1 for its right), and returns
-# 12 colours. Returning per-eye is what lets a mood be asymmetric - a cocked
-# head, one eye leading the other - which is most of what separates a face
-# from a status light.
+# Each takes the time the mood has been running, the smoothed level, which
+# eye it is drawing (-1 for the robot's left, +1 for its right), and the
+# active palette, then returns 12 colours. Returning per-eye is what lets a
+# mood be asymmetric - a cocked head, one eye leading the other - which is
+# most of what separates a face from a status light.
 #
 # The house style, after the first version was judged too busy: these mostly
 # BREATHE rather than rotate. A ring with something travelling round it pulls
@@ -249,19 +311,19 @@ def ripple_at(index, age):
 # that have earned it.
 
 
-def mood_off(t, level, eye):
+def mood_off(t, level, eye, palette):
     return [(0.0, 0.0, 0.0)] * PIXELS_PER_EYE
 
 
-def mood_idle(t, level, eye):
+def mood_idle(t, level, eye, palette):
     """Waiting. One slow breath, the whole ring together, nothing moving."""
 
     depth = breathe(t, 6.5, 0.13, 0.30)
 
-    return [scale(mix(EMBER, PURPLE, 0.55), depth)] * PIXELS_PER_EYE
+    return [scale(mix(palette.ember, palette.base, 0.55), depth)] * PIXELS_PER_EYE
 
 
-def mood_listening(t, level, eye):
+def mood_listening(t, level, eye, palette):
     """Somebody is talking. The ring holds still and answers their voice.
 
     Deliberately the least animated mood in the set. It is on for as long as
@@ -272,10 +334,12 @@ def mood_listening(t, level, eye):
     under = breathe(t, 4.2, 0.86, 1.0)
     lit = (0.17 + 0.55 * level) * under
 
-    return [scale(mix(DEEP, PALE, 0.30 + 0.45 * level), lit)] * PIXELS_PER_EYE
+    return [
+        scale(mix(palette.deep, palette.pale, 0.30 + 0.45 * level), lit)
+    ] * PIXELS_PER_EYE
 
 
-def mood_thinking(t, level, eye):
+def mood_thinking(t, level, eye, palette):
     """Working on it. A comet runs the ring - the one mood that travels.
 
     Kept, and kept moving, because here the motion is the message: it is the
@@ -290,14 +354,18 @@ def mood_thinking(t, level, eye):
 
     return [
         scale(
-            mix(DEEP, PALE, 0.35 + 0.5 * arc(i, head, 120.0, softness=2.0)),
+            mix(
+                palette.deep,
+                palette.pale,
+                0.35 + 0.5 * arc(i, head, 120.0, softness=2.0),
+            ),
             0.12 + 0.52 * arc(i, head, 120.0, softness=2.0),
         )
         for i in range(PIXELS_PER_EYE)
     ]
 
 
-def mood_speaking(t, level, eye):
+def mood_speaking(t, level, eye, palette):
     """The robot is talking. The whole eye swells with its own voice.
 
     The ring stays whole rather than opening an arc: the voice is already
@@ -308,11 +376,14 @@ def mood_speaking(t, level, eye):
     swell = breathe(t, 1.6, 0.88, 1.0)
 
     return [
-        scale(mix(DEEP, PALE, 0.25 + 0.45 * level), (0.15 + 0.62 * level) * swell)
+        scale(
+            mix(palette.deep, palette.pale, 0.25 + 0.45 * level),
+            (0.15 + 0.62 * level) * swell,
+        )
     ] * PIXELS_PER_EYE
 
 
-def mood_excited(t, level, eye):
+def mood_excited(t, level, eye, palette):
     """Fast, bright, and all the way up the purple axis.
 
     The first version sparkled random pixels white. It was too much, and the
@@ -323,11 +394,14 @@ def mood_excited(t, level, eye):
     pulse = breathe(t, 0.5, 0.35, 1.0)
 
     return [
-        scale(mix(PURPLE, PALE, 0.35 + 0.6 * pulse), 0.26 + 0.58 * pulse)
+        scale(
+            mix(palette.base, palette.pale, 0.35 + 0.6 * pulse),
+            0.26 + 0.58 * pulse,
+        )
     ] * PIXELS_PER_EYE
 
 
-def mood_happy(t, level, eye):
+def mood_happy(t, level, eye, palette):
     """Pleased. The lit part sinks to the bottom of the ring - a squint.
 
     A human smile closes the eyes from below. Lighting only the lower arc is
@@ -337,12 +411,15 @@ def mood_happy(t, level, eye):
     lift = breathe(t, 3.0, 0.0, 9.0)
 
     return [
-        scale(mix(PURPLE, PALE, 0.5), 0.09 + 0.66 * arc(i, 180.0 - lift, 95.0))
+        scale(
+            mix(palette.base, palette.pale, 0.5),
+            0.09 + 0.66 * arc(i, 180.0 - lift, 95.0),
+        )
         for i in range(PIXELS_PER_EYE)
     ]
 
 
-def mood_curious(t, level, eye):
+def mood_curious(t, level, eye, palette):
     """Interested. The two eyes sit at different heights, and drift slowly.
 
     Asymmetry is the whole point - it is what a cocked head looks like from
@@ -352,22 +429,25 @@ def mood_curious(t, level, eye):
     tilt = eye * (24.0 + 8.0 * math.sin(2.0 * math.pi * t / 4.5))
 
     return [
-        scale(mix(DEEP, PURPLE, 0.7), 0.11 + 0.55 * arc(i, 180.0 + tilt, 115.0))
+        scale(
+            mix(palette.deep, palette.base, 0.7),
+            0.11 + 0.55 * arc(i, 180.0 + tilt, 115.0),
+        )
         for i in range(PIXELS_PER_EYE)
     ]
 
 
-def mood_surprised(t, level, eye):
+def mood_surprised(t, level, eye, palette):
     """A flare that decays. Wide open, then settling back to purple."""
 
     flash = math.exp(-t / 0.45)
 
     return [
-        scale(mix(PURPLE, FLARE, 0.85 * flash), 0.26 + 0.66 * flash)
+        scale(mix(palette.base, palette.flare, 0.85 * flash), 0.26 + 0.66 * flash)
     ] * PIXELS_PER_EYE
 
 
-def mood_confused(t, level, eye):
+def mood_confused(t, level, eye, palette):
     """The eyes disagree with each other, slowly.
 
     A slow wobble in opposite directions rather than the counter-rotating
@@ -379,18 +459,39 @@ def mood_confused(t, level, eye):
     dim = breathe(t, 2.6, 0.75, 1.0)
 
     return [
-        scale(mix(EMBER, PURPLE, 0.6), (0.10 + 0.44 * arc(i, 180.0 + wobble, 130.0)) * dim)
+        scale(
+            mix(palette.ember, palette.base, 0.6),
+            (0.10 + 0.44 * arc(i, 180.0 + wobble, 130.0)) * dim,
+        )
         for i in range(PIXELS_PER_EYE)
     ]
 
 
-def mood_sleepy(t, level, eye):
+def mood_sleepy(t, level, eye, palette):
     """Almost out. A dim sliver at the bottom, fading in and out."""
 
     depth = breathe(t, 7.5, 0.04, 0.18)
 
     return [
-        scale(mix(EMBER, PURPLE, 0.45), depth * arc(i, 180.0, 75.0))
+        scale(
+            mix(palette.ember, palette.base, 0.45),
+            depth * arc(i, 180.0, 75.0),
+        )
+        for i in range(PIXELS_PER_EYE)
+    ]
+
+
+def mood_angry(t, level, eye, palette):
+    """A hard red brow: bright at the top and weighted toward the nose."""
+
+    pulse = breathe(t, 1.35, 0.78, 1.0)
+    center = 326.0 if eye < 0 else 34.0
+
+    return [
+        scale(
+            mix(palette.deep, palette.base, 0.72),
+            (0.10 + 0.64 * arc(i, center, 112.0)) * pulse,
+        )
         for i in range(PIXELS_PER_EYE)
     ]
 
@@ -406,10 +507,12 @@ MOODS = {
     "curious": mood_curious,
     "surprised": mood_surprised,
     "confused": mood_confused,
+    "angry": mood_angry,
     "sleepy": mood_sleepy,
 }
 
 DEFAULT_MOOD = "idle"
+_UNSET = object()
 
 
 class Pi5NeoPixelWrite:
@@ -440,6 +543,19 @@ class Pixels:
         self.mood = DEFAULT_MOOD
         self.mood_started = 0.0
 
+        self.color = DEFAULT_COLOR
+        default_palette = PALETTES[DEFAULT_COLOR]
+        self._palette_name = DEFAULT_COLOR
+        self._palette_from = default_palette
+        self._palette_to = default_palette
+        self._palette_started = 0.0
+
+        self.gaze = None
+        self.wink_eye = None
+        self.wink_started = None
+        self.celebration = None
+        self.celebration_started = None
+
         self.raw_level = 0.0
         self.level = 0.0
 
@@ -457,18 +573,67 @@ class Pixels:
 
     # ------------------------------------------------------------ the input
 
-    def set(self, mood=None, level=None, brightness=None):
+    def _current_palette(self):
+        through = clamp(
+            (self.clock - self._palette_started) / COLOR_TRANSITION_SECONDS
+        )
+        return mix_palette(self._palette_from, self._palette_to, through)
+
+    def _effective_palette_name(self, mood=None, color=None):
+        mood = self.mood if mood is None else mood
+        color = self.color if color is None else color
+        return "red" if mood == "angry" else color
+
+    def _transition_to(self, name):
+        if name == self._palette_name:
+            return
+
+        self._palette_from = self._current_palette()
+        self._palette_to = PALETTES[name]
+        self._palette_started = self.clock
+        self._palette_name = name
+
+    def set(
+        self,
+        mood=None,
+        level=None,
+        brightness=None,
+        color=None,
+        gaze=_UNSET,
+        effect=None,
+    ):
         """Take one update from the brain. Anything unknown is ignored."""
 
-        if mood is not None:
-            mood = str(mood)
+        next_mood = self.mood if mood is None else str(mood)
+        next_color = self.color if color is None else str(color)
 
-            if mood not in MOODS:
+        if next_mood not in MOODS or next_color not in PALETTES:
+            return False
+
+        if effect is not None:
+            if not isinstance(effect, dict):
                 return False
 
-            if mood != self.mood:
-                self.mood = mood
-                self.mood_started = self.clock
+            name = effect.get("name")
+
+            if name == "wink" and effect.get("eye") not in ("left", "right"):
+                return False
+            if name == "celebrate" and effect.get("style") not in (
+                "gold",
+                "rainbow",
+            ):
+                return False
+            if name not in ("wink", "celebrate"):
+                return False
+
+        target_palette = self._effective_palette_name(next_mood, next_color)
+        self._transition_to(target_palette)
+
+        if next_mood != self.mood:
+            self.mood = next_mood
+            self.mood_started = self.clock
+
+        self.color = next_color
 
         if level is not None:
             self.raw_level = clamp(float(level))
@@ -476,6 +641,17 @@ class Pixels:
 
         if brightness is not None:
             self.brightness = clamp(float(brightness), 0.0, BRIGHTNESS_CEILING)
+
+        if gaze is not _UNSET:
+            self.gaze = None if gaze is None else clamp(float(gaze), -1.0, 1.0)
+
+        if effect is not None:
+            if effect["name"] == "wink":
+                self.wink_eye = effect["eye"]
+                self.wink_started = self.clock
+            else:
+                self.celebration = effect["style"]
+                self.celebration_started = self.clock
 
         return True
 
@@ -523,7 +699,7 @@ class Pixels:
 
         return 1.0
 
-    def _ripple(self, colors, age):
+    def _ripple(self, colors, age, palette):
         """Lay the mood-change wave over one eye's twelve colours."""
 
         out = []
@@ -538,8 +714,71 @@ class Pixels:
             # Brightens AND pales, so the wave is visible even where the mood
             # underneath is already near black.
             out.append(
-                mix(scale(color, 1.0 + wave), scale(PALE, wave), 0.55 * wave)
+                mix(
+                    scale(color, 1.0 + wave),
+                    scale(palette.pale, wave),
+                    0.55 * wave,
+                )
             )
+
+        return out
+
+    def _wink_openness(self, eye):
+        if self.wink_started is None or self.wink_eye != eye:
+            return 1.0
+
+        age = self.clock - self.wink_started
+
+        if age >= MANUAL_WINK_SECONDS:
+            self.wink_started = None
+            self.wink_eye = None
+            return 1.0
+
+        through = age / MANUAL_WINK_SECONDS
+        shut = 0.5 * (1.0 + math.cos(2.0 * math.pi * through))
+        return BLINK_DEPTH + (1.0 - BLINK_DEPTH) * shut
+
+    def _gaze_highlight(self, colors, palette, eye):
+        if self.gaze is None:
+            return colors
+
+        center = 180.0 + eye * self.gaze * GAZE_SHIFT_DEGREES
+        return [
+            mix(color, palette.pale, GAZE_GAIN * arc(index, center, 92.0))
+            for index, color in enumerate(colors)
+        ]
+
+    def _celebrate(self, colors):
+        if self.celebration_started is None:
+            return colors
+
+        age = self.clock - self.celebration_started
+
+        if age >= CELEBRATE_SECONDS:
+            self.celebration = None
+            self.celebration_started = None
+            return colors
+
+        through = age / CELEBRATE_SECONDS
+        front = 180.0 * through
+        envelope = math.sin(math.pi * through)
+        out = []
+
+        for index, color in enumerate(colors):
+            away = abs(from_top(index) - front)
+            wave = 0.0
+            if away < CELEBRATE_WIDTH:
+                wave = 0.5 * (
+                    1.0 + math.cos(math.pi * away / CELEBRATE_WIDTH)
+                )
+
+            if self.celebration == "rainbow":
+                hue = (angle_of(index) / 360.0 + 0.45 * through) % 1.0
+                accent = colorsys.hsv_to_rgb(hue, 0.92, 1.0)
+            else:
+                accent = (1.0, 0.55, 0.03)
+
+            out.append(mix(color, scale(accent, 0.88), 0.92 * wave * envelope))
 
         return out
 
@@ -564,31 +803,44 @@ class Pixels:
 
         self._advance(elapsed)
         openness = self._blink(elapsed)
+        palette = self._current_palette()
 
         render = MOODS.get(self.mood, MOODS[DEFAULT_MOOD])
         age = self.clock - self.mood_started
 
-        left = render(age, self.level, -1)
-        right = render(age, self.level, +1)
+        left = render(age, self.level, -1, palette)
+        right = render(age, self.level, +1, palette)
 
         # The ripple rides on top of whatever the mood drew, so it reads as
         # the same eye reacting rather than as a second thing happening.
         if age <= RIPPLE_SECONDS and self.mood != "off":
-            left = self._ripple(left, age)
-            right = self._ripple(right, age)
+            left = self._ripple(left, age, palette)
+            right = self._ripple(right, age, palette)
+
+        left = self._gaze_highlight(left, palette, -1)
+        right = self._gaze_highlight(right, palette, +1)
+        left = self._celebrate(left)
+        right = self._celebrate(right)
 
         # The right eye is drawn mirrored, so a sweep runs outward from the
         # nose on both sides instead of both eyes turning the same way. Two
         # rings rotating in parallel read as gauges; mirrored reads as a face.
         right = list(reversed(right))
 
-        first, second = (left, right) if FIRST_RING_IS_LEFT else (right, left)
+        left_open = min(openness, self._wink_openness("left"))
+        right_open = min(openness, self._wink_openness("right"))
+
+        first, second = (
+            ((left, left_open), (right, right_open))
+            if FIRST_RING_IS_LEFT
+            else ((right, right_open), (left, left_open))
+        )
 
         out = []
 
-        for eye in (first, second):
+        for eye, eye_openness in (first, second):
             for index, color in enumerate(eye):
-                out.append(scale(color, self._lid_mask(index, openness)))
+                out.append(scale(color, self._lid_mask(index, eye_openness)))
 
         return out
 

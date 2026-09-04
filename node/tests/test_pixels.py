@@ -9,8 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from humalien_node.pixels import (
     BRIGHTNESS_CEILING,
     BYTE_ORDER,
+    CELEBRATE_SECONDS,
+    COLOR_TRANSITION_SECONDS,
     CURRENT_BUDGET_MA,
     DEFAULT_MOOD,
+    EYE_COLORS,
     MILLIAMPS_PER_CHANNEL,
     MOODS,
     PIXELS_PER_EYE,
@@ -79,8 +82,8 @@ class TestTheWireFormat(unittest.TestCase):
         self.assertGreater(max(blue), max(green) * 2)
         self.assertGreater(max(red), max(green))
 
-    def test_no_mood_ever_leaves_the_purple_axis(self):
-        """Every pixel of every mood, always: blue >= red >= green.
+    def test_ordinary_moods_keep_the_default_purple_axis(self):
+        """Purple remains the identity unless color or anger overrides it.
 
         The whole palette is one violet ramp - EMBER, DEEP, PURPLE, PALE,
         FLARE - and each satisfies that ordering, so every blend and every
@@ -91,6 +94,9 @@ class TestTheWireFormat(unittest.TestCase):
         """
 
         for name in MOODS:
+            if name == "angry":
+                continue
+
             pixels = Pixels(brightness=BRIGHTNESS_CEILING)
             pixels.set(mood=name, level=1.0)
 
@@ -107,6 +113,18 @@ class TestTheWireFormat(unittest.TestCase):
                         red, blue + 1,
                         f"{name} px{index} is redder than it is blue",
                     )
+
+    def test_angry_is_red_even_when_the_chosen_color_is_green(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.set(color="green")
+        run(pixels, COLOR_TRANSITION_SECONDS * 2)
+        pixels.set(mood="angry")
+
+        frame = run(pixels, COLOR_TRANSITION_SECONDS * 2)[-1]
+        green, red, blue = frame[0::3], frame[1::3], frame[2::3]
+
+        self.assertGreater(max(red), max(green) * 2)
+        self.assertGreater(max(red), max(blue) * 2)
 
 
 class TestSafety(unittest.TestCase):
@@ -158,6 +176,14 @@ class TestSafety(unittest.TestCase):
         self.assertFalse(pixels.set(mood="smug"))
         self.assertEqual(pixels.mood, "happy")
 
+    def test_an_unknown_color_or_effect_is_refused_atomically(self):
+        pixels = Pixels()
+
+        self.assertFalse(pixels.set(color="infrared"))
+        self.assertFalse(pixels.set(effect={"name": "wink", "eye": "middle"}))
+        self.assertEqual(pixels.color, "purple")
+        self.assertIsNone(pixels.wink_started)
+
     def test_clear_really_is_all_zeroes(self):
         """NeoPixels latch. Anything less leaves a face lit in an empty room."""
 
@@ -172,6 +198,95 @@ class TestSafety(unittest.TestCase):
 
 
 class TestBeingAlive(unittest.TestCase):
+    def test_both_eyes_share_one_selected_base_color(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.blink_at = 999.0
+        pixels.set(color="green", mood="idle")
+
+        frame = run(pixels, 2.0)[-1]
+        half = PIXELS_PER_EYE * 3
+
+        self.assertEqual(frame[:half], frame[half:])
+        self.assertGreater(max(frame[0::3]), max(frame[1::3]) * 2)
+
+    def test_color_changes_crossfade_instead_of_jump(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.blink_at = 999.0
+        run(pixels, 2.0)
+        purple = pixels.frame(0.0)
+
+        pixels.set(color="green")
+        first = pixels.frame(0.0)
+        middle = pixels.frame(COLOR_TRANSITION_SECONDS / 2)
+        green = pixels.frame(COLOR_TRANSITION_SECONDS)
+
+        self.assertEqual(first, purple)
+        self.assertNotEqual(middle, purple)
+        self.assertNotEqual(middle, green)
+        self.assertGreater(max(channel[1] for channel in green), 0.0)
+
+    def test_angry_releases_back_to_the_selected_color(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.blink_at = 999.0
+        pixels.set(color="green")
+        run(pixels, 1.0)
+        pixels.set(mood="angry")
+        run(pixels, 1.0)
+        pixels.set(mood="idle")
+
+        frame = run(pixels, 1.0)[-1]
+        green, red = frame[0::3], frame[1::3]
+        self.assertGreater(max(green), max(red) * 2)
+
+    def test_a_wink_only_closes_the_requested_eye(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.blink_at = 999.0
+        pixels.set(mood="idle")
+        run(pixels, 2.0)
+        pixels.set(effect={"name": "wink", "eye": "left"})
+
+        frame = run(pixels, 0.12)[-1]
+        half = PIXELS_PER_EYE * 3
+        left, right = sum(frame[:half]), sum(frame[half:])
+
+        self.assertLess(left, right * 0.55)
+
+    def test_celebration_is_brief_and_returns_to_the_base_animation(self):
+        for style in ("gold", "rainbow"):
+            pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+            pixels.blink_at = 999.0
+            pixels.set(mood="idle")
+            run(pixels, 2.0)
+            pixels.set(effect={"name": "celebrate", "style": style})
+
+            during = run(pixels, CELEBRATE_SECONDS / 2)
+            self.assertIsNotNone(pixels.celebration)
+            self.assertGreater(len(set(during)), 5)
+
+            run(pixels, CELEBRATE_SECONDS)
+            self.assertIsNone(pixels.celebration)
+
+    def test_gaze_adds_a_small_moving_highlight(self):
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.blink_at = 999.0
+        pixels.set(mood="idle")
+        run(pixels, 2.0)
+        centered = pixels.frame(0.0)
+
+        pixels.set(gaze=-1.0)
+        left = pixels.frame(TICK)
+        pixels.set(gaze=1.0)
+        right = pixels.frame(TICK)
+
+        self.assertNotEqual(centered, left)
+        self.assertNotEqual(left, right)
+
+    def test_every_supported_color_can_be_rendered(self):
+        for color in EYE_COLORS:
+            pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+            self.assertTrue(pixels.set(color=color))
+            self.assertGreater(sum(run(pixels, 1.0)[-1]), 0, color)
+
     def test_every_mood_except_off_actually_moves(self):
         for name in MOODS:
             pixels = Pixels(brightness=BRIGHTNESS_CEILING)

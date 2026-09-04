@@ -1,8 +1,9 @@
 """What the eyes are doing, and why.
 
 The rendering lives on the Pi - see node/humalien_node/pixels.py for why. This
-file decides only WHICH mood is true right now and how loud things are, and
-sends that as one small message whenever the answer changes.
+file decides which mood and shared color are true, how loud things are, where
+the gaze highlight belongs, and which one-shot effects should fire. It sends
+one small message whenever that semantic state changes.
 
 TWO SOURCES, ONE OUTPUT
 -----------------------
@@ -34,8 +35,16 @@ this becomes impossible to predict from the outside:
 import asyncio
 import json
 import time
+from collections import deque
 
 from websockets.exceptions import ConnectionClosed
+
+from appearance import (
+    CELEBRATIONS,
+    DEFAULT_EYE_COLOR,
+    EYE_COLORS,
+    WINK_EYES,
+)
 
 
 # The moods the node knows how to draw. Kept in step with MOODS in
@@ -51,6 +60,7 @@ MOODS = (
     "curious",
     "surprised",
     "confused",
+    "angry",
     "sleepy",
 )
 
@@ -63,6 +73,7 @@ FEELINGS = (
     "curious",
     "surprised",
     "confused",
+    "angry",
     "thinking",
     "sleepy",
 )
@@ -100,6 +111,10 @@ TICK = 0.1
 # node smooths between updates, which is what makes a coarse value survivable.
 LEVEL_DEADBAND = 0.06
 
+# Face tracking already smooths its target. This wider deadband keeps tiny
+# camera movements from turning into ten eye messages a second.
+GAZE_DEADBAND = 0.10
+
 
 def clamp(value, low=0.0, high=1.0):
     return max(low, min(high, value))
@@ -108,10 +123,18 @@ def clamp(value, low=0.0, high=1.0):
 class Mood:
     """Decides the eye mood and sends it. Feed it; run() does the rest."""
 
-    def __init__(self, websocket, log=None, brightness=None, is_speaking=None):
+    def __init__(
+        self,
+        websocket,
+        log=None,
+        brightness=None,
+        is_speaking=None,
+        color=DEFAULT_EYE_COLOR,
+    ):
         self.websocket = websocket
         self.log = log
         self.brightness = brightness
+        self.color = color if color in EYE_COLORS else DEFAULT_EYE_COLOR
 
         # Whether sound is actually coming out of the head, asked of
         # PacedPlayback rather than inferred from how recently a chunk was
@@ -136,6 +159,8 @@ class Mood:
 
         self.working = False
         self.feeling = None
+        self.gaze = None
+        self.effects = deque()
 
         self.mood = None
         self.last_sent = None
@@ -189,6 +214,39 @@ class Mood:
             self.log(f"Feeling {name}")
 
         return True
+
+    def set_color(self, color: str) -> bool:
+        """Change both eyes together. Persistence belongs to AppearanceStore."""
+
+        if color not in EYE_COLORS:
+            return False
+
+        self.color = color
+
+        if self.log:
+            self.log(f"Eye color: {color}")
+
+        return True
+
+    def wink(self, eye: str) -> bool:
+        if eye not in WINK_EYES:
+            return False
+
+        self.effects.append({"name": "wink", "eye": eye})
+        return True
+
+    def celebrate(self, style: str) -> bool:
+        if style not in CELEBRATIONS:
+            return False
+
+        self.effects.append({"name": "celebrate", "style": style})
+        return True
+
+    def look_at(self, x: float) -> None:
+        self.gaze = clamp(float(x), -1.0, 1.0)
+
+    def stop_looking(self) -> None:
+        self.gaze = None
 
     # ------------------------------------------------------------ the choice
 
@@ -244,15 +302,41 @@ class Mood:
     # -------------------------------------------------------------- the wire
 
     def worth_sending(self, mood, level) -> bool:
+        if self.effects:
+            return True
+
         if self.last_sent is None:
             return True
 
-        was, before = self.last_sent
+        was, before, color, gaze = self.last_sent
 
-        return mood != was or abs(level - before) >= LEVEL_DEADBAND
+        gaze_changed = (
+            (gaze is None) != (self.gaze is None)
+            or (
+                gaze is not None
+                and self.gaze is not None
+                and abs(gaze - self.gaze) >= GAZE_DEADBAND
+            )
+        )
+
+        return (
+            mood != was
+            or color != self.color
+            or gaze_changed
+            or abs(level - before) >= LEVEL_DEADBAND
+        )
 
     async def send(self, mood, level) -> None:
-        message = {"type": "eyes", "mood": mood, "level": round(level, 3)}
+        message = {
+            "type": "eyes",
+            "mood": mood,
+            "level": round(level, 3),
+            "color": self.color,
+            "gaze": None if self.gaze is None else round(self.gaze, 3),
+        }
+
+        if self.effects:
+            message["effect"] = self.effects.popleft()
 
         # Only on the first frame. Resending it every time would let a value
         # the bench is tuning be overwritten twenty times a second.
@@ -261,11 +345,12 @@ class Mood:
 
         await self.websocket.send(json.dumps(message))
 
-        self.last_sent = (mood, level)
+        self.last_sent = (mood, level, self.color, self.gaze)
 
     async def dark(self) -> None:
         """Close the eyes. Worth doing before the socket closes."""
 
+        self.effects.clear()
         self.last_sent = None
         await self.send("off", 0.0)
 

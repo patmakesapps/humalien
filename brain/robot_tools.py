@@ -15,6 +15,7 @@ Each tool declares its schema next to its handler. See tool_registry.py.
 import asyncio
 from dataclasses import dataclass, field
 
+from appearance import CELEBRATIONS, EYE_COLORS, WINK_EYES
 from conversation import ConversationState
 from describe import OllamaDescriber, to_jpeg
 from eyes import Eyes
@@ -53,6 +54,7 @@ class Robot:
     realtime: object | None = None
     mood: object | None = None
     gestures: object | None = None
+    appearance: object | None = None
     vision: str = REALTIME
 
     # The picture currently in front of the model, if any. Only ever one.
@@ -233,6 +235,106 @@ async def feel(robot: Robot, feeling: str) -> dict:
         )
 
     return {"shown": feeling}
+
+
+@tools.tool(
+    "set_eye_color",
+    "Change both of your illuminated eyes to the same named color because "
+    "somebody explicitly asked. The color stays for this run. Only save it "
+    "as your default when they explicitly say default, permanent, remember "
+    "it, or use it from now on. Do not announce or describe the change; just "
+    "keep talking.",
+    properties={
+        "color": {
+            "type": "string",
+            "enum": list(EYE_COLORS),
+            "description": "The shared color for both eyes.",
+        },
+        "save_as_default": {
+            "type": "boolean",
+            "description": (
+                "Persist across restarts. False unless the person explicitly "
+                "asked to change the default."
+            ),
+        },
+    },
+    required=["color"],
+)
+async def set_eye_color(
+    robot: Robot,
+    color: str,
+    save_as_default: bool = False,
+) -> dict:
+    if color not in EYE_COLORS:
+        raise ToolError(
+            f"{color!r} is not an eye color. Choose one of: "
+            + ", ".join(EYE_COLORS)
+        )
+
+    if save_as_default:
+        if robot.appearance is None:
+            raise ToolError("Your appearance settings are unavailable.")
+
+        await asyncio.to_thread(robot.appearance.set_default_eye_color, color)
+
+    if robot.mood is None:
+        return {"changed": None}
+
+    robot.mood.set_color(color)
+
+    log(
+        f"set_eye_color -> {color}"
+        + (" (default)" if save_as_default else "")
+    )
+
+    return {"changed": True}
+
+
+@tools.tool(
+    "wink",
+    "Briefly wink one eye because somebody asked you to, or because a wink "
+    "fits what you are saying. Left and right are YOUR left and right. It is "
+    "instant and silent; do not narrate it.",
+    properties={
+        "eye": {
+            "type": "string",
+            "enum": list(WINK_EYES),
+            "description": "Which of your own eyes to wink.",
+        }
+    },
+    required=["eye"],
+)
+async def wink(robot: Robot, eye: str) -> dict:
+    if robot.mood is None:
+        return {"shown": None}
+
+    if not robot.mood.wink(eye):
+        raise ToolError(f"You cannot wink {eye!r}.")
+
+    return {"shown": True}
+
+
+@tools.tool(
+    "celebrate",
+    "Send one brief celebratory ripple through both eyes. Use it for genuinely "
+    "good moments or when somebody asks you to celebrate, not as a constant "
+    "decoration. It is instant and silent; do not narrate it.",
+    properties={
+        "style": {
+            "type": "string",
+            "enum": list(CELEBRATIONS),
+            "description": "A warm gold ripple or a short rainbow ripple.",
+        }
+    },
+)
+async def celebrate(robot: Robot, style: str = "gold") -> dict:
+    if robot.mood is None:
+        return {"shown": None}
+
+    if not robot.mood.celebrate(style):
+        raise ToolError(f"You cannot celebrate with {style!r}.")
+
+    return {"shown": True}
 
 
 @tools.tool(

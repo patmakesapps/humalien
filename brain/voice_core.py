@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
 
+from appearance import AppearanceStore
 from attention import Attention
 from audio_adapter import ModelToPiAudio, PiToModelAudio
 from gaze import GazeController, HOLDING, TRACKING
@@ -343,6 +344,12 @@ async def follow_faces(
                 # to dead ahead - the drift in Gestures is better company.
                 gestures.stop_looking()
 
+        if mood is not None:
+            if target.state in (TRACKING, HOLDING):
+                mood.look_at(target.x)
+            else:
+                mood.stop_looking()
+
         # Only on a change. Every frame would bury the rest of the log, and
         # the question this answers - is it looking at anybody, and did it
         # switch - is a question about changes.
@@ -509,6 +516,7 @@ async def run_voice_core() -> None:
         raise RuntimeError(f"OPENAI_API_KEY was not found in {ENV_FILE}")
 
     store = PeopleStore(database)
+    appearance = AppearanceStore(database)
     eyes = Eyes(
         Perception(store),
         camera=int(camera) if camera.isdigit() else camera,
@@ -525,7 +533,12 @@ async def run_voice_core() -> None:
 
             gestures = Gestures(pi_websocket, log=log) if gesturing else None
             mood = (
-                Mood(pi_websocket, log=log, brightness=eye_brightness)
+                Mood(
+                    pi_websocket,
+                    log=log,
+                    brightness=eye_brightness,
+                    color=appearance.default_eye_color(),
+                )
                 if expressive
                 else None
             )
@@ -560,6 +573,7 @@ async def run_voice_core() -> None:
                 state=state,
                 mood=mood,
                 gestures=gestures,
+                appearance=appearance,
                 vision=vision,
             )
 
@@ -657,6 +671,7 @@ async def run_voice_core() -> None:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
     finally:
+        appearance.close()
         store.close()
 
 
