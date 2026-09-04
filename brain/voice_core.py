@@ -300,8 +300,11 @@ async def follow_faces(
     looking at; it cannot be wrong about how far it may turn.
     """
 
+    log("Face tracking on - the head follows whoever is talking")
+
     attention = Attention()
     controller = GazeController()
+    watching = None
 
     # When the room was last occupied. Not a bool: the detector drops a face
     # for a frame constantly, and treating every recovery as an arrival made
@@ -339,6 +342,27 @@ async def follow_faces(
                 # Recentering or idle. Let go rather than pinning the head
                 # to dead ahead - the drift in Gestures is better company.
                 gestures.stop_looking()
+
+        # Only on a change. Every frame would bury the rest of the log, and
+        # the question this answers - is it looking at anybody, and did it
+        # switch - is a question about changes.
+        if attended is None and watching is not None:
+            log("Looking at nobody in particular")
+            watching = None
+
+        elif attended is not None:
+            who = attended.face.center
+
+            if watching is None:
+                log(f"Looking at a face, {attended.count} in view")
+            elif attended.switched:
+                log(
+                    "Glancing at somebody else"
+                    if attended.glancing
+                    else f"Looking at someone else now, {attended.count} in view"
+                )
+
+            watching = who
 
         if attended is None:
             if empty_since is None:
