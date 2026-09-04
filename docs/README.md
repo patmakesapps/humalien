@@ -12,6 +12,10 @@ claim that the planned work has already been implemented.
 - [LumaKit delegation](lumakit-delegation.md) — giving Tubby durable background
   agency without building a second general-purpose agent framework.
 
+- [Head tracking review and bench plan](head-tracking-review.md) — the verified
+  face-to-servo behavior, current speaker-selection limitation, and the test and
+  tuning work planned for tonight or the next session.
+
 ## Decision summary
 
 1. The current laptop/Pi split remains in place until replacement hardware is
@@ -28,4 +32,3 @@ claim that the planned work has already been implemented.
    selection, persistence, retries, approvals, and completion tracking.
 6. Date/time awareness and LumaKit delegation are planned only after the
    consolidated runtime is stable.
-
