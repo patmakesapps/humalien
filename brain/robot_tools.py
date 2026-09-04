@@ -284,22 +284,23 @@ async def remember(robot: Robot, fact: str, about: str = "") -> dict:
 
 @tools.tool(
     "recall",
-    "Search what you remember from before this conversation. Use it when "
-    "somebody refers to something you should already know, or asks what you "
-    "remember. Instant and free. What comes back is your own memory - talk "
-    "about it as something you remember, never as a search result.",
+    "Look at what you remember from before this conversation. Call it with "
+    "nothing to see everything you know - that is the normal way to use it, "
+    "and you read it and pick out what matters. Only pass 'about' if the list "
+    "has got long and you want it narrowed. Instant and free. What comes back "
+    "is your own memory: talk about it as remembering, never as searching.",
     properties={
         "about": {
             "type": "string",
             "description": (
-                "What to look for - a topic, an object, a name. Leave it out "
-                "to see the most recent things you know."
+                "Optional. A word to narrow a long list by. Leave it out to "
+                "see everything, which is usually what you want."
             ),
         }
     },
 )
 async def recall(robot: Robot, about: str = "") -> dict:
-    # Whoever is in front of it, so their own memories come back first.
+    # Whoever is in front of it, so their own memories come first.
     visible = robot.eyes.known
     person = visible[0] if len(visible) == 1 else None
 
@@ -314,6 +315,10 @@ async def recall(robot: Robot, about: str = "") -> dict:
     return {
         "you_remember": [
             {
+                # The id is here so `revise` and `forget` have something to
+                # aim at. Reading the list is how the model finds the one it
+                # means; there is no lookup-by-text anywhere.
+                "id": row["id"],
                 "that": row["text"],
                 "about": (
                     None
@@ -324,6 +329,66 @@ async def recall(robot: Robot, about: str = "") -> dict:
             for row in found
         ]
     }
+
+
+@tools.tool(
+    "revise",
+    "Change something you already remember, rather than remembering a second "
+    "version of it. Use this when a detail turns out to be wrong or has moved "
+    "on - somebody changed jobs, finished the thing they were building, "
+    "prefers something else now. Recall first to find which memory you mean.",
+    properties={
+        "id": {
+            "type": "integer",
+            "description": "Which memory, from what recall gave you.",
+        },
+        "fact": {
+            "type": "string",
+            "description": (
+                "What it should say now, in full - this replaces the old "
+                "wording rather than being added to it."
+            ),
+        },
+    },
+    required=["id", "fact"],
+)
+async def revise(robot: Robot, id: int, fact: str) -> dict:
+    changed = await asyncio.to_thread(robot.store.revise, id, fact)
+
+    if not changed:
+        raise ToolError(
+            "You do not remember anything with that id. Recall first."
+        )
+
+    log(f"revise {id} -> {fact!r}")
+
+    return {"changed": True}
+
+
+@tools.tool(
+    "forget",
+    "Drop something you remember, when somebody asks you to forget it or it "
+    "turns out to be wrong. Recall first to find which one you mean. This is "
+    "permanent - if you are unsure which memory they mean, ask.",
+    properties={
+        "id": {
+            "type": "integer",
+            "description": "Which memory, from what recall gave you.",
+        }
+    },
+    required=["id"],
+)
+async def forget(robot: Robot, id: int) -> dict:
+    dropped = await asyncio.to_thread(robot.store.forget_memory, id)
+
+    if not dropped:
+        raise ToolError(
+            "You do not remember anything with that id. Recall first."
+        )
+
+    log(f"forget {id}")
+
+    return {"forgotten": True}
 
 
 @tools.tool(

@@ -395,14 +395,42 @@ class MemoryToolTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(self.store.recall("coriander")[0]["person_id"])
 
-    async def test_recall_finds_what_was_remembered(self):
+    async def test_recall_with_nothing_returns_everything(self):
+        """The normal call. The model reads the list and picks.
+
+        Deciding which of thirty sentences bears on what somebody just said
+        is a language problem, and there is a language model on the other end
+        of this call. Anything that pre-filters here is guessing on its
+        behalf, worse, with keywords.
+        """
+
+        self.store.remember("the neck servo is channel one")
+        self.store.remember("is building a kiln")
+        self.store.remember("takes coffee black")
+
+        result = await tools.execute(self.robot(), "recall", "{}")
+        text = json.dumps(result)
+
+        self.assertIn("channel one", text)
+        self.assertIn("kiln", text)
+        self.assertIn("coffee", text)
+
+    def test_recall_never_drops_a_row_the_model_might_want(self):
+        """A phrase that shares no keyword with a memory still returns it."""
+
+        self.store.remember("is building a kiln in the garage")
+
+        # Nothing here matches "kiln" or "building" by any string rule.
+        everything = self.store.recall()
+
+        self.assertEqual(len(everything), 1)
+
+    async def test_recall_hands_back_ids_to_act_on(self):
         self.store.remember("the neck servo is channel one")
 
-        result = await tools.execute(self.robot(), "recall", json.dumps(
-            {"about": "which servo is the neck"}
-        ))
+        result = json.loads(await tools.execute(self.robot(), "recall", "{}"))
 
-        self.assertIn("channel one", json.dumps(result))
+        self.assertIn("id", result["data"]["you_remember"][0])
 
     async def test_recall_names_who_a_memory_is_about(self):
         self.store.remember("takes coffee black", person_id=self.pat.id)
@@ -419,6 +447,41 @@ class MemoryToolTests(unittest.IsolatedAsyncioTestCase):
         ))
 
         self.assertNotIn("error", json.dumps(result).lower())
+
+    async def test_revise_replaces_rather_than_duplicating(self):
+        self.store.remember("is building a kiln", person_id=self.pat.id)
+        memory_id = self.store.recall()[0]["id"]
+
+        await tools.execute(self.robot(), "revise", json.dumps(
+            {"id": memory_id, "fact": "finished the kiln"}
+        ))
+
+        kept = self.store.recall()
+
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["text"], "finished the kiln")
+        self.assertEqual(kept[0]["person_id"], self.pat.id)
+
+    async def test_forget_drops_it(self):
+        self.store.remember("takes coffee black")
+        memory_id = self.store.recall()[0]["id"]
+
+        await tools.execute(self.robot(), "forget", json.dumps(
+            {"id": memory_id}
+        ))
+
+        self.assertEqual(self.store.recall(), [])
+
+    async def test_acting_on_a_memory_that_is_not_there_says_so(self):
+        for tool, arguments in (
+            ("revise", {"id": 999, "fact": "anything"}),
+            ("forget", {"id": 999}),
+        ):
+            result = await tools.execute(
+                self.robot(), tool, json.dumps(arguments)
+            )
+
+            self.assertIn("recall first", json.dumps(result).lower())
 
 
 class MoveToolTests(unittest.IsolatedAsyncioTestCase):

@@ -29,17 +29,6 @@ GREET_THRESHOLD = 0.50
 NOVEL_BELOW = 0.75
 MAX_FACES_PER_PERSON = 12
 
-# Words that appear in half the rows and so tell `recall` nothing. Kept short
-# and boring on purpose: this is a substring search, not a language model, and
-# a long stopword list is how a search starts quietly dropping real queries.
-FILLER = {
-    "the", "and", "for", "was", "you", "your", "yours", "our", "his", "her",
-    "hers", "its", "that", "this", "those", "these", "what", "when", "where",
-    "who", "why", "how", "about", "with", "from", "have", "has", "had",
-    "did", "does", "know", "tell", "say", "said", "remember", "anything",
-    "something", "there", "they", "them", "any", "are", "were", "been",
-    "can", "could", "would", "should", "will", "just", "like", "get", "got",
-}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS people (
@@ -77,6 +66,7 @@ CREATE INDEX IF NOT EXISTS faces_by_person ON faces(person_id);
 CREATE INDEX IF NOT EXISTS facts_by_person ON facts(person_id);
 CREATE INDEX IF NOT EXISTS memories_by_person ON memories(person_id);
 """
+
 
 # `facts` and `memories` look alike and are not the same thing.
 #
@@ -139,9 +129,12 @@ class PeopleStore:
         self.connection.execute("PRAGMA journal_mode = WAL")
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.executescript(SCHEMA)
+
+
         self.connection.commit()
 
         self._cache: tuple[np.ndarray, list[int]] | None = None
+
 
     def close(self) -> None:
         self.connection.close()
@@ -374,56 +367,64 @@ class PeopleStore:
         query: str = "",
         *,
         person_id: int | None = None,
-        limit: int = 8,
+        limit: int = 30,
     ) -> list[dict]:
-        """Memories matching `query`, newest first.
+        """What Humalien knows, newest first. Everything, unless narrowed.
 
-        Substring matching, deliberately. An embedding index over a few
-        hundred rows would cost a model call per write and per read to answer
-        questions this can already answer, on a machine that is also running
-        face recognition and paced audio. Revisit when the row count makes it
-        actually fail, not before.
+        THE MODEL IS THE RETRIEVAL, NOT THIS.
 
-        A person's own memories rank above unattached ones when a person is
-        given, because "what do you know about me" should not be answered
-        mostly with things about somebody else.
+        An earlier version of this scored rows against the query - stopword
+        lists, substring matching, relevance thresholds - and it was the wrong
+        shape of solution. Deciding which of thirty sentences bears on what
+        somebody just said is a language problem, and there is already a
+        language model on the other end of this call. Handing it the rows and
+        letting it choose beats any amount of keyword machinery, and it
+        understands "is he building anything" without being taught that
+        "building" and "build" are the same word.
+
+        So `query` is a convenience for narrowing a long list, not the
+        mechanism, and it is plain substring matching with no cleverness
+        pretending otherwise. Empty - the normal case - returns everything.
+
+        This holds while the list fits in a tool result. At a few thousand
+        memories it stops fitting and something has to pre-select; that is the
+        point to reach for embeddings, and not before.
         """
 
-        # Filler words match every row, which turns "what about the servo"
-        # into "everything". They are dropped - but a query that is ALL filler
-        # or all short words is still a real query ("cat", "PCB"), so there is
-        # a fallback rather than a no-match.
-        words = [
-            word
-            for word in query.lower().split()
-            if len(word) > 2 and word not in FILLER
-        ]
+        where, params = [], []
 
-        if not words and query.strip():
-            words = [query.strip()]
-
-        clauses, params = [], []
-
-        for word in words:
-            clauses.append("text LIKE ?")
-            params.append(f"%{word}%")
-
-        # An empty query is not a search, it is "everything you know".
-        where = " OR ".join(clauses) if clauses else "1=1"
+        if query.strip():
+            where.append("text LIKE ?")
+            params.append(f"%{query.strip()}%")
 
         if person_id is not None:
-            where = f"({where}) AND (person_id = ? OR person_id IS NULL)"
+            where.append("(person_id = ? OR person_id IS NULL)")
             params.append(person_id)
 
+        clause = f" WHERE {' AND '.join(where)}" if where else ""
+
         rows = self.connection.execute(
-            f"SELECT id, person_id, text, source, created_at FROM memories"
-            f" WHERE {where}"
+            "SELECT id, person_id, text, source, created_at FROM memories"
+            f"{clause}"
+            # The present person's own memories first, then newest. Ordering
+            # is all this does - it never drops a row the model might want.
             " ORDER BY (person_id IS NULL), created_at DESC"
             " LIMIT ?",
             (*params, limit),
         ).fetchall()
 
         return [dict(row) for row in rows]
+
+    def revise(self, memory_id: int, text: str) -> bool:
+        """Replace what a memory says, keeping who it is about."""
+
+        cursor = self.connection.execute(
+            "UPDATE memories SET text = ? WHERE id = ?",
+            (text.strip(), memory_id),
+        )
+        self.connection.commit()
+
+        return cursor.rowcount > 0
 
     def forget_memory(self, memory_id: int) -> bool:
         cursor = self.connection.execute(
