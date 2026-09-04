@@ -57,17 +57,19 @@ PAN_RANGE = (-14.4, 14.4)
 # SERVO_MAP.md allows the node down to -3.6 and up to +40. Ordinary speech
 # motion is deliberately kept inside the small envelope it asks for; only
 # deliberate looking-up borrows any of the rest.
-NOD_RANGE = (-3.6, 8.0)
+NOD_RANGE = (-3.6, 22.0)
 
 # What the head may do when somebody ASKS it to look up, as opposed to what
-# it does to itself while talking. Being asked is a different thing: "look up"
-# answered with eight degrees reads as the robot not having heard. This is
-# still well short of the +40 the node allows and the mechanism was walked to.
+# it does to itself while talking. Being asked is a different thing, and it
+# has to be VISIBLY different: conversational motion now reaches +22 on its
+# own, so a "look up" answered with anything near that reads as the robot
+# carrying on rather than as it doing what it was told. Still well short of
+# the +40 the node allows and the mechanism was walked to.
 #
 # The two ranges exist so that a bug in the speech envelope can never reach
 # the larger one - only an explicit `command` unlocks it, and only while the
 # hold lasts.
-NOD_COMMAND_RANGE = (-3.6, 22.0)
+NOD_COMMAND_RANGE = (-3.6, 32.0)
 
 # How loud a chunk has to be to earn a full-sized gesture. Speech sits well
 # below full scale, so an envelope used raw barely moves the arms at all.
@@ -98,8 +100,11 @@ PHASE = 2.2
 
 # ----------------------------------------------------------------- the head
 
-# The head's own beat, well under the arms'. Phrases, not syllables.
-HEAD_BEAT_HZ = 0.17
+# The head's own beat. Under the arms' - it follows phrases rather than
+# syllables - but not by as much as it was. At 0.17 Hz the head changed
+# direction once every three seconds, which on a desk is indistinguishable
+# from not moving.
+HEAD_BEAT_HZ = 0.38
 
 # The head's own envelope, well slower than the arms'. ATTACK of 0.05 s is
 # right for a hand that lands with the syllable, and wrong for a neck: the
@@ -108,22 +113,38 @@ HEAD_BEAT_HZ = 0.17
 # the instant anybody starts talking. The node would refuse it - it is
 # acceleration-limited - but a refused request is a head visibly lagging its
 # own gestures. Easing in over a third of a second asks for what it can have.
-HEAD_ATTACK = 0.45
-HEAD_RELEASE = 0.70
+HEAD_ATTACK = 0.28
+HEAD_RELEASE = 0.60
 
 # How far the head moves on the speech envelope, in degrees, at full volume.
-# Small on purpose: this rides on top of wherever the robot is already
-# looking, and the sum still has to fit inside PAN_RANGE.
-PAN_SPEECH = 4.5
-NOD_SPEECH = 2.4
+# This rides on top of wherever the robot is already looking, and the sum
+# still has to fit inside PAN_RANGE - which is what stops these going higher.
+PAN_SPEECH = 9.0
+NOD_SPEECH = 6.0
 
-# The head lifts very slightly while speaking, the way people do.
-NOD_SPEAKING_BIAS = 0.8
+# WHY THE NOD PIVOTS UPWARD INSTEAD OF AROUND ZERO
+#
+# The mechanism goes +40 degrees up and only -3.6 down. A nod in the ordinary
+# sense - chin down, back up - is not a motion this head can make. Swinging a
+# small amount either side of zero, which is what this did at first, spends
+# almost all of its travel on the 3.6 degrees that do not exist and reads as
+# a head that never moves vertically at all.
+#
+# So the head raises its chin while it talks and swings around THAT. The lift
+# scales with the speech envelope, so it is level when quiet and has room to
+# move when it is not: at full voice the nod lives between about +1 and +13,
+# entirely inside the approved upward travel, and never goes near the floor.
+NOD_SPEAKING_LIFT = 7.0
 
 # Idle drift. Two periods that do not divide into each other, so the wander
 # never repeats visibly. Amplitudes in degrees.
-PAN_IDLE = 3.2
-NOD_IDLE = 0.7
+#
+# The nod drift is biased upward for the same reason as the speaking lift:
+# centred on zero it would spend half its time trying to go somewhere the
+# mechanism cannot.
+PAN_IDLE = 5.5
+NOD_IDLE = 2.0
+NOD_IDLE_CENTRE = 2.5
 PAN_IDLE_PERIOD = 11.3
 NOD_IDLE_PERIOD = 17.9
 
@@ -132,7 +153,7 @@ NOD_IDLE_PERIOD = 17.9
 # How much of the way to a face the head actually turns. Under 1 on purpose:
 # a robot that centres a face perfectly looks like a security camera. This
 # turns toward somebody and lets the rest be implied.
-TRACK_GAIN = 0.65
+TRACK_GAIN = 0.85
 
 # Which way a face on the right of the CAMERA IMAGE moves the neck.
 #
@@ -151,7 +172,7 @@ PAN_FROM_GAZE = -1.0
 # approved. It is what lets a desk bot raise its face to somebody standing
 # over it instead of talking to their belt. Set it to 0 to switch looking-up
 # off entirely without touching anything else.
-NOD_TRACK_UP = 6.0
+NOD_TRACK_UP = 9.0
 
 # How long a gaze target stays interesting after the last face update. The
 # vision loop drops frames constantly; without this the head would snap back
@@ -161,7 +182,7 @@ GAZE_STALE_AFTER = 1.5
 # How fast the head's own idea of where to look catches up with the tracker,
 # in seconds. This is a second, slower smoothing on top of GazeController's,
 # and it is what stops the neck reacting to a head turning in a chair.
-GAZE_TAU = 0.9
+GAZE_TAU = 0.55
 
 # ------------------------------------------------------------------ the wire
 
@@ -189,9 +210,9 @@ HEAD_DEADBAND = 0.15
 # `pan` throughout this codebase. Somebody facing it who meant their own left
 # will say so, and can be answered.
 COMMANDED = {
-    ("head", "left"): {"pan": 10.0},
-    ("head", "right"): {"pan": -10.0},
-    ("head", "up"): {"nod": 20.0},
+    ("head", "left"): {"pan": 13.0},
+    ("head", "right"): {"pan": -13.0},
+    ("head", "up"): {"nod": 30.0},
     ("head", "down"): {"nod": -3.6},
     ("head", "centre"): {"pan": 0.0, "nod": 0.0},
     ("left arm", "up"): {"arm_l": 55.0},
@@ -351,7 +372,9 @@ class Gestures:
         """
 
         drift_pan = PAN_IDLE * math.sin(2.0 * math.pi * self.clock / PAN_IDLE_PERIOD)
-        drift_nod = NOD_IDLE * math.sin(2.0 * math.pi * self.clock / NOD_IDLE_PERIOD)
+        drift_nod = NOD_IDLE_CENTRE + NOD_IDLE * math.sin(
+            2.0 * math.pi * self.clock / NOD_IDLE_PERIOD
+        )
 
         if self.gaze is not None and self.since_gaze < GAZE_STALE_AFTER:
             x, y = self.gaze
@@ -414,7 +437,7 @@ class Gestures:
         pan = aim_pan + PAN_SPEECH * self.head_level * math.sin(head_phase)
         nod = (
             aim_nod
-            + NOD_SPEAKING_BIAS * self.head_level
+            + NOD_SPEAKING_LIFT * self.head_level
             + NOD_SPEECH * self.head_level * math.sin(head_phase * 1.7 + 0.9)
         )
 

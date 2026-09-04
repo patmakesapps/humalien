@@ -143,32 +143,66 @@ class TestHead(unittest.TestCase):
 
         self.assertGreaterEqual(min(p["nod"] for p in poses), -3.6)
 
-    def test_the_head_moves_gently_even_at_full_volume(self):
-        """No step big enough to be a flick, before the node even sees it.
+    def test_the_head_never_asks_for_more_than_the_node_can_give(self):
+        """The brain must not out-run the servo it is driving.
 
-        The node is what enforces this - it acceleration-limits every axis -
-        but a brain that asks for a snap and is refused still produces a
-        head that lags its own gestures. Better not to ask.
+        The node acceleration-limits every axis, so asking for more than it
+        can deliver is not dangerous - it is just a head visibly lagging its
+        own gestures, arriving at each pose after the sentence that wanted it.
+
+        These caps are node/humalien_node/arms.py's, walked on the robot and
+        approved. This test used to assert a flat 20 deg/s, which was written
+        when the node itself capped at 18 and quietly went stale the day that
+        changed.
         """
+
+        # PAN_SLEW_DPS and NOD_SLEW_DPS in node/humalien_node/arms.py.
+        caps = {"pan": 144.0, "nod": 108.0}
 
         gestures = Gestures(None)
         poses = run(gestures, 30.0, loudness=1.0, looking=(1.0, -1.0))
 
-        for axis in ("pan", "nod"):
+        for axis, cap in caps.items():
             worst = max(
                 abs(b[axis] - a[axis]) / STEP
                 for a, b in zip(poses, poses[1:])
             )
 
-            self.assertLess(worst, 20.0, f"{axis} asked for {worst:.1f} deg/s")
+            self.assertLess(
+                worst, cap,
+                f"{axis} asked for {worst:.1f} deg/s of {cap:.0f} available",
+            )
 
-    def test_the_head_is_quieter_than_the_arms(self):
+    def test_the_head_actually_moves_vertically(self):
+        """The mechanism goes +40 up and -3.6 down, so a nod cannot dip.
+
+        Swinging a little either side of zero - which this did at first -
+        spends nearly all its travel on the 3.6 degrees that do not exist,
+        and reads as a head that never moves vertically at all. It raises its
+        chin while talking and swings around that instead.
+        """
+
+        poses = run(Gestures(None), 20.0, loudness=1.0)
+        nods = [pose["nod"] for pose in poses]
+
+        self.assertGreater(max(nods) - min(nods), 10.0)
+        self.assertGreater(max(nods), 12.0)
+
+    def test_the_head_actually_moves_side_to_side(self):
+        poses = run(Gestures(None), 20.0, loudness=1.0)
+        pans = [pose["pan"] for pose in poses]
+
+        self.assertGreater(max(pans) - min(pans), 15.0)
+
+    def test_the_head_is_still_quieter_than_the_arms(self):
+        """Not by as much as it was, but the hands should still lead."""
+
         poses = run(Gestures(None), 12.0, loudness=LEVEL_REFERENCE)
 
         arms = max(abs(p["arm_l"] - ARM_REST) for p in poses)
         head = max(abs(p["nod"]) for p in poses)
 
-        self.assertLess(head, arms / 3.0)
+        self.assertLess(head, arms / 2.0)
 
     def test_the_head_turns_toward_a_face(self):
         left = run(Gestures(None), 6.0, looking=(-1.0, 0.0))[-1]
@@ -232,10 +266,10 @@ class TestAskedForPoses(unittest.TestCase):
         gestures = Gestures(None)
         gestures.command("head", "left")
 
-        poses = run(gestures, 2.0, loudness=1.0)
+        wanted = COMMANDED[("head", "left")]["pan"]
 
-        for pose in poses:
-            self.assertAlmostEqual(pose["pan"], 10.0, places=3)
+        for pose in run(gestures, 2.0, loudness=1.0):
+            self.assertAlmostEqual(pose["pan"], wanted, places=3)
 
     def test_it_holds_through_a_face_it_would_rather_look_at(self):
         gestures = Gestures(None)
@@ -243,7 +277,9 @@ class TestAskedForPoses(unittest.TestCase):
 
         pose = run(gestures, 2.0, looking=(1.0, 0.0))[-1]
 
-        self.assertAlmostEqual(pose["pan"], 10.0, places=3)
+        self.assertAlmostEqual(
+            pose["pan"], COMMANDED[("head", "left")]["pan"], places=3
+        )
 
     def test_the_hold_expires_on_its_own(self):
         """It has to. Nothing else ever ends it.
@@ -299,7 +335,9 @@ class TestAskedForPoses(unittest.TestCase):
         asked = Gestures(None)
         asked.command("head", "up")
 
-        self.assertGreater(run(asked, 0.5)[-1]["nod"], NOD_RANGE[1])
+        # Visibly past anything the robot reaches on its own, or asking it
+        # to look up is indistinguishable from it carrying on talking.
+        self.assertGreater(run(asked, 0.5)[-1]["nod"], NOD_RANGE[1] + 5.0)
 
         # And once it expires, the small envelope is back in force.
         run(asked, HOLD_SECONDS + 1.0, loudness=1.0)
