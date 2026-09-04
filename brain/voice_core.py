@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from websockets.asyncio.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosed
 
 from attention import Attention
 from audio_adapter import ModelToPiAudio, PiToModelAudio
@@ -40,6 +41,11 @@ RE_OFFER_AFTER = 20.0
 # How often the head reconsiders where to look. Faster than recognition runs,
 # because the smoothing wants a steady clock more than it wants new data.
 TRACK_INTERVAL = 0.1
+
+# How long the room has to be genuinely empty before somebody appearing counts
+# as an arrival worth being curious about. Detection drops out constantly, and
+# without this every dropped frame becomes a fresh arrival.
+NEW_FACE_AFTER = 6.0
 
 
 # Windows consoles default to cp1252, which cannot encode most of what a
@@ -84,6 +90,17 @@ async def pi_to_realtime(
     adapter = PiToModelAudio()
     listening = True
 
+    # Both ends of this can hang up first. Either way it is an ending, not a
+    # fault, and a traceback here made a clean quit look like a crash.
+    try:
+        await _pump_microphone(pi_websocket, realtime, gate, mood, adapter, listening)
+    except ConnectionClosed:
+        return
+
+
+async def _pump_microphone(
+    pi_websocket, realtime, gate, mood, adapter, listening
+) -> None:
     async for message in pi_websocket:
         if isinstance(message, bytes):
             if not gate.is_open:
@@ -285,7 +302,11 @@ async def follow_faces(
 
     attention = Attention()
     controller = GazeController()
-    had_somebody = False
+
+    # When the room was last occupied. Not a bool: the detector drops a face
+    # for a frame constantly, and treating every recovery as an arrival made
+    # the eyes flick back to `curious` several times a reply.
+    empty_since = None
 
     while True:
         await asyncio.sleep(TRACK_INTERVAL)
@@ -319,10 +340,20 @@ async def follow_faces(
                 # to dead ahead - the drift in Gestures is better company.
                 gestures.stop_looking()
 
-        if mood is not None and attended is not None:
-            mood.seen(new=not had_somebody)
+        if attended is None:
+            if empty_since is None:
+                empty_since = now
 
-        had_somebody = attended is not None
+        else:
+            arrived = (
+                empty_since is not None
+                and now - empty_since > NEW_FACE_AFTER
+            )
+
+            if mood is not None:
+                mood.seen(new=arrived)
+
+            empty_since = None
 
 
 async def watch_the_room(
@@ -490,6 +521,12 @@ async def run_voice_core() -> None:
                     mood.speaking(level)
 
             playback = PacedPlayback(pi_websocket, on_level=on_level)
+
+            # Set after the fact because the two need each other: playback
+            # reports its level to the mood, and the mood asks playback
+            # whether sound is actually coming out of the head.
+            if mood is not None:
+                mood.is_speaking = lambda: playback.is_speaking
             gate = build_mic_gate(gate_name, playback)
             state = ConversationState()
             robot = Robot(
@@ -561,18 +598,39 @@ async def run_voice_core() -> None:
                 else:
                     log("Speaking on sight is off - Humalien waits to be spoken to")
 
-                done, pending = await asyncio.wait(
-                    tasks,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+                try:
+                    done, _ = await asyncio.wait(
+                        tasks,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
 
-                for task in pending:
-                    task.cancel()
+                    # Whichever of these finishes first takes the whole robot
+                    # down with it, so it is worth saying which one and why.
+                    # Without this, a task that simply RETURNS - a socket
+                    # closing, a stream ending - shuts everything down in
+                    # silence and is indistinguishable from a crash.
+                    for task in done:
+                        name = task.get_coro().__qualname__
 
-                await asyncio.gather(*pending, return_exceptions=True)
+                        try:
+                            task.result()
+                            log(f"SHUTDOWN — {name} ended on its own")
 
-                for task in done:
-                    task.result()
+                        except Exception as error:
+                            log(f"SHUTDOWN — {name} failed: "
+                                f"{type(error).__name__}: {error}")
+                            raise
+
+                finally:
+                    # In the finally, and over ALL the tasks rather than the
+                    # pending ones, because ctrl-c cancels this coroutine
+                    # wherever it happens to be. Leaving tasks uncollected
+                    # meant a clean quit printed two tracebacks and looked
+                    # exactly like a crash.
+                    for task in tasks:
+                        task.cancel()
+
+                    await asyncio.gather(*tasks, return_exceptions=True)
 
     finally:
         store.close()
@@ -581,8 +639,16 @@ async def run_voice_core() -> None:
 def main() -> None:
     try:
         asyncio.run(run_voice_core())
+
     except KeyboardInterrupt:
-        log("Stopped")
+        # On Windows this is also what a console close, a Ctrl-Break, and a
+        # Ctrl-C delivered to the whole console process group look like - so
+        # say what was seen rather than asserting somebody pressed something.
+        log("Stopped — interrupt received")
+
+    except BaseException as error:
+        log(f"Stopped — {type(error).__name__}: {error}")
+        raise
 
 
 if __name__ == "__main__":

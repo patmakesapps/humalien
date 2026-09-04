@@ -41,6 +41,8 @@ import json
 import math
 import time
 
+from websockets.exceptions import ConnectionClosed
+
 
 # From cad/desk_bot.py. Positive is FORWARD on both arms; the node deals with
 # the fact that the two channels are wired in opposite directions.
@@ -468,13 +470,21 @@ class Gestures:
 
         last = time.monotonic()
 
-        while True:
-            await asyncio.sleep(TICK)
+        try:
+            while True:
+                await asyncio.sleep(TICK)
 
-            now = time.monotonic()
-            elapsed, last = now - last, now
+                now = time.monotonic()
+                elapsed, last = now - last, now
 
-            pose = self.pose(min(elapsed, TICK * 4))
+                pose = self.pose(min(elapsed, TICK * 4))
 
-            if self.worth_sending(pose):
-                await self.send(pose)
+                if self.worth_sending(pose):
+                    await self.send(pose)
+
+        except ConnectionClosed:
+            # The node hung up, or we are shutting down. Either way the body
+            # is the node's problem now - it parks the head and goes limp on
+            # its own. Raising here only produces a traceback on a normal
+            # quit, which makes every exit look like a crash.
+            return

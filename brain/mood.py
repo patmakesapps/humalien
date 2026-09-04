@@ -35,6 +35,8 @@ import asyncio
 import json
 import time
 
+from websockets.exceptions import ConnectionClosed
+
 
 # The moods the node knows how to draw. Kept in step with MOODS in
 # node/humalien_node/pixels.py by test_mood.py, which reads both.
@@ -106,10 +108,16 @@ def clamp(value, low=0.0, high=1.0):
 class Mood:
     """Decides the eye mood and sends it. Feed it; run() does the rest."""
 
-    def __init__(self, websocket, log=None, brightness=None):
+    def __init__(self, websocket, log=None, brightness=None, is_speaking=None):
         self.websocket = websocket
         self.log = log
         self.brightness = brightness
+
+        # Whether sound is actually coming out of the head, asked of
+        # PacedPlayback rather than inferred from how recently a chunk was
+        # released. See `decide` for why that distinction is the difference
+        # between a mood and a strobe.
+        self.is_speaking = is_speaking
 
         # Seconds since each signal, advanced by decide() on its own clock so
         # the whole state machine is testable without sleeping.
@@ -198,7 +206,25 @@ class Mood:
 
         self.feeling = None
 
-        if self.since_speaking < SPEAKING_TAIL:
+        # ASK, do not infer.
+        #
+        # This used to be `since_speaking < SPEAKING_TAIL` - is it less than a
+        # third of a second since a chunk was released. That is not the same
+        # question. PacedPlayback deliberately releases audio in bursts and
+        # then sleeps, holding only LEAD_SECONDS in flight, so the gap between
+        # releases is routinely longer than any tail worth having. The eyes
+        # dropped out of `speaking` in every one of those gaps and came back
+        # on the next chunk, several times a second, for the whole reply.
+        #
+        # `is_speaking` knows about the queue AND the audio still sitting
+        # inside aplay, which is the actual question: is sound coming out of
+        # the head. The tail below is only the fallback for a Mood built
+        # without one, which is every test in test_mood.py.
+        if self.is_speaking is not None:
+            if self.is_speaking():
+                return "speaking", self.speaking_level
+
+        elif self.since_speaking < SPEAKING_TAIL:
             return "speaking", self.speaking_level
 
         if self.working:
@@ -249,18 +275,23 @@ class Mood:
 
         last = time.monotonic()
 
-        while True:
-            await asyncio.sleep(TICK)
+        try:
+            while True:
+                await asyncio.sleep(TICK)
 
-            now = time.monotonic()
-            elapsed, last = now - last, now
+                now = time.monotonic()
+                elapsed, last = now - last, now
 
-            mood, level = self.decide(min(elapsed, TICK * 4))
+                mood, level = self.decide(min(elapsed, TICK * 4))
 
-            if mood != self.mood and self.log:
-                self.log(f"Eyes: {mood}")
+                if mood != self.mood and self.log:
+                    self.log(f"Eyes: {mood}")
 
-            self.mood = mood
+                self.mood = mood
 
-            if self.worth_sending(mood, level):
-                await self.send(mood, level)
+                if self.worth_sending(mood, level):
+                    await self.send(mood, level)
+
+        except ConnectionClosed:
+            # A normal end. The node clears the rings itself.
+            return
