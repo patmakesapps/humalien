@@ -55,6 +55,38 @@ resoldered before the next test. Do not record left/right order from that
 failed test.
 
 
+## The driver, its permissions, and its licence
+
+`pip install -r node/requirements.txt` brings in
+`adafruit-blinka-raspberry-pi5-neopixel`, which provides the
+`adafruit_raspberry_pi5_neopixel_write` module this code imports. It is the
+only route that works on a Pi 5: the RP1 offers no PWM/DMA path the older
+`rpi_ws281x` libraries can use, so this one drives the pixels over PIO.
+
+That means it needs **`/dev/pio0`**, not just GPIO. If that file is owned
+`root:root`, add to `/etc/udev/rules.d/99-com.rules`:
+
+```
+SUBSYSTEM=="*-pio", GROUP="gpio", MODE="0660"
+```
+
+and reboot. If it does not exist at all, the Pi 5 firmware predates PIO
+support. Either way the node logs `No NeoPixels, running blind-faced` and
+carries on with its voice and its arms - a missing driver costs the robot its
+face, never its speech.
+
+### Licence flag
+
+This package is **GPL-2.0-only**. Every other dependency here is permissive.
+It is imported rather than vendored, but Humalien is a commercial product and
+an image that ships it carries copyleft obligations the rest of the stack does
+not. Worth a decision before hardware leaves the building rather than after.
+
+If that decision goes against it, the replacement is a small one: the module
+is touched in exactly one place, `Pi5NeoPixelWrite` in `humalien_node/pixels.py`,
+which is nine lines and takes raw GRB bytes. Everything above it - the moods,
+the blink, the current budget - is ours and stays.
+
 ## Runtime driver — added 2026-09-03
 
 `humalien_node/pixels.py` renders the eyes; `humalien_node/pixel_bench.py`
