@@ -19,7 +19,7 @@ adafruit-circuitpython-pca9685==3.4.22
 #      "No NeoPixels, running blind-faced" and keeps its voice.
 #
 #   2. LICENCE: this package is GPL-2.0-only, unlike everything else here.
-#      It is an import, not vendored source, but Humalien is a commercial
+#      It is an import, not vendored source, but Humalien may become a commercial
 #      product and shipping an image containing it carries obligations the
 #      other dependencies do not. Flagged deliberately - see the note in
 #      node/NEOPIXEL_MAP.md before this ships on hardware that leaves the
