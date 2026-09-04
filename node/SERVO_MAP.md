@@ -98,8 +98,8 @@ the pulses observed above, not the CAD ranges:
 | axis | limits | pulses | top speed | acceleration |
 | --- | --- | --- | --- | --- |
 | `arm_l` / `arm_r` | -20..+75 deg | 600..2400 us | 100 deg/s | 600 deg/s² |
-| `pan` | ±14.4 deg | 1340..1660 us | 18 deg/s | 55 deg/s² |
-| `nod` | -3.6..+40 deg | 1056..1540 us | 10 deg/s | 30 deg/s² |
+| `pan` | ±14.4 deg | 1340..1660 us | 144 deg/s | 398 deg/s² |
+| `nod` | -3.6..+40 deg | 1056..1540 us | 108 deg/s | 237 deg/s² |
 
 The pulse clamp is per axis on purpose: a bad trim or a recalibrated
 `US_PER_DEG` cannot walk the neck out into an arm's pulse range.
@@ -113,10 +113,18 @@ however low the cap is. Every axis is therefore acceleration-limited as well,
 with a discrete braking curve that arrives at rest instead of being stopped
 dead on the last frame.
 
-At these figures the head reaches its top speed in a third of a second, pan
-crosses its whole 28.8 degree range in 1.9 s, and nod crosses its 43.6
-degrees in 4.7 s. `head_bench`'s `profile` command prints this before
-anything moves.
+At these figures pan reaches its cap in 0.36 s and crosses its whole 28.8
+degree range in about 0.5 s; nod reaches its cap in 0.46 s and crosses its
+43.6 degrees in about 0.9 s. `head_bench`'s `profile` command prints this
+before anything moves.
+
+The two acceleration figures are deliberately not round. A flat 80% increase
+on the accelerations that matched the approved speeds - 450 and 324 - FAILED
+the discrete braking tests in `node/tests/test_arms.py`: at those figures an
+axis can no longer bleed its speed off in whole 20 ms frames without a jerk
+on the frame it lands. 398 and 237 are the nearby values that keep the
+invariant. Do not round them up, and do not relax the tests so that rounder
+ones pass - those tests are the reason these numbers can be trusted.
 
 The head is also **parked at neutral before it is released** — on disconnect,
 on `limp`, and on the way out of both benches. An axis released off-centre
@@ -124,18 +132,28 @@ has to be jumped back the next time it engages, because a limp servo has no
 known position to slew from, and that jump is the one move the eye wiring
 cannot afford.
 
-### The rates are the part that is still unobserved
+### The rates, and what "approved" covers
 
-The pulse *endpoints* above were watched on the assembled robot. The *rates*
-were not: SERVO_MAP's earlier "proven slow rate" of 3.6 deg/s is what the old
-bench script ramped at, and a full pan sweep at that rate takes eight
-seconds. The figures in the table are the first ones fast enough to hold a
-conversation with.
+Walked on the assembled robot and accepted on 2026-09-03.
 
-**Walk them with `python -m humalien_node.head_bench` before letting the
-brain drive the head unattended.** `profile`, then `nod`, `pan`, `sweep` and
-`talk`. If anything looks harsh, lower the acceleration first and the speed
-second, in `arms.py`.
+The first runtime rates here were 18 and 10 deg/s, chosen to be obviously
+safe rather than to be right. They were walked up on the bench in stages -
+80/60 deg/s, then these - and accepted at 144 and 108. The observed test at
+the final profile was:
+
+- nod 0 -> -2 -> +5 -> 0 degrees
+- pan 0 -> -5 -> +5 -> 0 degrees
+- head parked at neutral, then released
+
+**What that does not cover: full-range travel, and durability over many
+cycles.** These rates are approved for short conversational motion, which is
+all `brain/gestures.py` ever asks for. Nothing has yet run the head to its
+stops repeatedly at this speed.
+
+If it ever looks harsh, lower the ACCELERATION first and the speed second, in
+`arms.py`. Walk any change with `python -m humalien_node.head_bench` -
+`profile`, then `nod`, `pan`, `sweep`, `talk` - before letting the brain
+drive it unattended.
 
 ### What the brain shapes
 

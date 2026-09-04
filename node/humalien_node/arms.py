@@ -55,7 +55,8 @@ SAFETY SHAPE
   * Nothing SNAPS either. Every axis is acceleration-limited as well as
     speed-limited - see below, it is the head's wiring that depends on it.
   * The head is parked at neutral before it is released, so the next engage
-    has nowhere to jump from.
+    has nowhere to jump from. This matters more now than it did: the head is
+    fast enough that a jump from an unknown position would be a real yank.
   * Loss of the brain means limp, not a held pose. A stalled servo holding
     an arm out is the one failure mode that gets hot.
   * The pulse clamp is PER AXIS. A trim value or a recalibrated US_PER_DEG
@@ -76,9 +77,9 @@ the most travel.
 
 So each axis also carries `accel_dps2`, and `step` ramps velocity into and
 out of every move, braking early enough to arrive without overshooting. The
-arms get a high figure - near enough to the behaviour they were proven with -
-and the head gets a deliberately low one. Nothing about the head needs to be
-quick. It needs to look like it meant it.
+head's speeds were walked up on the bench and approved; its ACCELERATIONS are
+what keep it from snapping at either end, and they are the numbers to lower
+first if it ever looks harsh again.
 """
 
 import asyncio
@@ -162,24 +163,34 @@ PAN_PULSE_CLAMP = (CENTER_US - _us(14.4), CENTER_US + _us(14.4))
 NOD_LIMITS = (-3.6, 40.0)
 NOD_PULSE_CLAMP = (CENTER_US - _us(40.0), CENTER_US + _us(3.6))
 
-# The head is deliberately slower than the arms. It follows phrases, not
-# syllables, and a neck that snaps reads as a machine rather than a face.
+# WALKED ON THE ASSEMBLED ROBOT AND APPROVED, 2026-09-03.
 #
-# SERVO_MAP.md's "proven slow rate" of 3.6 deg/s is the rate the BENCH SCRIPT
-# ramped at, not a mechanism limit - a full pan sweep at that rate takes eight
-# seconds, which is not conversation. These are the first rates fast enough to
-# be worth watching, and they have NOT yet been observed on the assembled
-# robot. Walk them with `python -m humalien_node.head_bench` before letting
-# the brain drive the head unattended.
-PAN_SLEW_DPS = 18.0
-NOD_SLEW_DPS = 10.0
+# These are not a guess. The first runtime rates here were 18 and 10 deg/s,
+# picked to be obviously safe; they were walked up on the bench in stages and
+# accepted at these. The observed test was nod 0 -> -2 -> +5 -> 0 and pan
+# 0 -> -5 -> +5 -> 0, at this exact profile, watched.
+#
+# What that does NOT cover: full-range travel and long-cycle durability. The
+# rates are approved for short conversational motion, which is all the brain
+# ever asks for, and are not yet proven for anything sustained.
+PAN_SLEW_DPS = 144.0
+NOD_SLEW_DPS = 108.0
 
-# The eye wiring runs through the nod joint. These are low enough that the
-# head takes about a third of a second to reach its own top speed and the
-# same again to stop, which is the difference between a nod and a flick.
-# There is nothing to gain by raising them: read the header.
-PAN_ACCEL_DPS2 = 55.0
-NOD_ACCEL_DPS2 = 30.0
+# The eye wiring runs through the nod joint, so the accelerations still do the
+# real work: pan reaches its cap in 0.36 s and nod in 0.46 s, and each spends
+# the same again stopping. That ramp is what keeps a fast head from being a
+# snapping one.
+#
+# These two are deliberately not round numbers. A flat 80% increase on the
+# accelerations that matched the approved speeds - 450 and 324 - FAILED the
+# discrete braking tests in test_arms.py: at those figures an axis can no
+# longer bleed off its speed in whole 20 ms frames without a jerk on the
+# landing frame. 398 and 237 are the nearby values that keep the invariant.
+#
+# Do not round them up, and do not relax the tests to make rounder ones pass.
+# The tests are the reason these numbers are trustworthy.
+PAN_ACCEL_DPS2 = 398.0
+NOD_ACCEL_DPS2 = 237.0
 
 # --------------------------------------------------------------- the table
 
