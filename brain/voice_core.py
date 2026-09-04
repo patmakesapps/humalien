@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -39,6 +40,17 @@ RE_OFFER_AFTER = 20.0
 # How often the head reconsiders where to look. Faster than recognition runs,
 # because the smoothing wants a steady clock more than it wants new data.
 TRACK_INTERVAL = 0.1
+
+
+# Windows consoles default to cp1252, which cannot encode most of what a
+# transcriber returns - a curly quote is enough. Printing one raised
+# UnicodeEncodeError inside the event loop, and because run_voice_core
+# re-raises what its tasks raise, a single smart apostrophe in a transcript
+# took the whole robot down mid-conversation. Nothing the microphone hears
+# should be able to do that.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def log(message: str) -> None:

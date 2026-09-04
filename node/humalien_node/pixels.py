@@ -75,16 +75,20 @@ TICK = 0.025
 
 # --------------------------------------------------------------- the colours
 
-# The brand. Every mood is a move away from this and back to it.
+# The brand, and the only hue on this robot. Every mood is a move along ONE
+# axis - dark violet, brand purple, lavender - and never off it.
+#
+# An earlier version travelled to cyan for listening and magenta for
+# excitement. It read as a novelty light rather than as one product: the eyes
+# stopped being Humalien's colour and started being whatever the mood was.
+# Brightness, saturation and how much of the ring is lit carry the difference
+# instead, which is more work per mood and worth it.
 PURPLE = (0.58, 0.18, 1.00)
 
-# Where the moods travel to. Kept few and named, rather than a hue wheel: a
-# small palette that always reads as the same robot beats a rainbow.
-DEEP = (0.30, 0.05, 0.75)       # the low end of a breath
-CYAN = (0.25, 0.65, 1.00)       # attention, listening
-MAGENTA = (1.00, 0.18, 0.85)    # excitement
-WARM = (1.00, 0.45, 0.85)       # pleased
-WHITE = (1.00, 0.92, 1.00)      # a flare, never a resting state
+EMBER = (0.16, 0.02, 0.38)      # the bottom of a breath, barely on
+DEEP = (0.30, 0.05, 0.75)       # resting purple
+PALE = (0.80, 0.60, 1.00)       # a lit highlight, still unmistakably violet
+FLARE = (0.93, 0.86, 1.00)      # the top of a reaction. Never a resting state
 
 # Scales the whole frame. NEOPIXEL_MAP.md's bench note is the reason this is
 # low: raise it with `bright` on the bench, then paste what you land on here.
@@ -113,12 +117,30 @@ LEVEL_STALE_AFTER = 0.5
 
 # What makes a face look alive more than any single mood does. A lid sweeps
 # down the ring and back up.
-BLINK_EVERY = (2.6, 7.0)
-BLINK_SECONDS = 0.16
+#
+# Rarer and quicker than the first version, which blinked every few seconds
+# and became the thing you watched instead of the mood underneath. A blink
+# should be something noticed afterwards, not during.
+BLINK_EVERY = (5.5, 13.0)
+BLINK_SECONDS = 0.13
+
+# How far the lid actually gets. Not all the way: on a 12 pixel ring a full
+# close lands as a hard off-frame, and at this speed leaving a trace of light
+# reads softer while still reading as a blink.
+BLINK_DEPTH = 0.15
 
 # How far the lid edge is smeared across the ring, in degrees. With only 12
 # pixels a hard edge closes in four visible steps; this makes it a sweep.
 LID_SOFTNESS = 45.0
+
+# --------------------------------------------------------------- the ripple
+
+# A wave that runs from the top of each ring down both sides and fades out.
+# It fires when the mood CHANGES, not on a timer, so it reads as the robot
+# reacting to something rather than as decoration playing to itself.
+RIPPLE_SECONDS = 0.85
+RIPPLE_WIDTH = 60.0
+RIPPLE_GAIN = 0.55
 
 # Moods that must not blink: one is off, and the other is a face frozen
 # mid-reaction.
@@ -151,6 +173,17 @@ def angle_of(index):
     return (PIXEL_ZERO_DEGREES + 30.0 * (index % PIXELS_PER_EYE)) % 360.0
 
 
+def from_top(index):
+    """How far a pixel is from twelve o'clock, 0 at the top, 180 at the bottom.
+
+    Shared by the lid and the ripple: both travel from the top down BOTH
+    sides at once, which is the only motion a ring can make that reads as
+    coming from somewhere rather than going round.
+    """
+
+    return abs((angle_of(index) + 180.0) % 360.0 - 180.0)
+
+
 def arc(index, center, width, softness=1.0):
     """How strongly a pixel belongs to an arc centred at `center` degrees.
 
@@ -177,13 +210,43 @@ def breathe(t, period, low=0.0, high=1.0):
     return low + (high - low) * phase
 
 
+def ripple_at(index, age):
+    """The wave a mood change sends round the ring. 0 once it has passed.
+
+    Runs from the top down both sides at once, because a ring has no centre
+    to spread from - the top is the only point both halves share.
+    """
+
+    if age < 0.0 or age > RIPPLE_SECONDS:
+        return 0.0
+
+    through = age / RIPPLE_SECONDS
+    front = 180.0 * through
+    away = abs(from_top(index) - front)
+
+    if away >= RIPPLE_WIDTH:
+        return 0.0
+
+    edge = 0.5 * (1.0 + math.cos(math.pi * away / RIPPLE_WIDTH))
+
+    # Fades as it travels, so it dies out rather than stopping at the bottom.
+    return RIPPLE_GAIN * edge * (1.0 - through)
+
+
 # ----------------------------------------------------------------- the moods
 #
 # Each takes the time the mood has been running, the smoothed level, and which
 # eye it is drawing (-1 for the robot's left, +1 for its right), and returns
 # 12 colours. Returning per-eye is what lets a mood be asymmetric - a cocked
-# head, a wink, one eye leading the other - which is most of what separates a
-# face from a status light.
+# head, one eye leading the other - which is most of what separates a face
+# from a status light.
+#
+# The house style, after the first version was judged too busy: these mostly
+# BREATHE rather than rotate. A ring with something travelling round it pulls
+# the eye and never lets go, which is right for `thinking`, where the motion
+# means work is happening, and wrong for everything the robot does all day.
+# Stillness that swells is the resting state; movement is reserved for moods
+# that have earned it.
 
 
 def mood_off(t, level, eye):
@@ -191,98 +254,77 @@ def mood_off(t, level, eye):
 
 
 def mood_idle(t, level, eye):
-    """Waiting. A slow breath with a highlight drifting round it."""
+    """Waiting. One slow breath, the whole ring together, nothing moving."""
 
-    depth = breathe(t, 5.2, 0.16, 0.34)
-    sweep = (t * 22.0) % 360.0
+    depth = breathe(t, 6.5, 0.13, 0.30)
 
-    return [
-        scale(mix(DEEP, PURPLE, 0.3 + 0.7 * arc(i, sweep, 150.0)), depth)
-        for i in range(PIXELS_PER_EYE)
-    ]
+    return [scale(mix(EMBER, PURPLE, 0.55), depth)] * PIXELS_PER_EYE
 
 
 def mood_listening(t, level, eye):
-    """Somebody is talking. The ring leans cyan and answers their voice.
+    """Somebody is talking. The ring holds still and answers their voice.
 
-    The rotating highlight is slow and the level term is fast, so the eye
-    reads as attentive underneath and responsive on top.
+    Deliberately the least animated mood in the set. It is on for as long as
+    anybody is speaking, so anything that travels round the ring here becomes
+    the thing people watch instead of a robot paying attention.
     """
 
-    sweep = (t * 55.0) % 360.0
-    lit = 0.22 + 0.55 * level
+    under = breathe(t, 4.2, 0.86, 1.0)
+    lit = (0.17 + 0.55 * level) * under
 
-    return [
-        scale(
-            mix(
-                mix(DEEP, CYAN, 0.35 + 0.45 * level),
-                WHITE,
-                0.35 * arc(i, sweep, 90.0) * level,
-            ),
-            lit * (0.55 + 0.45 * arc(i, sweep, 130.0)),
-        )
-        for i in range(PIXELS_PER_EYE)
-    ]
+    return [scale(mix(DEEP, PALE, 0.30 + 0.45 * level), lit)] * PIXELS_PER_EYE
 
 
 def mood_thinking(t, level, eye):
-    """Working on it. A comet runs the ring, both eyes the same way round.
+    """Working on it. A comet runs the ring - the one mood that travels.
 
-    Deliberately NOT mirrored. Two eyes chasing in opposite directions reads
-    as confusion; chasing together reads as one mechanism spinning up.
+    Kept, and kept moving, because here the motion is the message: it is the
+    gap between a question landing and an answer starting, and a still ring
+    through that gap reads as a robot that did not hear you.
+
+    Deliberately NOT mirrored. Two eyes chasing opposite ways reads as
+    confusion; chasing together reads as one mechanism spinning up.
     """
 
-    head = (t * 300.0) % 360.0
+    head = (t * 210.0) % 360.0
 
     return [
         scale(
-            mix(DEEP, PURPLE, 0.4 + 0.6 * arc(i, head, 110.0, softness=2.2)),
-            0.14 + 0.70 * arc(i, head, 110.0, softness=2.2),
+            mix(DEEP, PALE, 0.35 + 0.5 * arc(i, head, 120.0, softness=2.0)),
+            0.12 + 0.52 * arc(i, head, 120.0, softness=2.0),
         )
         for i in range(PIXELS_PER_EYE)
     ]
 
 
 def mood_speaking(t, level, eye):
-    """The robot is talking. The eye opens with the voice.
+    """The robot is talking. The whole eye swells with its own voice.
 
-    Width as well as brightness follows the envelope, so a loud phrase makes
-    the eye look bigger rather than merely brighter.
+    The ring stays whole rather than opening an arc: the voice is already
+    carrying the sentence, and an eye that changes shape per syllable fights
+    it. This just gets brighter and fuller when the voice does.
     """
 
-    width = 70.0 + 110.0 * level
-    shimmer = breathe(t, 0.9, 0.85, 1.0)
+    swell = breathe(t, 1.6, 0.88, 1.0)
 
     return [
-        scale(
-            mix(PURPLE, WHITE, 0.30 * level),
-            (0.16 + 0.72 * level) * shimmer * (0.35 + 0.65 * arc(i, 180.0, width)),
-        )
-        for i in range(PIXELS_PER_EYE)
-    ]
+        scale(mix(DEEP, PALE, 0.25 + 0.45 * level), (0.15 + 0.62 * level) * swell)
+    ] * PIXELS_PER_EYE
 
 
 def mood_excited(t, level, eye):
-    """Fast, bright, and pushed toward magenta, with sparks off the top.
+    """Fast, bright, and all the way up the purple axis.
 
-    The sparkle is seeded from the frame time so both eyes glitter on the
-    same beats without glittering on the same pixels.
+    The first version sparkled random pixels white. It was too much, and the
+    sparkle was the part doing it - noise reads as a fault on a face. Speed
+    and brightness carry this instead.
     """
 
-    pulse = breathe(t, 0.34, 0.45, 1.0)
-    spark = random.Random(int(t * 26.0) * 7 + int(eye)).random
+    pulse = breathe(t, 0.5, 0.35, 1.0)
 
-    out = []
-
-    for i in range(PIXELS_PER_EYE):
-        color = mix(PURPLE, MAGENTA, 0.55 + 0.45 * pulse)
-
-        if spark() > 0.86:
-            color = mix(color, WHITE, 0.75)
-
-        out.append(scale(color, 0.30 + 0.60 * pulse))
-
-    return out
+    return [
+        scale(mix(PURPLE, PALE, 0.35 + 0.6 * pulse), 0.26 + 0.58 * pulse)
+    ] * PIXELS_PER_EYE
 
 
 def mood_happy(t, level, eye):
@@ -292,31 +334,25 @@ def mood_happy(t, level, eye):
     the same trick, and it is the one mood people name without being told.
     """
 
-    lift = breathe(t, 2.4, 0.0, 12.0)
+    lift = breathe(t, 3.0, 0.0, 9.0)
 
     return [
-        scale(
-            mix(PURPLE, WARM, 0.65),
-            0.10 + 0.75 * arc(i, 180.0 - lift, 95.0),
-        )
+        scale(mix(PURPLE, PALE, 0.5), 0.09 + 0.66 * arc(i, 180.0 - lift, 95.0))
         for i in range(PIXELS_PER_EYE)
     ]
 
 
 def mood_curious(t, level, eye):
-    """Interested. The two eyes sit at different heights, and drift.
+    """Interested. The two eyes sit at different heights, and drift slowly.
 
     Asymmetry is the whole point - it is what a cocked head looks like from
     the front, and it costs one term.
     """
 
-    tilt = eye * (26.0 + 10.0 * math.sin(2.0 * math.pi * t / 3.6))
+    tilt = eye * (24.0 + 8.0 * math.sin(2.0 * math.pi * t / 4.5))
 
     return [
-        scale(
-            mix(PURPLE, CYAN, 0.3),
-            0.12 + 0.62 * arc(i, 180.0 + tilt, 110.0),
-        )
+        scale(mix(DEEP, PURPLE, 0.7), 0.11 + 0.55 * arc(i, 180.0 + tilt, 115.0))
         for i in range(PIXELS_PER_EYE)
     ]
 
@@ -327,21 +363,23 @@ def mood_surprised(t, level, eye):
     flash = math.exp(-t / 0.45)
 
     return [
-        scale(mix(PURPLE, WHITE, 0.8 * flash), 0.28 + 0.68 * flash)
-        for i in range(PIXELS_PER_EYE)
-    ]
+        scale(mix(PURPLE, FLARE, 0.85 * flash), 0.26 + 0.66 * flash)
+    ] * PIXELS_PER_EYE
 
 
 def mood_confused(t, level, eye):
-    """The eyes disagree with each other, slowly. Counter-rotating arcs."""
+    """The eyes disagree with each other, slowly.
 
-    sweep = (eye * t * 90.0) % 360.0
+    A slow wobble in opposite directions rather than the counter-rotating
+    arcs this used to be. Same idea - the two sides not agreeing - without
+    two things travelling in a face that is supposed to be holding still.
+    """
+
+    wobble = eye * 30.0 * math.sin(2.0 * math.pi * t / 2.6)
+    dim = breathe(t, 2.6, 0.75, 1.0)
 
     return [
-        scale(
-            mix(DEEP, PURPLE, 0.5),
-            0.10 + 0.50 * arc(i, sweep, 100.0),
-        )
+        scale(mix(EMBER, PURPLE, 0.6), (0.10 + 0.44 * arc(i, 180.0 + wobble, 130.0)) * dim)
         for i in range(PIXELS_PER_EYE)
     ]
 
@@ -349,10 +387,10 @@ def mood_confused(t, level, eye):
 def mood_sleepy(t, level, eye):
     """Almost out. A dim sliver at the bottom, fading in and out."""
 
-    depth = breathe(t, 6.5, 0.05, 0.20)
+    depth = breathe(t, 7.5, 0.04, 0.18)
 
     return [
-        scale(mix(DEEP, PURPLE, 0.4), depth * arc(i, 180.0, 70.0))
+        scale(mix(EMBER, PURPLE, 0.45), depth * arc(i, 180.0, 75.0))
         for i in range(PIXELS_PER_EYE)
     ]
 
@@ -476,13 +514,34 @@ class Pixels:
             # Open, shut, open again over the blink, on a cosine so neither
             # end of the movement is abrupt.
             through = self.blinking_since / BLINK_SECONDS
+            shut = 0.5 * (1.0 + math.cos(2.0 * math.pi * through))
 
-            return 0.5 * (1.0 + math.cos(2.0 * math.pi * through))
+            return BLINK_DEPTH + (1.0 - BLINK_DEPTH) * shut
 
         if self.clock >= self.blink_at:
             self.blinking_since = 0.0
 
         return 1.0
+
+    def _ripple(self, colors, age):
+        """Lay the mood-change wave over one eye's twelve colours."""
+
+        out = []
+
+        for index, color in enumerate(colors):
+            wave = ripple_at(index, age)
+
+            if wave <= 0.0:
+                out.append(color)
+                continue
+
+            # Brightens AND pales, so the wave is visible even where the mood
+            # underneath is already near black.
+            out.append(
+                mix(scale(color, 1.0 + wave), scale(PALE, wave), 0.55 * wave)
+            )
+
+        return out
 
     def _lid_mask(self, index, openness):
         """A lid closing from the top. 1 is lit, 0 is covered.
@@ -496,10 +555,9 @@ class Pixels:
         if openness >= 0.999:
             return 1.0
 
-        from_top = abs((angle_of(index) + 180.0) % 360.0 - 180.0)
         edge = (1.0 - openness) * (180.0 + 2.0 * LID_SOFTNESS) - LID_SOFTNESS
 
-        return clamp((from_top - edge) / LID_SOFTNESS)
+        return clamp((from_top(index) - edge) / LID_SOFTNESS)
 
     def frame(self, elapsed):
         """One rendered frame: 24 colours, in logical pixel order."""
@@ -512,6 +570,12 @@ class Pixels:
 
         left = render(age, self.level, -1)
         right = render(age, self.level, +1)
+
+        # The ripple rides on top of whatever the mood drew, so it reads as
+        # the same eye reacting rather than as a second thing happening.
+        if age <= RIPPLE_SECONDS and self.mood != "off":
+            left = self._ripple(left, age)
+            right = self._ripple(right, age)
 
         # The right eye is drawn mirrored, so a sweep runs outward from the
         # nose on both sides instead of both eyes turning the same way. Two

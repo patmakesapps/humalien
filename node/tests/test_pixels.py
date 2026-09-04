@@ -16,6 +16,7 @@ from humalien_node.pixels import (
     PIXELS_PER_EYE,
     PIXEL_COUNT,
     Pixels,
+    RIPPLE_SECONDS,
     TICK,
 )
 
@@ -77,6 +78,35 @@ class TestTheWireFormat(unittest.TestCase):
 
         self.assertGreater(max(blue), max(green) * 2)
         self.assertGreater(max(red), max(green))
+
+    def test_no_mood_ever_leaves_the_purple_axis(self):
+        """Every pixel of every mood, always: blue >= red >= green.
+
+        The whole palette is one violet ramp - EMBER, DEEP, PURPLE, PALE,
+        FLARE - and each satisfies that ordering, so every blend and every
+        dimming of them does too. An earlier version travelled to cyan for
+        listening and magenta for excitement, and the eyes stopped reading as
+        one product. This is the rule that keeps them on brand: break it and
+        a hue has been introduced, whatever the intention was.
+        """
+
+        for name in MOODS:
+            pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+            pixels.set(mood=name, level=1.0)
+
+            for frame in run(pixels, 10.0):
+                for index in range(PIXEL_COUNT):
+                    green, red, blue = frame[index * 3: index * 3 + 3]
+
+                    # A byte of slack: these are rounded from floats.
+                    self.assertLessEqual(
+                        green, red + 1,
+                        f"{name} px{index} is greener than it is red",
+                    )
+                    self.assertLessEqual(
+                        red, blue + 1,
+                        f"{name} px{index} is redder than it is blue",
+                    )
 
 
 class TestSafety(unittest.TestCase):
@@ -153,6 +183,45 @@ class TestBeingAlive(unittest.TestCase):
                 self.assertEqual(len(frames), 1, name)
             else:
                 self.assertGreater(len(frames), 20, f"{name} barely moves")
+
+    def test_a_mood_change_sends_a_ripple_round_the_ring(self):
+        """It fires on the change, travels, and is gone. Not a loop.
+
+        A wave that ran on a timer would be decoration. Firing it on the
+        change is what makes it read as the robot reacting to something.
+        """
+
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.set(mood="idle")
+
+        run(pixels, 4.0)
+        settled = sum(run(pixels, 1.0)[-1])
+
+        pixels.set(mood="happy")
+
+        during = [sum(frame) for frame in run(pixels, RIPPLE_SECONDS)]
+        after = [sum(frame) for frame in run(pixels, 3.0)[-20:]]
+
+        self.assertGreater(max(during), settled)
+        self.assertLess(max(after), max(during))
+
+    def test_the_ripple_travels_rather_than_flashing(self):
+        """The top of the ring peaks before the bottom does."""
+
+        pixels = Pixels(brightness=BRIGHTNESS_CEILING)
+        pixels.set(mood="idle")
+        run(pixels, 3.0)
+
+        pixels.set(mood="excited")
+        frames = run(pixels, RIPPLE_SECONDS)
+
+        def peak_at(index):
+            values = [sum(f[index * 3: index * 3 + 3]) for f in frames]
+
+            return values.index(max(values))
+
+        # Pixel 0 is twelve o'clock; pixel 6 is the bottom of the same ring.
+        self.assertLess(peak_at(0), peak_at(6))
 
     def test_the_eyes_blink(self):
         pixels = Pixels(brightness=BRIGHTNESS_CEILING)
