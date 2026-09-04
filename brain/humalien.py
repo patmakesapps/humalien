@@ -54,7 +54,7 @@ def preflight() -> tuple[list[str], list[str]]:
     if missing:
         degraded.append(
             f"Face models missing ({', '.join(missing)}). "
-            "Run: python tools/fetch_models.py - Humalien will be blind."
+            "Run: python devtools/fetch_models.py - Humalien will be blind."
         )
 
     return fatal, degraded

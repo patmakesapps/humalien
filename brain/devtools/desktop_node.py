@@ -42,7 +42,7 @@ def usable_channels(device: int, *, capture: bool) -> int:
         direction = "input" if capture else "output"
         raise RuntimeError(
             f"Device {device} ({info['name']}) has no {direction} channels. "
-            "Run: python tools/list_audio_devices.py"
+            "Run: python devtools/list_audio_devices.py"
         )
 
     return min(WIRE_CHANNELS, available)

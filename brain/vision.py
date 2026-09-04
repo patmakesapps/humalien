@@ -11,7 +11,7 @@ MODEL_DIR = Path(__file__).resolve().parent / "models"
 YUNET_MODEL = MODEL_DIR / "face_detection_yunet_2023mar.onnx"
 
 MISSING_MODEL = (
-    "Face model not found: {path}\nRun: python tools/fetch_models.py"
+    "Face model not found: {path}\nRun: python devtools/fetch_models.py"
 )
 
 
