@@ -9,7 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gestures import (
     ARM_RANGE,
     ARM_REST,
+    COMMANDED,
+    HOLD_SECONDS,
     LEVEL_REFERENCE,
+    NOD_COMMAND_RANGE,
     NOD_RANGE,
     NOD_TRACK_UP,
     PAN_RANGE,
@@ -215,6 +218,117 @@ class TestHead(unittest.TestCase):
         drifted = run(gestures, 30.0)[-1]["pan"]
 
         self.assertLess(abs(drifted), abs(turned))
+
+
+class TestAskedForPoses(unittest.TestCase):
+    """"Turn your head left" has to survive the gesture generator.
+
+    `pose` rewrites every axis twenty times a second off the speech envelope.
+    A commanded pose with no hold is overwritten within one frame, and the
+    robot silently ignores what it was asked to do.
+    """
+
+    def test_a_commanded_pose_beats_the_speech(self):
+        gestures = Gestures(None)
+        gestures.command("head", "left")
+
+        poses = run(gestures, 2.0, loudness=1.0)
+
+        for pose in poses:
+            self.assertAlmostEqual(pose["pan"], 10.0, places=3)
+
+    def test_it_holds_through_a_face_it_would_rather_look_at(self):
+        gestures = Gestures(None)
+        gestures.command("head", "left")
+
+        pose = run(gestures, 2.0, looking=(1.0, 0.0))[-1]
+
+        self.assertAlmostEqual(pose["pan"], 10.0, places=3)
+
+    def test_the_hold_expires_on_its_own(self):
+        """It has to. Nothing else ever ends it.
+
+        The model has no reliable moment at which it says "you may move
+        again", so a hold that waited for one would freeze the robot in
+        whatever position it was last told, for the rest of the session.
+        """
+
+        gestures = Gestures(None)
+        gestures.command("head", "left")
+
+        run(gestures, HOLD_SECONDS + 1.0, loudness=1.0)
+
+        self.assertEqual(gestures.held, {})
+
+    def test_an_unheld_axis_keeps_gesturing_meanwhile(self):
+        gestures = Gestures(None)
+        gestures.command("head", "left")
+
+        poses = run(gestures, 2.0, loudness=LEVEL_REFERENCE)
+        arms = [pose["arm_l"] for pose in poses]
+
+        self.assertGreater(max(arms) - min(arms), 1.0)
+
+    def test_a_move_this_body_cannot_make_is_refused(self):
+        gestures = Gestures(None)
+
+        self.assertIsNone(gestures.command("tail", "up"))
+        self.assertIsNone(gestures.command("head", "backwards"))
+        self.assertEqual(gestures.held, {})
+
+    def test_every_commanded_pose_is_inside_the_envelope(self):
+        for (part, direction), wanted in COMMANDED.items():
+            gestures = Gestures(None)
+            gestures.command(part, direction)
+
+            pose = run(gestures, 0.5, loudness=1.0)[-1]
+
+            for axis in wanted:
+                self.assertAlmostEqual(
+                    pose[axis], wanted[axis], places=3,
+                    msg=f"{part} {direction} was clamped - it is out of range",
+                )
+
+    def test_only_a_hold_unlocks_the_bigger_upward_nod(self):
+        """Speech gets the small envelope; being asked gets the larger one.
+
+        Two ranges rather than one, so a bug in the speech envelope can never
+        reach the travel that only an explicit request is allowed.
+        """
+
+        asked = Gestures(None)
+        asked.command("head", "up")
+
+        self.assertGreater(run(asked, 0.5)[-1]["nod"], NOD_RANGE[1])
+
+        # And once it expires, the small envelope is back in force.
+        run(asked, HOLD_SECONDS + 1.0, loudness=1.0)
+
+        for pose in run(asked, 5.0, loudness=1.0, looking=(0.0, -1.0)):
+            self.assertLessEqual(pose["nod"], NOD_RANGE[1] + 1e-6)
+
+    def test_even_an_asked_for_pose_stays_inside_the_mechanism(self):
+        gestures = Gestures(None)
+
+        for (part, direction) in COMMANDED:
+            gestures.command(part, direction)
+
+            for pose in run(gestures, 1.0, loudness=1.0):
+                self.assertGreaterEqual(pose["nod"], NOD_COMMAND_RANGE[0])
+                self.assertLessEqual(pose["nod"], NOD_COMMAND_RANGE[1])
+                self.assertGreaterEqual(pose["pan"], PAN_RANGE[0])
+                self.assertLessEqual(pose["pan"], PAN_RANGE[1])
+
+            gestures.let_go()
+
+    def test_letting_go_hands_the_body_straight_back(self):
+        gestures = Gestures(None)
+        gestures.command("head", "left")
+        run(gestures, 1.0)
+
+        gestures.let_go()
+
+        self.assertEqual(gestures.held, {})
 
 
 class TestTheWire(unittest.TestCase):

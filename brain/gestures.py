@@ -53,9 +53,19 @@ ARM_REST = -8.0
 PAN_RANGE = (-14.4, 14.4)
 
 # SERVO_MAP.md allows the node down to -3.6 and up to +40. Ordinary speech
-# motion is deliberately kept inside the small symmetric envelope it asks
-# for; only deliberate looking-up borrows any of the rest.
+# motion is deliberately kept inside the small envelope it asks for; only
+# deliberate looking-up borrows any of the rest.
 NOD_RANGE = (-3.6, 8.0)
+
+# What the head may do when somebody ASKS it to look up, as opposed to what
+# it does to itself while talking. Being asked is a different thing: "look up"
+# answered with eight degrees reads as the robot not having heard. This is
+# still well short of the +40 the node allows and the mechanism was walked to.
+#
+# The two ranges exist so that a bug in the speech envelope can never reach
+# the larger one - only an explicit `command` unlocks it, and only while the
+# hold lasts.
+NOD_COMMAND_RANGE = (-3.6, 22.0)
 
 # How loud a chunk has to be to earn a full-sized gesture. Speech sits well
 # below full scale, so an envelope used raw barely moves the arms at all.
@@ -165,6 +175,45 @@ DEADBAND = 0.4
 # deadband would swallow its motion entirely.
 HEAD_DEADBAND = 0.15
 
+# --------------------------------------------------------- asked-for poses
+
+# What "turn your head left" is worth, in degrees. Modest on purpose: these
+# are pulled out of a conversation, and a robot that swings to its stop every
+# time somebody says "look left" gets old in about four goes. The node clamps
+# them again anyway.
+#
+# LEFT AND RIGHT ARE THE ROBOT'S OWN, the way "raise your left hand" is. It is
+# the reading that survives the robot turning round, and the one that matches
+# `pan` throughout this codebase. Somebody facing it who meant their own left
+# will say so, and can be answered.
+COMMANDED = {
+    ("head", "left"): {"pan": 10.0},
+    ("head", "right"): {"pan": -10.0},
+    ("head", "up"): {"nod": 20.0},
+    ("head", "down"): {"nod": -3.6},
+    ("head", "centre"): {"pan": 0.0, "nod": 0.0},
+    ("left arm", "up"): {"arm_l": 55.0},
+    ("left arm", "down"): {"arm_l": ARM_REST},
+    ("right arm", "up"): {"arm_r": 55.0},
+    ("right arm", "down"): {"arm_r": ARM_REST},
+    ("both arms", "up"): {"arm_l": 55.0, "arm_r": 55.0},
+    ("both arms", "down"): {"arm_l": ARM_REST, "arm_r": ARM_REST},
+}
+
+PARTS = ("head", "left arm", "right arm", "both arms")
+DIRECTIONS = ("left", "right", "up", "down", "centre")
+
+# How long an asked-for pose survives before the body goes back to gesturing.
+#
+# It has to expire. `pose` rewrites every axis twenty times a second off the
+# speech envelope, so a commanded pose with no hold is overwritten within one
+# frame and the robot simply ignores what it was asked. Holding it FOREVER is
+# the opposite failure: the robot would freeze mid-conversation in whatever
+# position it was last told, with no event that ever ends it - the model has
+# no reliable moment to say "you may move again". A few seconds is long enough
+# to be seen and short enough that it cannot become a mode.
+HOLD_SECONDS = 4.5
+
 AXES = ("arm_l", "arm_r", "pan", "nod")
 
 DEADBANDS = {
@@ -217,6 +266,10 @@ class Gestures:
         self.aim_pan = 0.0
         self.aim_nod = 0.0
 
+        # Axes the model has asked to place, and how long each has left.
+        # Empty is the normal state.
+        self.held = {}
+
         self.last_sent = None
 
     # ------------------------------------------------------------- the input
@@ -243,6 +296,48 @@ class Gestures:
 
         self.gaze = None
         self.since_gaze = GAZE_STALE_AFTER
+
+    def command(self, part: str, direction: str, seconds: float = HOLD_SECONDS):
+        """Place part of the body because somebody asked. Expires by itself.
+
+        Returns the axes it took, or None if that is not a move this body
+        can make. The angles are still clamped by `pose`, and clamped again
+        by the node, so a bad entry in COMMANDED cannot reach a servo.
+        """
+
+        wanted = COMMANDED.get((part, direction))
+
+        if wanted is None:
+            return None
+
+        for axis, degrees in wanted.items():
+            self.held[axis] = [float(degrees), float(seconds)]
+
+        return dict(wanted)
+
+    def let_go(self, axis: str | None = None) -> None:
+        """Hand an axis - or everything - back to the gesture generator."""
+
+        if axis is None:
+            self.held.clear()
+        elif axis in self.held:
+            del self.held[axis]
+
+    def _hold(self, pose: dict, elapsed: float) -> dict:
+        """Overwrite held axes, and retire the holds that have run out."""
+
+        for axis in list(self.held):
+            degrees, left = self.held[axis]
+            left -= elapsed
+
+            if left <= 0.0:
+                del self.held[axis]
+                continue
+
+            self.held[axis] = [degrees, left]
+            pose[axis] = degrees
+
+        return pose
 
     # -------------------------------------------------------------- the pose
 
@@ -321,11 +416,26 @@ class Gestures:
             + NOD_SPEECH * self.head_level * math.sin(head_phase * 1.7 + 0.9)
         )
 
-        return {
+        pose = {
             "arm_l": clamp(base + swing * math.sin(self.phase), *ARM_RANGE),
             "arm_r": clamp(base + swing * math.sin(self.phase + PHASE), *ARM_RANGE),
             "pan": clamp(pan, *PAN_RANGE),
             "nod": clamp(nod, *NOD_RANGE),
+        }
+
+        # An asked-for pose beats the speech, for as long as it lasts.
+        pose = self._hold(pose, elapsed)
+
+        return {
+            "arm_l": clamp(pose["arm_l"], *ARM_RANGE),
+            "arm_r": clamp(pose["arm_r"], *ARM_RANGE),
+            "pan": clamp(pose["pan"], *PAN_RANGE),
+            # Only a live hold unlocks the larger upward range. Generated
+            # motion is clamped to the small one whatever it computes.
+            "nod": clamp(
+                pose["nod"],
+                *(NOD_COMMAND_RANGE if "nod" in self.held else NOD_RANGE),
+            ),
         }
 
     # -------------------------------------------------------------- the wire
@@ -349,6 +459,7 @@ class Gestures:
 
         self.level = 0.0
         self.head_level = 0.0
+        self.let_go()
         await self.send(dict(REST_POSE))
 
     async def run(self) -> None:

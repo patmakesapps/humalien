@@ -306,3 +306,159 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FakeGestures:
+    """Just enough of Gestures to see what `move` asked for."""
+
+    def __init__(self, answer=None):
+        self.answer = answer
+        self.asked = []
+
+    def command(self, part, direction):
+        self.asked.append((part, direction))
+        return self.answer
+
+
+class MemoryToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.store = PeopleStore(":memory:")
+        self.pat = self.store.enroll("Pat", embedding(1))
+        self.sam = self.store.enroll("Sam", embedding(2))
+
+    def tearDown(self):
+        self.store.close()
+
+    def robot(self, sightings=()):
+        return Robot(
+            eyes=FakeEyes(self.store, sightings=list(sightings)),
+            store=self.store,
+            describer=None,
+            state=ConversationState(),
+        )
+
+    def seeing(self, person):
+        return FakeSighting(match=type("M", (), {"person": person})())
+
+    async def test_remember_keeps_something_general(self):
+        await tools.execute(self.robot(), "remember", json.dumps(
+            {"fact": "the desk bot lives on the workbench"}
+        ))
+
+        kept = self.store.recall("workbench")
+
+        self.assertEqual(len(kept), 1)
+        self.assertIsNone(kept[0]["person_id"])
+
+    async def test_remember_files_it_against_a_named_person(self):
+        await tools.execute(self.robot(), "remember", json.dumps(
+            {"fact": "takes coffee black", "about": "Pat"}
+        ))
+
+        self.assertEqual(self.store.recall("coffee")[0]["person_id"], self.pat.id)
+
+    async def test_an_unknown_name_still_keeps_the_memory(self):
+        """Losing the fact would be worse than losing who it was about."""
+
+        await tools.execute(self.robot(), "remember", json.dumps(
+            {"fact": "Morgan is building a kiln", "about": "Morgan"}
+        ))
+
+        kept = self.store.recall("kiln")
+
+        self.assertEqual(len(kept), 1)
+        self.assertIsNone(kept[0]["person_id"])
+
+    async def test_one_visible_face_claims_an_unattributed_memory(self):
+        robot = self.robot(sightings=[self.seeing(self.pat)])
+
+        await tools.execute(robot, "remember", json.dumps(
+            {"fact": "is learning the cello"}
+        ))
+
+        self.assertEqual(self.store.recall("cello")[0]["person_id"], self.pat.id)
+
+    async def test_two_visible_faces_do_not_get_a_coin_flip(self):
+        """"Remember I take it black" with two people in view is ambiguous.
+
+        Unattached is recoverable - it is still findable. Filed against the
+        wrong person is not.
+        """
+
+        robot = self.robot(
+            sightings=[self.seeing(self.pat), self.seeing(self.sam)]
+        )
+
+        await tools.execute(robot, "remember", json.dumps(
+            {"fact": "hates coriander"}
+        ))
+
+        self.assertIsNone(self.store.recall("coriander")[0]["person_id"])
+
+    async def test_recall_finds_what_was_remembered(self):
+        self.store.remember("the neck servo is channel one")
+
+        result = await tools.execute(self.robot(), "recall", json.dumps(
+            {"about": "which servo is the neck"}
+        ))
+
+        self.assertIn("channel one", json.dumps(result))
+
+    async def test_recall_names_who_a_memory_is_about(self):
+        self.store.remember("takes coffee black", person_id=self.pat.id)
+
+        result = await tools.execute(self.robot(), "recall", json.dumps(
+            {"about": "coffee"}
+        ))
+
+        self.assertIn("Pat", json.dumps(result))
+
+    async def test_recall_of_nothing_is_not_an_error(self):
+        result = await tools.execute(self.robot(), "recall", json.dumps(
+            {"about": "submarines"}
+        ))
+
+        self.assertNotIn("error", json.dumps(result).lower())
+
+
+class MoveToolTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.store = PeopleStore(":memory:")
+
+    def tearDown(self):
+        self.store.close()
+
+    def robot(self, gestures):
+        return Robot(
+            eyes=FakeEyes(self.store),
+            store=self.store,
+            describer=None,
+            state=ConversationState(),
+            gestures=gestures,
+        )
+
+    async def test_move_reaches_the_gesture_generator(self):
+        gestures = FakeGestures(answer={"pan": 10.0})
+
+        await tools.execute(self.robot(gestures), "move", json.dumps(
+            {"part": "head", "direction": "left"}
+        ))
+
+        self.assertEqual(gestures.asked, [("head", "left")])
+
+    async def test_a_move_the_body_cannot_make_says_so(self):
+        result = await tools.execute(
+            self.robot(FakeGestures(answer=None)), "move",
+            json.dumps({"part": "head", "direction": "down"}),
+        )
+
+        self.assertIn("cannot", json.dumps(result).lower())
+
+    async def test_a_brain_with_no_body_does_not_raise(self):
+        """A laptop, or gestures switched off. Not worth an apology."""
+
+        result = await tools.execute(self.robot(None), "move", json.dumps(
+            {"part": "head", "direction": "left"}
+        ))
+
+        self.assertNotIn("error", json.dumps(result).lower())

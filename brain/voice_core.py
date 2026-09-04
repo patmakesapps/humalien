@@ -498,6 +498,7 @@ async def run_voice_core() -> None:
                 describer=describer,
                 state=state,
                 mood=mood,
+                gestures=gestures,
                 vision=vision,
             )
 

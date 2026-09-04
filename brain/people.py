@@ -29,6 +29,18 @@ GREET_THRESHOLD = 0.50
 NOVEL_BELOW = 0.75
 MAX_FACES_PER_PERSON = 12
 
+# Words that appear in half the rows and so tell `recall` nothing. Kept short
+# and boring on purpose: this is a substring search, not a language model, and
+# a long stopword list is how a search starts quietly dropping real queries.
+FILLER = {
+    "the", "and", "for", "was", "you", "your", "yours", "our", "his", "her",
+    "hers", "its", "that", "this", "those", "these", "what", "when", "where",
+    "who", "why", "how", "about", "with", "from", "have", "has", "had",
+    "did", "does", "know", "tell", "say", "said", "remember", "anything",
+    "something", "there", "they", "them", "any", "are", "were", "been",
+    "can", "could", "would", "should", "will", "just", "like", "get", "got",
+}
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS people (
     id             INTEGER PRIMARY KEY,
@@ -53,9 +65,33 @@ CREATE TABLE IF NOT EXISTS facts (
     created_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS memories (
+    id         INTEGER PRIMARY KEY,
+    person_id  INTEGER REFERENCES people(id) ON DELETE CASCADE,
+    text       TEXT NOT NULL,
+    source     TEXT,
+    created_at REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS faces_by_person ON faces(person_id);
 CREATE INDEX IF NOT EXISTS facts_by_person ON facts(person_id);
+CREATE INDEX IF NOT EXISTS memories_by_person ON memories(person_id);
 """
+
+# `facts` and `memories` look alike and are not the same thing.
+#
+# A FACT belongs to somebody and is pushed at the model unasked, as context,
+# every time that person walks into view. It has to earn that: "prefers to be
+# called Pat" does, "we talked about servos on Tuesday" does not - a dozen of
+# those would bury the greeting in noise.
+#
+# A MEMORY is pulled, not pushed. It is anything worth keeping past the end of
+# the conversation, it may belong to nobody in particular, and it only reaches
+# the model when something goes looking for it.
+#
+# person_id is NULLABLE here and NOT NULL on facts, which is the whole
+# difference in one column: a fact with no person is meaningless, and most of
+# what is worth remembering is not about a person at all.
 
 
 def normalize(embedding) -> np.ndarray:
@@ -304,6 +340,114 @@ class PeopleStore:
             (person_id, text, source, now),
         )
         self.connection.commit()
+
+    # ------------------------------------------------------------- memories
+
+    def remember(
+        self,
+        text: str,
+        *,
+        person_id: int | None = None,
+        source: str = "conversation",
+        now: float | None = None,
+    ) -> int:
+        """Keep something past the end of this conversation.
+
+        `person_id` of None means it belongs to nobody in particular, which is
+        most of what is worth keeping. See the note above SCHEMA for why this
+        is not the same table as `facts`.
+        """
+
+        now = time.time() if now is None else now
+
+        cursor = self.connection.execute(
+            "INSERT INTO memories (person_id, text, source, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (person_id, text.strip(), source, now),
+        )
+        self.connection.commit()
+
+        return cursor.lastrowid
+
+    def recall(
+        self,
+        query: str = "",
+        *,
+        person_id: int | None = None,
+        limit: int = 8,
+    ) -> list[dict]:
+        """Memories matching `query`, newest first.
+
+        Substring matching, deliberately. An embedding index over a few
+        hundred rows would cost a model call per write and per read to answer
+        questions this can already answer, on a machine that is also running
+        face recognition and paced audio. Revisit when the row count makes it
+        actually fail, not before.
+
+        A person's own memories rank above unattached ones when a person is
+        given, because "what do you know about me" should not be answered
+        mostly with things about somebody else.
+        """
+
+        # Filler words match every row, which turns "what about the servo"
+        # into "everything". They are dropped - but a query that is ALL filler
+        # or all short words is still a real query ("cat", "PCB"), so there is
+        # a fallback rather than a no-match.
+        words = [
+            word
+            for word in query.lower().split()
+            if len(word) > 2 and word not in FILLER
+        ]
+
+        if not words and query.strip():
+            words = [query.strip()]
+
+        clauses, params = [], []
+
+        for word in words:
+            clauses.append("text LIKE ?")
+            params.append(f"%{word}%")
+
+        # An empty query is not a search, it is "everything you know".
+        where = " OR ".join(clauses) if clauses else "1=1"
+
+        if person_id is not None:
+            where = f"({where}) AND (person_id = ? OR person_id IS NULL)"
+            params.append(person_id)
+
+        rows = self.connection.execute(
+            f"SELECT id, person_id, text, source, created_at FROM memories"
+            f" WHERE {where}"
+            " ORDER BY (person_id IS NULL), created_at DESC"
+            " LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+
+        return [dict(row) for row in rows]
+
+    def forget_memory(self, memory_id: int) -> bool:
+        cursor = self.connection.execute(
+            "DELETE FROM memories WHERE id = ?", (memory_id,)
+        )
+        self.connection.commit()
+
+        return cursor.rowcount > 0
+
+    def by_name(self, name: str):
+        """The person somebody means when they say a name. None if unsure.
+
+        Case-insensitive and exact. Fuzzy matching here would let a memory be
+        filed against the wrong person, which is worse than filing it against
+        nobody - an unattached memory is still findable.
+        """
+
+        rows = self.connection.execute(
+            "SELECT id, name, sighting_count, last_seen_at"
+            " FROM people WHERE lower(name) = lower(?)",
+            (name.strip(),),
+        ).fetchall()
+
+        return Person(**dict(rows[0])) if len(rows) == 1 else None
 
     def forget(self, person_id: int) -> None:
         """Remove someone entirely. Faces and facts go with them."""

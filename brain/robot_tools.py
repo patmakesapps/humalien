@@ -1,10 +1,13 @@
 """What Humalien can do besides talk.
 
-Four tools, deliberately. Looking is slow and costs money, so the model
-decides when it is worth it. Recognition is free and already running, so
-asking who is here is cheap. Remembering a name writes immediately, because
-the rest of the conversation depends on it. Feeling something is instant and
-changes only how the eyes look.
+Looking is slow and costs money, so the model decides when it is worth it.
+Recognition is free and already running, so asking who is here is cheap.
+Remembering a name writes immediately, because the rest of the conversation
+depends on it. Feeling something, moving, and remembering are all instant.
+
+`move` is the odd one: it is the only tool that takes the body away from the
+gesture generator, and it gives it back on a timer rather than waiting for
+the model to say when. See HOLD_SECONDS in gestures.py for why.
 
 Each tool declares its schema next to its handler. See tool_registry.py.
 """
@@ -15,6 +18,7 @@ from dataclasses import dataclass, field
 from conversation import ConversationState
 from describe import OllamaDescriber, to_jpeg
 from eyes import Eyes
+from gestures import DIRECTIONS, PARTS
 from mood import FEELINGS
 from people import PeopleStore
 from tool_registry import ToolError, ToolRegistry
@@ -48,6 +52,7 @@ class Robot:
     state: ConversationState = field(default_factory=ConversationState)
     realtime: object | None = None
     mood: object | None = None
+    gestures: object | None = None
     vision: str = REALTIME
 
     # The picture currently in front of the model, if any. Only ever one.
@@ -228,3 +233,135 @@ async def feel(robot: Robot, feeling: str) -> dict:
         )
 
     return {"shown": feeling}
+
+
+@tools.tool(
+    "remember",
+    "Keep something past the end of this conversation - what somebody likes, "
+    "what they are working on, what you agreed, anything you would be sorry "
+    "to have forgotten next time. Instant and free. Do not announce it or "
+    "confirm it out loud; just carry on talking.",
+    properties={
+        "fact": {
+            "type": "string",
+            "description": (
+                "The thing worth keeping, written so it still makes sense "
+                "months from now with no other context."
+            ),
+        },
+        "about": {
+            "type": "string",
+            "description": (
+                "The name of the person it is about, if it is about one. "
+                "Leave it out for anything general."
+            ),
+        },
+    },
+    required=["fact"],
+)
+async def remember(robot: Robot, fact: str, about: str = "") -> dict:
+    person = robot.store.by_name(about) if about.strip() else None
+
+    if person is None and not about.strip():
+        # Nobody named. If exactly one known face is in view, it is almost
+        # certainly about them - "remember I take it black" said to a robot
+        # looking at one person. Two people in view is ambiguous, so it goes
+        # in unattached rather than against a coin flip.
+        visible = robot.eyes.known
+        person = visible[0] if len(visible) == 1 else None
+
+    await asyncio.to_thread(
+        robot.store.remember,
+        fact,
+        person_id=None if person is None else person.id,
+    )
+
+    log(f"remember -> {fact!r} ({person.name if person else 'general'})")
+
+    # Deliberately bare. Anything readable here gets read out.
+    return {"kept": True}
+
+
+@tools.tool(
+    "recall",
+    "Search what you remember from before this conversation. Use it when "
+    "somebody refers to something you should already know, or asks what you "
+    "remember. Instant and free. What comes back is your own memory - talk "
+    "about it as something you remember, never as a search result.",
+    properties={
+        "about": {
+            "type": "string",
+            "description": (
+                "What to look for - a topic, an object, a name. Leave it out "
+                "to see the most recent things you know."
+            ),
+        }
+    },
+)
+async def recall(robot: Robot, about: str = "") -> dict:
+    # Whoever is in front of it, so their own memories come back first.
+    visible = robot.eyes.known
+    person = visible[0] if len(visible) == 1 else None
+
+    found = await asyncio.to_thread(
+        robot.store.recall,
+        about,
+        person_id=None if person is None else person.id,
+    )
+
+    log(f"recall {about!r} -> {len(found)} memories")
+
+    return {
+        "you_remember": [
+            {
+                "that": row["text"],
+                "about": (
+                    None
+                    if row["person_id"] is None
+                    else getattr(robot.store.person(row["person_id"]), "name", None)
+                ),
+            }
+            for row in found
+        ]
+    }
+
+
+@tools.tool(
+    "move",
+    "Move part of your body because somebody asked you to. Left and right are "
+    "YOUR left and right, the way your own hands are. The pose holds for a few "
+    "seconds and then you go back to moving normally - that is expected, not a "
+    "failure. Do not narrate it; move and keep talking.",
+    properties={
+        "part": {
+            "type": "string",
+            "enum": list(PARTS),
+            "description": "Which part of you to move.",
+        },
+        "direction": {
+            "type": "string",
+            "enum": list(DIRECTIONS),
+            "description": (
+                "Where to move it. 'centre' only applies to your head."
+            ),
+        },
+    },
+    required=["part", "direction"],
+)
+async def move(robot: Robot, part: str, direction: str) -> dict:
+    if robot.gestures is None:
+        # No body on this brain - a laptop, or gestures switched off. Not
+        # worth an error the model has to apologise for.
+        return {"moved": None}
+
+    took = robot.gestures.command(part, direction)
+
+    if took is None:
+        raise ToolError(
+            f"You cannot move your {part} {direction}. Your head goes left, "
+            "right, up, down or centre; your arms go up or down."
+        )
+
+    log(f"move -> {part} {direction} {took}")
+
+    return {"moved": f"{part} {direction}"}
