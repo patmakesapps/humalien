@@ -357,6 +357,9 @@ async def sleep(robot: Robot) -> dict:
     if robot.mood is not None:
         robot.mood.sleep(True)
 
+    if robot.gestures is not None:
+        robot.gestures.sleep(True)
+
     log("Asleep - the microphone is closed until somebody says the name")
 
     return {"asleep": True}

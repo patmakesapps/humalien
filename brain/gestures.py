@@ -295,6 +295,11 @@ class Gestures:
 
         self.last_sent = None
 
+        # Muted. The head has three sources of motion and face tracking is
+        # only one of them, so stopping the tracker still left the idle
+        # drift turning the head of a robot that was asleep.
+        self.asleep = False
+
     # ------------------------------------------------------------- the input
 
     def feed(self, loudness: float) -> None:
@@ -401,6 +406,13 @@ class Gestures:
     def pose(self, elapsed: float) -> dict:
         """Advance the envelope and the beats, and return every axis."""
 
+        # Asleep is still, and returned before any clock moves. The idle
+        # drift is a function of self.clock, so letting it run through a
+        # sleep would put the head wherever the sine had reached by the
+        # time somebody said the name - a jump, on waking.
+        if self.asleep:
+            return dict(REST_POSE)
+
         self.since_audio += elapsed
         self.since_gaze += elapsed
         self.clock += elapsed
@@ -486,6 +498,17 @@ class Gestures:
         self.head_level = 0.0
         self.let_go()
         await self.send(dict(REST_POSE))
+
+    def sleep(self, asleep: bool) -> None:
+        """Put the body down for a mute, or hand it back on waking."""
+
+        self.asleep = asleep
+
+        if asleep:
+            self.level = 0.0
+            self.head_level = 0.0
+            self.let_go()
+            self.stop_looking()
 
     async def run(self) -> None:
         if self.log:

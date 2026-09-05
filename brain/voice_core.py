@@ -89,7 +89,13 @@ def looks_like_image_trouble(event: dict) -> bool:
     )
 
 
-def wake(state: ConversationState, mood: Mood | None, waker, why: str) -> None:
+def wake(
+    state: ConversationState,
+    mood: Mood | None,
+    gestures: Gestures | None,
+    waker,
+    why: str,
+) -> None:
     """Undo a sleep, from wherever noticed it was over."""
 
     if not state.asleep:
@@ -100,6 +106,9 @@ def wake(state: ConversationState, mood: Mood | None, waker, why: str) -> None:
 
     if mood is not None:
         mood.sleep(False)
+
+    if gestures is not None:
+        gestures.sleep(False)
 
     if waker is not None:
         waker.reset()
@@ -114,6 +123,7 @@ async def pi_to_realtime(
     mood: Mood | None = None,
     state: ConversationState | None = None,
     waker=None,
+    gestures: Gestures | None = None,
 ) -> None:
     adapter = PiToModelAudio()
     listening = True
@@ -135,6 +145,7 @@ async def pi_to_realtime(
             state,
             waker,
             wake_adapter,
+            gestures,
         )
     except ConnectionClosed:
         return
@@ -150,6 +161,7 @@ async def _pump_microphone(
     state=None,
     waker=None,
     wake_adapter=None,
+    gestures=None,
 ) -> None:
     async for message in pi_websocket:
         if isinstance(message, bytes):
@@ -171,7 +183,7 @@ async def _pump_microphone(
                         and converted_wake
                         and waker.feed(converted_wake)
                     ):
-                        wake(state, mood, waker, "heard its name")
+                        wake(state, mood, gestures, waker, "heard its name")
 
                 # Only when there is no wake word. A robot that can be woken
                 # by voice and un-mutes itself anyway has overridden somebody
@@ -181,7 +193,7 @@ async def _pump_microphone(
                 elif state.slept_at is not None and (
                     time.monotonic() - state.slept_at > WAKE_AFTER_SECONDS
                 ):
-                    wake(state, mood, waker, "the sleep timed out")
+                    wake(state, mood, gestures, waker, "the sleep timed out")
 
             if not gate.is_open:
                 if listening:
@@ -712,7 +724,7 @@ async def run_voice_core() -> None:
                 tasks = {
                     asyncio.create_task(
                         pi_to_realtime(
-                            pi_websocket, realtime, gate, mood, state, waker
+                            pi_websocket, realtime, gate, mood, state, waker, gestures
                         )
                     ),
                     asyncio.create_task(

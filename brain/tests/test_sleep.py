@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import voice_core
 from audio_adapter import WAKE_SAMPLE_RATE, PiToModelAudio
 from conversation import ConversationState
+from gestures import REST_POSE, Gestures
 from mic_gate import HalfDuplexGate, OpenGate, SleepableGate
 from mood import Mood
 from robot_tools import Robot, tools
@@ -132,6 +133,73 @@ class SleepingEyesTests(unittest.TestCase):
         mood.sleep(False)
 
         self.assertNotEqual(mood.decide(0.1)[0], "off")
+
+
+class SleepingBodyTests(unittest.TestCase):
+    """The head has three sources of motion and tracking is only one."""
+
+    def build(self):
+        body = Gestures(websocket=None)
+        body.feed(0.8)
+        body.look_at(0.5, 0.2)
+        return body
+
+    def test_the_idle_drift_stops(self):
+        """Face tracking was gated and the head still moved.
+
+        `_aim` drifts the head off its own clock whether or not anything
+        is being tracked, so a sleeping robot kept turning.
+        """
+
+        body = self.build()
+        body.sleep(True)
+
+        moved = {
+            axis
+            for axis in ("pan", "nod")
+            for _ in range(200)
+            if abs(body.pose(0.05)[axis] - REST_POSE[axis]) > 0.5
+        }
+
+        self.assertEqual(moved, set())
+
+    def test_it_forgets_the_face_it_was_watching(self):
+        body = self.build()
+        body.sleep(True)
+
+        self.assertIsNone(body.gaze)
+
+    def test_the_speech_envelope_is_dropped(self):
+        body = self.build()
+        body.sleep(True)
+
+        self.assertEqual(body.level, 0.0)
+        self.assertEqual(body.head_level, 0.0)
+
+    def test_the_clock_does_not_run_on(self):
+        """Otherwise the drift resumes wherever the sine reached, as a jump."""
+
+        body = self.build()
+        body.sleep(True)
+        before = body.clock
+
+        for _ in range(100):
+            body.pose(0.05)
+
+        self.assertEqual(body.clock, before)
+
+    def test_waking_hands_the_body_back(self):
+        body = self.build()
+        body.sleep(True)
+        body.sleep(False)
+        body.feed(0.8)
+
+        moved = any(
+            abs(body.pose(0.05)["pan"] - REST_POSE["pan"]) > 0.5
+            for _ in range(400)
+        )
+
+        self.assertTrue(moved)
 
 
 class WakeWordTests(unittest.TestCase):
