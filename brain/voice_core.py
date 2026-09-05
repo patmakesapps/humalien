@@ -156,14 +156,21 @@ async def _pump_microphone(
             asleep = state is not None and state.asleep
 
             if asleep:
-                # Asleep is the one closed gate where the microphone is
-                # still worth listening to. Half duplex is not: the only
-                # voice in it is the robot's own, and it would wake itself
-                # up saying its name.
                 if waker is not None and wake_adapter is not None:
+                    # Converted either way, so the resampler stays
+                    # continuous across the robot's own speech.
                     converted_wake = wake_adapter.convert(message)
 
-                    if converted_wake and waker.feed(converted_wake):
+                    # But only listened to when the voice in it is not the
+                    # robot's. There is no echo cancellation - that is what
+                    # half duplex is for - so the microphone hears the
+                    # speaker, and a goodnight that ends "say my name" woke
+                    # it on its own name every single time.
+                    if (
+                        gate.room_only
+                        and converted_wake
+                        and waker.feed(converted_wake)
+                    ):
                         wake(state, mood, waker, "heard its name")
 
                 # Only when there is no wake word. A robot that can be woken

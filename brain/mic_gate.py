@@ -61,6 +61,17 @@ class SleepableGate:
     def is_open(self) -> bool:
         return self.inner.is_open and not self.state.asleep
 
+    @property
+    def room_only(self) -> bool:
+        """Whether the microphone is hearing the room rather than us.
+
+        Sleep is the one closed gate whose audio is still worth listening
+        to, but only the half of it that is not the robot's own voice
+        coming back through the speaker.
+        """
+
+        return self.inner.is_open
+
 
 GATES = {
     HALF_DUPLEX: HalfDuplexGate,

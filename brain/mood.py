@@ -264,6 +264,11 @@ class Mood:
         if asleep:
             self.effects.clear()
 
+            # Whoever it was watching stays in `gaze` otherwise, and the
+            # node paints that highlight whatever the mood is - so half of
+            # each eye stayed lit on a robot that was supposed to be off.
+            self.stop_looking()
+
     def decide(self, elapsed: float) -> tuple:
         """Advance every clock and return (mood, level)."""
 

@@ -112,6 +112,19 @@ class SleepingEyesTests(unittest.TestCase):
 
         self.assertEqual(mood.decide(0.1)[0], "off")
 
+    def test_it_stops_looking_at_whoever_it_was_watching(self):
+        """Half of each eye stayed lit on a robot that was supposed to be off.
+
+        The node paints the gaze highlight whatever the mood is, so a gaze
+        left over from the moment it fell asleep kept burning.
+        """
+
+        mood = Mood(websocket=None)
+        mood.look_at(0.6)
+        mood.sleep(True)
+
+        self.assertIsNone(mood.gaze)
+
     def test_waking_returns_to_a_normal_mood(self):
         mood = Mood(websocket=None)
         mood.sleep(True)
@@ -294,6 +307,52 @@ class PumpTests(unittest.IsolatedAsyncioTestCase):
             ['{"type": "node_status", "node": "humalien-pi", "state": "ready"}', audio],
             state,
             waker=AlwaysWakes(),
+        )
+
+        self.assertFalse(state.asleep)
+
+    async def test_it_does_not_wake_itself_up_saying_goodnight(self):
+        """It woke on its own name, every time, before this.
+
+        There is no echo cancellation, so the microphone hears the speaker.
+        The goodnight ends "say my name" and the wake word listener heard
+        exactly that.
+        """
+
+        state = ConversationState()
+        state.asleep = True
+
+        speaking = FakePlayback(speaking=True)
+        waker = AlwaysWakes()
+
+        await voice_core._pump_microphone(
+            FakeWebsocket([SILENCE]),
+            FakeRealtime(),
+            SleepableGate(HalfDuplexGate(speaking), state),
+            None,
+            PiToModelAudio(),
+            True,
+            state,
+            waker,
+            PiToModelAudio(WAKE_SAMPLE_RATE),
+        )
+
+        self.assertTrue(state.asleep)
+
+    async def test_it_does_wake_once_the_room_is_the_only_voice(self):
+        state = ConversationState()
+        state.asleep = True
+
+        await voice_core._pump_microphone(
+            FakeWebsocket([SILENCE]),
+            FakeRealtime(),
+            SleepableGate(HalfDuplexGate(FakePlayback(speaking=False)), state),
+            None,
+            PiToModelAudio(),
+            True,
+            state,
+            AlwaysWakes(),
+            PiToModelAudio(WAKE_SAMPLE_RATE),
         )
 
         self.assertFalse(state.asleep)

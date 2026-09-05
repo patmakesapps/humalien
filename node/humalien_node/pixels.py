@@ -739,6 +739,12 @@ class Pixels:
         return BLINK_DEPTH + (1.0 - BLINK_DEPTH) * shut
 
     def _gaze_highlight(self, colors, palette, eye):
+        # `off` means off. The brain clears the gaze when it sleeps, but
+        # this is the half that decides whether anything is lit, and a
+        # stale highlight arriving with an off mood used to light it.
+        if self.mood == "off":
+            return colors
+
         if self.gaze is None:
             return colors
 
