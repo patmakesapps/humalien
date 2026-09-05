@@ -217,8 +217,12 @@ async def _pump_microphone(
 
         if event_type == "node_status":
             node = event.get("node", "unknown")
-            state = event.get("state", "unknown")
-            log(f"Pi node {node}: {state}")
+
+            # Not `state`. That is the ConversationState this loop needs to
+            # read the mute off, and one node_status message used to
+            # overwrite it with "ready" a second after the Pi connected.
+            node_state = event.get("state", "unknown")
+            log(f"Pi node {node}: {node_state}")
         else:
             log(f"Pi event: {event_type}")
 

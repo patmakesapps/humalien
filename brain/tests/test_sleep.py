@@ -7,11 +7,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import voice_core
+from audio_adapter import WAKE_SAMPLE_RATE, PiToModelAudio
 from conversation import ConversationState
 from mic_gate import HalfDuplexGate, OpenGate, SleepableGate
 from mood import Mood
 from robot_tools import Robot, tools
 from waking import WakeWord, heard_wake_word
+
+
+# 200 ms of 48 kHz stereo PCM16. Longer than the Pi's 20 ms chunk on
+# purpose: soxr buffers, and one chunk in gets nothing back out, so a test
+# built on a single chunk sees an empty send and blames the mute.
+SILENCE = bytes(2 * 2 * 9600)
 
 
 class FakePlayback:
@@ -132,7 +140,7 @@ class WakeWordTests(unittest.TestCase):
     def test_a_final_result_wakes_it(self):
         waker = WakeWord(FakeRecognizer(finals=['{"text": "hey tubby"}']))
 
-        self.assertTrue(waker.feed(b"\x00\x00"))
+        self.assertTrue(waker.feed(SILENCE))
 
     def test_a_partial_does_not_wake_it(self):
         """The decoder revises partials, and revises through the wake words.
@@ -145,12 +153,12 @@ class WakeWordTests(unittest.TestCase):
 
         waker = WakeWord(FakeRecognizer(partials=['{"partial": "wake tubby"}']))
 
-        self.assertFalse(waker.feed(b"\x00\x00"))
+        self.assertFalse(waker.feed(SILENCE))
 
     def test_unrelated_speech_does_not(self):
         waker = WakeWord(FakeRecognizer(finals=['{"text": "[unk]"}']))
 
-        self.assertFalse(waker.feed(b"\x00\x00"))
+        self.assertFalse(waker.feed(SILENCE))
 
     def test_reset_clears_the_phrase_that_woke_it(self):
         recognizer = FakeRecognizer()
@@ -217,6 +225,115 @@ class SleepToolTests(unittest.IsolatedAsyncioTestCase):
         result = await self.run_tool(robot, "sleep")
 
         self.assertTrue(result["data"]["asleep"])
+
+
+class FakeWebsocket:
+    def __init__(self, messages):
+        self.messages = messages
+
+    def __aiter__(self):
+        return self._iterate()
+
+    async def _iterate(self):
+        for message in self.messages:
+            yield message
+
+
+class FakeRealtime:
+    def __init__(self):
+        self.sent = []
+
+    async def send_audio(self, audio):
+        self.sent.append(audio)
+
+
+class AlwaysWakes:
+    def __init__(self):
+        self.reset_calls = 0
+
+    def feed(self, audio):
+        return True
+
+    def reset(self):
+        self.reset_calls += 1
+
+
+class PumpTests(unittest.IsolatedAsyncioTestCase):
+    """The loop the mute actually runs in."""
+
+    async def pump(self, messages, state, waker=None):
+        await voice_core._pump_microphone(
+            FakeWebsocket(messages),
+            FakeRealtime(),
+            SleepableGate(OpenGate(FakePlayback()), state),
+            None,
+            PiToModelAudio(),
+            True,
+            state,
+            waker,
+            PiToModelAudio(WAKE_SAMPLE_RATE) if waker else None,
+        )
+
+    async def test_a_pi_status_message_does_not_clobber_the_mute(self):
+        """This crashed the robot a second after the Pi connected.
+
+        `node_status` carries a field called "state", and assigning it to a
+        local of the same name replaced the ConversationState with the
+        string "ready". The next chunk of audio asked "ready" whether it
+        was asleep.
+        """
+
+        state = ConversationState()
+        state.asleep = True
+
+        # A whole 20 ms of 48 kHz stereo, so the resampler has something to
+        # hand the wake word listener.
+        audio = SILENCE
+
+        await self.pump(
+            ['{"type": "node_status", "node": "humalien-pi", "state": "ready"}', audio],
+            state,
+            waker=AlwaysWakes(),
+        )
+
+        self.assertFalse(state.asleep)
+
+    async def test_audio_is_withheld_while_asleep(self):
+        state = ConversationState()
+        state.asleep = True
+
+        realtime = FakeRealtime()
+        await voice_core._pump_microphone(
+            FakeWebsocket([SILENCE]),
+            realtime,
+            SleepableGate(OpenGate(FakePlayback()), state),
+            None,
+            PiToModelAudio(),
+            True,
+            state,
+            None,
+            None,
+        )
+
+        self.assertEqual(realtime.sent, [])
+
+    async def test_audio_flows_again_once_awake(self):
+        state = ConversationState()
+
+        realtime = FakeRealtime()
+        await voice_core._pump_microphone(
+            FakeWebsocket([SILENCE]),
+            realtime,
+            SleepableGate(OpenGate(FakePlayback()), state),
+            None,
+            PiToModelAudio(),
+            True,
+            state,
+            None,
+            None,
+        )
+
+        self.assertTrue(realtime.sent)
 
 
 if __name__ == "__main__":
