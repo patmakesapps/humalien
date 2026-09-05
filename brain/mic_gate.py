@@ -39,6 +39,29 @@ class OpenGate:
         return True
 
 
+class SleepableGate:
+    """Any gate, plus a mute the conversation can ask for.
+
+    Sleep and half duplex close the microphone for unrelated reasons - one
+    because somebody asked, one because the robot is talking over itself -
+    and both have to be able to close it independently. Wrapping rather
+    than adding a flag to each gate keeps that from becoming two booleans
+    every gate has to remember to check.
+    """
+
+    def __init__(self, inner, state):
+        self.inner = inner
+        self.state = state
+
+    @property
+    def name(self) -> str:
+        return f"{self.inner.name} (sleepable)"
+
+    @property
+    def is_open(self) -> bool:
+        return self.inner.is_open and not self.state.asleep
+
+
 GATES = {
     HALF_DUPLEX: HalfDuplexGate,
     OPEN: OpenGate,

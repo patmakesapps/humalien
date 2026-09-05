@@ -13,6 +13,7 @@ Each tool declares its schema next to its handler. See tool_registry.py.
 """
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 
 from appearance import CELEBRATIONS, EYE_COLORS, WINK_EYES
@@ -335,6 +336,30 @@ async def celebrate(robot: Robot, style: str = "gold") -> dict:
         raise ToolError(f"You cannot celebrate with {style!r}.")
 
     return {"shown": True}
+
+
+@tools.tool(
+    "sleep",
+    "Stop listening, because somebody asked you to - 'go to sleep', 'sleep', "
+    "'mute yourself', 'stop listening', 'that's enough for now'. Your "
+    "microphone actually closes: you will not hear anything said after this, "
+    "so say your goodnight in the SAME reply you call this in. They wake you "
+    "by saying your name out loud. Do not argue and do not ask them to "
+    "confirm.",
+)
+async def sleep(robot: Robot) -> dict:
+    if robot.state.asleep:
+        return {"asleep": True}
+
+    robot.state.asleep = True
+    robot.state.slept_at = time.monotonic()
+
+    if robot.mood is not None:
+        robot.mood.sleep(True)
+
+    log("Asleep - the microphone is closed until somebody says the name")
+
+    return {"asleep": True}
 
 
 @tools.tool(

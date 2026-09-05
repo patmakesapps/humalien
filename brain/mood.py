@@ -158,6 +158,12 @@ class Mood:
         self.hearing_level = 0.0
 
         self.working = False
+
+        # Muted. Overrides every other signal, including a feeling that has
+        # not expired: a robot that is supposed to be asleep must not light
+        # up because somebody walked past it.
+        self.asleep = False
+
         self.feeling = None
         self.gaze = None
         self.effects = deque()
@@ -250,6 +256,14 @@ class Mood:
 
     # ------------------------------------------------------------ the choice
 
+    def sleep(self, asleep: bool) -> None:
+        """Close the eyes for a mute, or open them again on waking."""
+
+        self.asleep = asleep
+
+        if asleep:
+            self.effects.clear()
+
     def decide(self, elapsed: float) -> tuple:
         """Advance every clock and return (mood, level)."""
 
@@ -258,6 +272,12 @@ class Mood:
         self.since_face += elapsed
         self.since_new_face += elapsed
         self.since_feel += elapsed
+
+        # Checked after every clock is advanced but before any is read, so
+        # time spent asleep still counts and waking does not resume a stale
+        # `curious` from whoever walked in an hour ago.
+        if self.asleep:
+            return "off", 0.0
 
         if self.feeling is not None and self.since_feel < FEEL_SECONDS:
             return self.feeling, self.speaking_level

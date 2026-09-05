@@ -11,21 +11,28 @@ from websockets.exceptions import ConnectionClosed
 
 from appearance import AppearanceStore
 from attention import Attention
-from audio_adapter import ModelToPiAudio, PiToModelAudio
+from audio_adapter import WAKE_SAMPLE_RATE, ModelToPiAudio, PiToModelAudio
 from gaze import GazeController, HOLDING, TRACKING
 from gestures import Gestures
 from playback import BYTES_PER_SECOND as PI_BYTES_PER_SECOND
 from conversation import ConversationState
 from describe import OllamaDescriber
 from eyes import Eyes
-from mic_gate import HALF_DUPLEX, build_mic_gate
+from mic_gate import HALF_DUPLEX, SleepableGate, build_mic_gate
 from mood import Mood
 from people import PeopleStore
 from perception import Perception
 from playback import PacedPlayback, level as loudness_of
 from realtime_client import RealtimeClient, load_persona
 from robot_tools import Robot, tools
+from waking import build_waker
 
+
+# A sleep nobody ever wakes. Without this a robot whose wake word model is
+# missing, or whose name simply never gets heard over the room, is deaf until
+# somebody restarts it - and the person who muted it has no way to know that
+# is what happened.
+WAKE_AFTER_SECONDS = 30 * 60
 
 ENV_FILE = Path(__file__).resolve().parent / ".env"
 DEFAULT_DB = Path(__file__).resolve().parent / "humalien.db"
@@ -82,32 +89,101 @@ def looks_like_image_trouble(event: dict) -> bool:
     )
 
 
+def wake(state: ConversationState, mood: Mood | None, waker, why: str) -> None:
+    """Undo a sleep, from wherever noticed it was over."""
+
+    if not state.asleep:
+        return
+
+    state.asleep = False
+    state.slept_at = None
+
+    if mood is not None:
+        mood.sleep(False)
+
+    if waker is not None:
+        waker.reset()
+
+    log(f"Awake - {why}")
+
+
 async def pi_to_realtime(
     pi_websocket,
     realtime: RealtimeClient,
     gate,
     mood: Mood | None = None,
+    state: ConversationState | None = None,
+    waker=None,
 ) -> None:
     adapter = PiToModelAudio()
     listening = True
 
+    # Its own resampler at its own rate. Sharing one with the model path
+    # would give each consumer half the samples.
+    wake_adapter = PiToModelAudio(WAKE_SAMPLE_RATE) if waker is not None else None
+
     # Both ends of this can hang up first. Either way it is an ending, not a
     # fault, and a traceback here made a clean quit look like a crash.
     try:
-        await _pump_microphone(pi_websocket, realtime, gate, mood, adapter, listening)
+        await _pump_microphone(
+            pi_websocket,
+            realtime,
+            gate,
+            mood,
+            adapter,
+            listening,
+            state,
+            waker,
+            wake_adapter,
+        )
     except ConnectionClosed:
         return
 
 
 async def _pump_microphone(
-    pi_websocket, realtime, gate, mood, adapter, listening
+    pi_websocket,
+    realtime,
+    gate,
+    mood,
+    adapter,
+    listening,
+    state=None,
+    waker=None,
+    wake_adapter=None,
 ) -> None:
     async for message in pi_websocket:
         if isinstance(message, bytes):
+            asleep = state is not None and state.asleep
+
+            if asleep:
+                # Asleep is the one closed gate where the microphone is
+                # still worth listening to. Half duplex is not: the only
+                # voice in it is the robot's own, and it would wake itself
+                # up saying its name.
+                if waker is not None and wake_adapter is not None:
+                    converted_wake = wake_adapter.convert(message)
+
+                    if converted_wake and waker.feed(converted_wake):
+                        wake(state, mood, waker, "heard its name")
+
+                # Only when there is no wake word. A robot that can be woken
+                # by voice and un-mutes itself anyway has overridden somebody
+                # who asked it to stop listening, which is worse than staying
+                # asleep. The timeout is the fallback for having no way back
+                # at all, not a general policy.
+                elif state.slept_at is not None and (
+                    time.monotonic() - state.slept_at > WAKE_AFTER_SECONDS
+                ):
+                    wake(state, mood, waker, "the sleep timed out")
+
             if not gate.is_open:
                 if listening:
                     listening = False
-                    log("Microphone closed - Humalien is speaking")
+                    log(
+                        "Microphone closed - asleep"
+                        if asleep
+                        else "Microphone closed - Humalien is speaking"
+                    )
 
                 # Keep feeding the resampler so its state stays continuous
                 # and reopening does not produce a click.
@@ -283,6 +359,7 @@ async def follow_faces(
     eyes: Eyes,
     gestures: Gestures | None,
     mood: Mood | None,
+    state: ConversationState | None = None,
 ) -> None:
     """Point the head at whoever is being talked to.
 
@@ -314,6 +391,11 @@ async def follow_faces(
 
     while True:
         await asyncio.sleep(TRACK_INTERVAL)
+
+        # A robot that was asked to go to sleep should not still be
+        # swivelling to watch whoever walks past it.
+        if state is not None and state.asleep:
+            continue
 
         frame = eyes.frame
 
@@ -415,6 +497,13 @@ async def watch_the_room(
         await asyncio.sleep(0.5)
 
         now = time.monotonic()
+
+        # Arrivals are pushed to the model, not heard, so the closed
+        # microphone does not stop them. Without this the robot greets
+        # people by name while it is supposed to be asleep.
+        if state.asleep:
+            continue
+
         idle = not state.response_active and not playback.is_speaking
 
         present = {person.id: person for person in eyes.known}
@@ -564,8 +653,18 @@ async def run_voice_core() -> None:
             # whether sound is actually coming out of the head.
             if mood is not None:
                 mood.is_speaking = lambda: playback.is_speaking
-            gate = build_mic_gate(gate_name, playback)
             state = ConversationState()
+
+            # Wrapped, so `sleep` and half duplex can close the microphone
+            # for their own reasons without either knowing about the other.
+            gate = SleepableGate(build_mic_gate(gate_name, playback), state)
+            waker = build_waker()
+
+            if waker is None:
+                log(
+                    "No wake word - a sleep will end on its own after "
+                    f"{WAKE_AFTER_SECONDS // 60} minutes"
+                )
             robot = Robot(
                 eyes=eyes,
                 store=store,
@@ -601,7 +700,9 @@ async def run_voice_core() -> None:
 
                 tasks = {
                     asyncio.create_task(
-                        pi_to_realtime(pi_websocket, realtime, gate, mood)
+                        pi_to_realtime(
+                            pi_websocket, realtime, gate, mood, state, waker
+                        )
                     ),
                     asyncio.create_task(
                         realtime_to_pi(realtime, playback, robot, state, mood)
@@ -622,7 +723,7 @@ async def run_voice_core() -> None:
 
                 if tracking:
                     tasks.add(
-                        asyncio.create_task(follow_faces(eyes, gestures, mood))
+                        asyncio.create_task(follow_faces(eyes, gestures, mood, state))
                     )
                 else:
                     log("Face tracking is off - the head drifts on its own")

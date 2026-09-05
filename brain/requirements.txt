@@ -4,3 +4,8 @@ soxr>=1,<2
 python-dotenv>=1,<2
 sounddevice>=0.5,<1
 opencv-python>=4.10,<5
+
+# Optional. Offline wake word, so a sleeping robot can be woken by voice
+# without the microphone reaching the network. Without it sleep still works
+# and ends on a timeout instead. See waking.py.
+vosk>=0.3,<1

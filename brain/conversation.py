@@ -17,6 +17,16 @@ class ConversationState:
         self.speech_started_at: float | None = None
         self.speech_stopped_at: float | None = None
 
+        # Muted. Not a mood and not a pause: while this is set the
+        # microphone never reaches the Realtime API at all, so there is
+        # nothing for the model to answer and nothing it can decide to
+        # answer anyway. Enforced in the gate rather than in the persona,
+        # because a mute the model can talk itself out of is not a mute.
+        self.asleep = False
+
+        # When it went to sleep, so a wake that never comes can time out.
+        self.slept_at: float | None = None
+
     def speech_window(self) -> tuple[float | None, float | None]:
         """The span the last question was asked in, if there was one."""
 

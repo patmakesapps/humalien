@@ -8,6 +8,9 @@ PI_CHANNELS = 2
 MODEL_SAMPLE_RATE = 24_000
 MODEL_CHANNELS = 1
 
+# What the offline wake word listener wants. See waking.py.
+WAKE_SAMPLE_RATE = 16_000
+
 SAMPLE_WIDTH = 2
 
 
@@ -29,12 +32,18 @@ def _split_whole_frames(
 
 
 class PiToModelAudio:
-    """Convert Pi PCM16 audio from 48 kHz stereo to 24 kHz mono."""
+    """Convert Pi PCM16 audio from 48 kHz stereo to 24 kHz mono.
 
-    def __init__(self):
+    The wake word listener needs the same stereo-to-mono downsample at its
+    own rate, so the target is a parameter. Each instance carries its own
+    resampler state and they must not be shared: two consumers stepping the
+    same stream would each get half the samples.
+    """
+
+    def __init__(self, rate: int = MODEL_SAMPLE_RATE):
         self.resampler = soxr.ResampleStream(
             PI_SAMPLE_RATE,
-            MODEL_SAMPLE_RATE,
+            rate,
             MODEL_CHANNELS,
             dtype="int16",
             quality="HQ",
