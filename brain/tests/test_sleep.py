@@ -28,6 +28,12 @@ class FakeRecognizer:
         self.reset_calls = 0
 
     def AcceptWaveform(self, audio):
+        """True only when a phrase has ended, which is the real behaviour.
+
+        Vosk emits a final on endpointing - the silence after the words -
+        so a clip that stops the instant the word does never produces one.
+        """
+
         return bool(self.finals)
 
     def Result(self):
@@ -128,10 +134,18 @@ class WakeWordTests(unittest.TestCase):
 
         self.assertTrue(waker.feed(b"\x00\x00"))
 
-    def test_a_partial_wakes_it_without_waiting_for_silence(self):
-        waker = WakeWord(FakeRecognizer(partials=['{"partial": "tubby"}']))
+    def test_a_partial_does_not_wake_it(self):
+        """The decoder revises partials, and revises through the wake words.
 
-        self.assertTrue(waker.feed(b"\x00\x00"))
+        Recorded from the real model: "what time is it tomorrow afternoon"
+        partials as `wake`, then `wake tubby`, before settling on `[unk]`
+        in the final. Waking on a partial turns a robot somebody muted back
+        on because they said "tomorrow".
+        """
+
+        waker = WakeWord(FakeRecognizer(partials=['{"partial": "wake tubby"}']))
+
+        self.assertFalse(waker.feed(b"\x00\x00"))
 
     def test_unrelated_speech_does_not(self):
         waker = WakeWord(FakeRecognizer(finals=['{"text": "[unk]"}']))

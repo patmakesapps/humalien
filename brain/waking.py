@@ -66,17 +66,22 @@ class WakeWord:
         self.recognizer = recognizer
 
     def feed(self, audio: bytes) -> bool:
-        """Whether this chunk completed a wake phrase."""
+        """Whether this chunk completed a wake phrase.
 
-        if self.recognizer.AcceptWaveform(audio):
-            result = json.loads(self.recognizer.Result() or "{}")
-            return heard_wake_word(result.get("text", ""))
+        Final results only. Partials look tempting - they would save the
+        pause after the word - but the decoder revises them as it hears
+        more, and it revises through the wake phrases on the way past.
+        "What time is it tomorrow afternoon" partials as `wake`, then
+        `wake tubby`, before settling on `[unk]` in the final. Waking on
+        that would mean a robot somebody muted turning itself back on
+        because they said "tomorrow", which is worse than being slow.
+        """
 
-        # Partials are checked too. Waiting for the final result means
-        # waiting for the silence after the word, which is most of a second
-        # of the robot visibly ignoring somebody who just called it.
-        partial = json.loads(self.recognizer.PartialResult() or "{}")
-        return heard_wake_word(partial.get("partial", ""))
+        if not self.recognizer.AcceptWaveform(audio):
+            return False
+
+        result = json.loads(self.recognizer.Result() or "{}")
+        return heard_wake_word(result.get("text", ""))
 
     def reset(self) -> None:
         """Forget what it has heard so far.
