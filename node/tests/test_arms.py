@@ -145,16 +145,20 @@ class TestLimits(unittest.TestCase):
             for degrees in (-1000.0, 1000.0):
                 us = arms.microseconds(axis, degrees)
 
+                # The head's whole envelope is 1056 (nod, fully up) to 1820
+                # (pan, hard left) since pan was widened. The bound is what
+                # keeps a head axis from ever being driven anywhere near an
+                # arm's 600 or 2400 - not a restatement of the pan limit.
                 self.assertGreater(us, 1000.0, axis)
-                self.assertLess(us, 1700.0, axis)
+                self.assertLess(us, 1900.0, axis)
 
     def test_the_head_pulses_match_the_numbers_that_were_observed(self):
         """SERVO_MAP.md: pan 1340..1660, nod 1056..1540. Verified by eye."""
 
         arms = Arms()
 
-        self.assertAlmostEqual(arms.microseconds("pan", PAN_LIMITS[0]), 1340, places=0)
-        self.assertAlmostEqual(arms.microseconds("pan", PAN_LIMITS[1]), 1660, places=0)
+        self.assertAlmostEqual(arms.microseconds("pan", PAN_LIMITS[0]), 1180, places=0)
+        self.assertAlmostEqual(arms.microseconds("pan", PAN_LIMITS[1]), 1820, places=0)
         self.assertAlmostEqual(arms.microseconds("nod", NOD_LIMITS[0]), 1540, places=0)
         self.assertAlmostEqual(arms.microseconds("nod", NOD_LIMITS[1]), 1056, places=0)
 

@@ -34,7 +34,9 @@ through - and they are NOT what the assembled mechanism has been observed to
 survive. SERVO_MAP.md records what was actually watched happening on the
 robot, and that is what is enforced here:
 
-  pan   1340..1660 us   = +-14.4 deg, both directions observed clean.
+  pan   1180..1820 us   = +-28.8 deg, inside the 1000..2000 sweep that
+                         did not bind. See PAN_LIMITS for why this one
+                         moved and the nod did not.
   nod   1056..1540 us   = -3.6 deg down, +40.0 deg up.
 
 The nod asymmetry is real, not an oversight. Upward travel was walked to
@@ -154,9 +156,18 @@ ARM_PULSE_CLAMP = (600.0, 2400.0)
 
 # ---------------------------------------------------------------- the head
 
-# SERVO_MAP.md, verified on the assembled robot 2026-09-03. 1340..1660 us.
-PAN_LIMITS = (-14.4, 14.4)
-PAN_PULSE_CLAMP = (CENTER_US - _us(14.4), CENTER_US + _us(14.4))
+# SERVO_MAP.md. Widened from the original 1340..1660 us on 2026-09-06,
+# because +-14.4 degrees on a desk is a head that barely turns - Pat, who
+# owns the assembled robot, asked for visibly more and reports the neck has
+# it. Exactly double, which is still 16 degrees short of the 1000..2000 us
+# sweep SERVO_MAP.md records as passing without binding, so this stays
+# inside what was actually watched rather than extrapolating past it.
+#
+# Not raised further because the eye wiring runs up through this joint: the
+# constraint on pan is the cable, not the servo, and doubling the sweep
+# doubles how far it twists.
+PAN_LIMITS = (-28.8, 28.8)
+PAN_PULSE_CLAMP = (CENTER_US - _us(28.8), CENTER_US + _us(28.8))
 
 # SERVO_MAP.md. Up is a LOWER pulse and was walked to 1056 us; down is
 # approved only as far as 1540 us. Asymmetric on purpose - read the header.

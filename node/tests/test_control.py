@@ -164,7 +164,7 @@ class TestControlPath(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(target["arm_l"], 75.0)
-        self.assertEqual(target["pan"], 14.4)
+        self.assertEqual(target["pan"], 28.8)
         self.assertEqual(target["nod"], -3.6)
 
     async def test_an_eyes_frame_sets_the_mood(self):

@@ -36,8 +36,25 @@ protractor.
 - Proven slow rate: 2 µs every 50 ms = 40 µs/s, nominally 3.6 degrees/s.
 - Observed test path: 1500 -> 1660, hold 0.4 s, 1660 -> 1340,
   hold 0.4 s, 1340 -> 1500, hold 0.5 s, then release.
-- The earlier 1000–2000 µs bench sweep did not bind, but speech gestures should
-  start with the much narrower 1340–1660 µs envelope above.
+- The earlier 1000–2000 µs bench sweep did not bind, but speech gestures
+  started with the much narrower 1340–1660 µs envelope above.
+
+#### Widened to 1180–1820 µs, 2026-09-06
+
+±14.4 degrees reads as a head that does not really turn. Runtime pan was
+doubled to ±28.8 degrees on Pat's account of what the assembled neck can
+do. This is a decision, not a new bench test: the only measurement behind
+it is still the 1000–2000 µs sweep above, and ±28.8 sits 16 degrees inside
+it on each side.
+
+What to watch, because it is the reason not to go further: the NeoPixel eye
+wiring runs up through this joint. Doubling the sweep doubles the twist per
+turn, and a cable is the part that fails quietly over weeks rather than
+audibly on the bench. Check the loom at the neck before leaving this
+running for long sessions.
+
+Backing it out is one constant: `PAN_LIMITS` in `node/humalien_node/arms.py`,
+with the matching mirror in `brain/gestures.py`.
 
 ### Head nod (`nod`, channel 2)
 
@@ -98,7 +115,7 @@ the pulses observed above, not the CAD ranges:
 | axis | limits | pulses | top speed | acceleration |
 | --- | --- | --- | --- | --- |
 | `arm_l` / `arm_r` | -20..+75 deg | 600..2400 us | 100 deg/s | 600 deg/s² |
-| `pan` | ±14.4 deg | 1340..1660 us | 144 deg/s | 398 deg/s² |
+| `pan` | ±28.8 deg | 1180..1820 us | 144 deg/s | 398 deg/s² |
 | `nod` | -3.6..+40 deg | 1056..1540 us | 108 deg/s | 237 deg/s² |
 
 The pulse clamp is per axis on purpose: a bad trim or a recalibrated
@@ -157,7 +174,7 @@ drive it unattended.
 
 ### What the brain shapes
 
-`brain/gestures.py` keeps ordinary speech motion far inside those limits: pan
+`brain/gestures.py` keeps ordinary speech motion inside those limits: pan
 ±4.5 degrees and nod ±2.4 on the speech envelope, on a beat of 0.17 Hz
 against the arms' 0.45 Hz, so the head follows phrases rather than syllables.
 It runs the head on its own slower envelope (`HEAD_ATTACK`) for the same

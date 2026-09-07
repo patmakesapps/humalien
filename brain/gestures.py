@@ -52,7 +52,7 @@ ARM_REST = -8.0
 # Mirrors node/humalien_node/arms.py, which mirrors what was observed on the
 # assembled robot. See node/SERVO_MAP.md. Positive pan is the robot's own
 # LEFT; positive nod is UP.
-PAN_RANGE = (-14.4, 14.4)
+PAN_RANGE = (-28.8, 28.8)
 
 # SERVO_MAP.md allows the node down to -3.6 and up to +40. Ordinary speech
 # motion is deliberately kept inside the small envelope it asks for; only
@@ -98,13 +98,67 @@ BEAT_HZ = 0.45
 # reads as a mechanism keeping time rather than a person talking.
 PHASE = 2.2
 
+# ---------------------------------------------------------------- emphasis
+#
+# Every so often a gesture should be bigger and quicker than the rest of
+# them - the hand that goes up when somebody gets to the point they actually
+# cared about. Gestures that are all the same size read as a machine running,
+# however well the size was chosen.
+#
+# WHERE THE EXCITEMENT COMES FROM
+#
+# Not from the words. Nothing here reads the transcript, matches a phrase or
+# looks for an exclamation mark - by the time text could be scanned the audio
+# is already playing, and a keyword list is a worse judge of emphasis than
+# the delivery is. It comes from the voice: the model genuinely gets louder
+# and sharper when it is making a point, and that is already measured, in the
+# envelope every other gesture rides on.
+#
+# It is measured RELATIVE to how loud this stretch of speech has been, not
+# absolutely. Absolute loudness is mostly the volume knob and how far away
+# the speaker is; what marks a moment as emphatic is being louder than the
+# surrounding speech. So a slow follower tracks the recent average and
+# emphasis is how far the level is above its own baseline.
+BASELINE_TAU = 6.0
+
+# How far above its own baseline counts as full emphasis. Small, because the
+# envelope is already compressed against LEVEL_REFERENCE.
+EMPHASIS_SPAN = 0.32
+
+# Slow to leave, so the moment carries through the rest of the sentence
+# instead of spiking on one syllable and vanishing.
+#
+# Arriving over most of half a second rather than instantly, for the reason
+# in HEAD_ATTACK: a step in the envelope already asks the arms for about
+# 207 deg/s against the 100 the node can give, so the servo is briefly
+# saturated whatever this file wants. That is pre-existing, and the node's
+# acceleration limiting is what turns it into the quick, controlled lift
+# that works - but it does mean an emphasis that arrives in 120 ms stacks
+# onto a spike the arm is already unable to follow, and buys nothing for it.
+# At 0.45 the extra lift is added while the arm is moving instead: same
+# reach, 230 deg/s instead of 280, and the gesture is shaped here rather
+# than by how long the servo spends against its limiter.
+EMPHASIS_ATTACK = 0.45
+EMPHASIS_RELEASE = 1.6
+
+# What full emphasis does, as a fraction added to the normal gesture. Lift
+# and swing make the gesture bigger, beat makes it quicker.
+#
+# Against the node's arm limits again: at full emphasis the beat is 0.585 Hz
+# and the swing 21 degrees, so 77 deg/s and 283 deg/s^2, against 100 and 600.
+# The reach is ARM_REST + LIFT*1.55 + SWING*1.5 = 32 + 21 = 53 degrees, well
+# inside the +75 the arms are allowed.
+EMPHASIS_LIFT = 0.55
+EMPHASIS_SWING = 0.50
+EMPHASIS_BEAT = 0.30
+
 # ----------------------------------------------------------------- the head
 
 # The head's own beat. Under the arms' - it follows phrases rather than
 # syllables - but not by as much as it was. At 0.17 Hz the head changed
 # direction once every three seconds, which on a desk is indistinguishable
 # from not moving.
-HEAD_BEAT_HZ = 0.38
+HEAD_BEAT_HZ = 0.52
 
 # The head's own envelope, well slower than the arms'. ATTACK of 0.05 s is
 # right for a hand that lands with the syllable, and wrong for a neck: the
@@ -119,8 +173,20 @@ HEAD_RELEASE = 0.60
 # How far the head moves on the speech envelope, in degrees, at full volume.
 # This rides on top of wherever the robot is already looking, and the sum
 # still has to fit inside PAN_RANGE - which is what stops these going higher.
-PAN_SPEECH = 9.0
-NOD_SPEECH = 6.0
+#
+# Both went up when PAN_RANGE doubled. At the old +-14.4 a 9 degree speech
+# sway had to share the range with tracking, and whichever of the two was
+# bigger simply pinned the head against the clamp - a head held at its limit
+# does not read as a head moving a lot, it reads as a head not moving. With
+# twice the room the sway can be most of the old WHOLE range and still leave
+# tracking somewhere to point.
+#
+# Sanity check against the node, which is acceleration-limited and will
+# visibly lag anything it cannot do: a sine of amplitude A at f Hz peaks at
+# 2*pi*f*A degrees/s and (2*pi*f)^2*A degrees/s^2. At 16 degrees and
+# 0.52 Hz that is 52 deg/s and 171 deg/s^2, against limits of 144 and 398.
+PAN_SPEECH = 16.0
+NOD_SPEECH = 7.5
 
 # WHY THE NOD PIVOTS UPWARD INSTEAD OF AROUND ZERO
 #
@@ -142,7 +208,7 @@ NOD_SPEAKING_LIFT = 7.0
 # The nod drift is biased upward for the same reason as the speaking lift:
 # centred on zero it would spend half its time trying to go somewhere the
 # mechanism cannot.
-PAN_IDLE = 5.5
+PAN_IDLE = 8.0
 NOD_IDLE = 2.0
 NOD_IDLE_CENTRE = 2.5
 PAN_IDLE_PERIOD = 11.3
@@ -276,6 +342,12 @@ class Gestures:
 
         # The same envelope, followed slowly. See HEAD_ATTACK.
         self.head_level = 0.0
+
+        # How loud this stretch of speech has been, and how far above that
+        # the current moment is. See the emphasis constants.
+        self.baseline = 0.0
+        self.emphasis = 0.0
+        self.was_speaking = False
 
         self.phase = 0.0
         self.clock = 0.0
@@ -430,20 +502,56 @@ class Gestures:
             1.0 - math.exp(-elapsed / head_tau)
         )
 
+        # How loud it has been lately, and how far above that it is now.
+        #
+        # Starting to talk is not emphasis. Coming out of a silence the level
+        # climbs from nothing, and a baseline that lags that would read the
+        # first second of EVERY reply as a big moment - which is the same
+        # failure as having no emphasis at all, just louder. So the baseline
+        # is seeded at the opening chunk and only lags from there, and what
+        # is left is what emphasis actually is: getting louder part-way
+        # through something you were already saying.
+        if speaking and not self.was_speaking:
+            self.baseline = target
+        elif speaking:
+            self.baseline += (self.level - self.baseline) * (
+                1.0 - math.exp(-elapsed / BASELINE_TAU)
+            )
+
+        self.was_speaking = speaking
+
+        excess = clamp((self.level - self.baseline) / EMPHASIS_SPAN, 0.0, 1.0)
+        emphasis_tau = (
+            EMPHASIS_ATTACK if excess > self.emphasis else EMPHASIS_RELEASE
+        )
+        self.emphasis += (excess - self.emphasis) * (
+            1.0 - math.exp(-elapsed / emphasis_tau)
+        )
+
         # The beat only advances while there is something to gesture about, so
         # speech always starts from the same place in the cycle rather than
-        # wherever a free-running clock happened to be.
-        if self.level > 0.01:
-            self.phase += 2.0 * math.pi * BEAT_HZ * elapsed
+        # wherever a free-running clock happened to be. It runs quicker when
+        # the point being made is emphatic - a raised hand that moves at the
+        # same rate as an unraised one is just a taller idle.
+        beat = BEAT_HZ * (1.0 + EMPHASIS_BEAT * self.emphasis)
 
-        base = ARM_REST + LIFT * self.level
-        swing = SWING * self.level
+        if self.level > 0.01:
+            self.phase += 2.0 * math.pi * beat * elapsed
+
+        base = ARM_REST + LIFT * (1.0 + EMPHASIS_LIFT * self.emphasis) * self.level
+        swing = SWING * (1.0 + EMPHASIS_SWING * self.emphasis) * self.level
 
         aim_pan, aim_nod = self._aim(elapsed)
 
         # The head rides the same envelope at its own, much slower rate. The
         # phases are offset from each other so pan and nod do not trace a
         # single diagonal line.
+        # Derived from the arm phase, so it picks up the emphasis speed-up
+        # with it - the head quickening slightly with an emphatic gesture is
+        # right, and the ratio is what keeps the two from ever locking into
+        # step. The head's own amplitude is deliberately NOT boosted: the
+        # neck is acceleration-limited and already asking for more of its
+        # range than it used to.
         head_phase = self.phase * (HEAD_BEAT_HZ / BEAT_HZ)
 
         pan = aim_pan + PAN_SPEECH * self.head_level * math.sin(head_phase)
@@ -496,6 +604,9 @@ class Gestures:
 
         self.level = 0.0
         self.head_level = 0.0
+        self.baseline = 0.0
+        self.emphasis = 0.0
+        self.was_speaking = False
         self.let_go()
         await self.send(dict(REST_POSE))
 
@@ -507,6 +618,9 @@ class Gestures:
         if asleep:
             self.level = 0.0
             self.head_level = 0.0
+            self.baseline = 0.0
+            self.emphasis = 0.0
+            self.was_speaking = False
             self.let_go()
             self.stop_looking()
 

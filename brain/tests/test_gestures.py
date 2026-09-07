@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gestures import (
     ARM_RANGE,
+    BEAT_HZ,
     ARM_REST,
     COMMANDED,
     HOLD_SECONDS,
@@ -18,6 +19,7 @@ from gestures import (
     PAN_RANGE,
     Gestures,
 )
+import gestures as gestures_module
 from playback import level
 
 
@@ -253,6 +255,163 @@ class TestHead(unittest.TestCase):
 
         self.assertLess(abs(drifted), abs(turned))
 
+
+def feed_run(gestures, loudnesses, step=STEP):
+    """Advance the generator on a changing voice, rather than a flat one."""
+
+    return [gestures.pose(step) for value in loudnesses if not gestures.feed(value)]
+
+
+def reach(poses):
+    """How far forward the arms actually got."""
+
+    return max(max(pose["arm_l"], pose["arm_r"]) for pose in poses)
+
+
+class TestEmphasis(unittest.TestCase):
+    """Every so often a gesture should be bigger than the rest of them.
+
+    Driven from the voice, not the words - nothing reads the transcript. The
+    model genuinely gets louder when it is making a point, and that is
+    already measured, so emphasis is how far above its own recent baseline
+    the envelope has climbed.
+    """
+
+    def steady(self, seconds, loudness):
+        return [loudness] * int(seconds / STEP)
+
+    def test_getting_louder_mid_sentence_makes_a_bigger_gesture(self):
+        quiet = 0.35 * LEVEL_REFERENCE
+
+        settled = feed_run(Gestures(None), self.steady(8.0, quiet))
+        excited = feed_run(
+            Gestures(None), self.steady(8.0, quiet) + self.steady(2.0, LEVEL_REFERENCE)
+        )
+
+        self.assertGreater(reach(excited), reach(settled) + 5.0)
+
+    def test_starting_to_talk_is_not_emphasis(self):
+        """Otherwise every reply opens with the big gesture, which is the
+        same as having no emphasis at all - just louder throughout."""
+
+        gestures = Gestures(None)
+
+        feed_run(gestures, self.steady(1.0, LEVEL_REFERENCE))
+
+        self.assertLess(gestures.emphasis, 0.25)
+
+    def test_talking_loudly_all_along_settles_back_down(self):
+        """Emphasis is relative. Loud is the volume knob; louder is a point."""
+
+        gestures = Gestures(None)
+
+        feed_run(gestures, self.steady(12.0, LEVEL_REFERENCE))
+
+        self.assertLess(gestures.emphasis, 0.2)
+
+    def test_the_moment_passes(self):
+        gestures = Gestures(None)
+        quiet = 0.35 * LEVEL_REFERENCE
+
+        feed_run(gestures, self.steady(8.0, quiet) + self.steady(1.0, LEVEL_REFERENCE))
+        at_the_peak = gestures.emphasis
+
+        feed_run(gestures, self.steady(6.0, quiet))
+
+        self.assertGreater(at_the_peak, 0.4)
+        self.assertLess(gestures.emphasis, at_the_peak / 3.0)
+
+    def test_an_emphatic_gesture_is_quicker_as_well_as_bigger(self):
+        gestures = Gestures(None)
+        quiet = 0.35 * LEVEL_REFERENCE
+
+        feed_run(gestures, self.steady(8.0, quiet))
+        before = gestures.phase
+
+        feed_run(gestures, self.steady(2.0, quiet))
+        calm = gestures.phase - before
+
+        feed_run(gestures, self.steady(2.0, LEVEL_REFERENCE))
+        loud = gestures.phase - (before + calm)
+
+        # Both stretches are two seconds; the emphatic one covers more of
+        # the beat cycle, so the hands are moving faster through it.
+        self.assertGreater(loud, calm)
+
+    def test_sleeping_forgets_the_moment(self):
+        # Otherwise waking up resumes mid-gesture at whatever size the last
+        # sentence had reached.
+        gestures = Gestures(None)
+        quiet = 0.35 * LEVEL_REFERENCE
+
+        feed_run(gestures, self.steady(8.0, quiet) + self.steady(1.0, LEVEL_REFERENCE))
+        gestures.sleep(True)
+
+        self.assertEqual(gestures.emphasis, 0.0)
+
+    def test_even_at_full_emphasis_the_arms_stay_inside_the_range(self):
+        gestures = Gestures(None)
+        quiet = 0.35 * LEVEL_REFERENCE
+
+        poses = feed_run(
+            gestures, self.steady(8.0, quiet) + self.steady(6.0, 4.0 * LEVEL_REFERENCE)
+        )
+
+        for pose in poses:
+            self.assertGreaterEqual(pose["arm_l"], ARM_RANGE[0])
+            self.assertLessEqual(pose["arm_l"], ARM_RANGE[1])
+            self.assertLessEqual(pose["arm_r"], ARM_RANGE[1])
+
+    def test_emphasis_does_not_make_the_arms_much_harder_to_drive(self):
+        """A sudden jump in volume ALREADY asks the arms for about 207 deg/s
+        against the 100 node/humalien_node/arms.py can give - that predates
+        emphasis and is what the node's acceleration limiting exists to
+        smooth. Emphasis rides on top of that spike, so what matters is that
+        it does not pile much more onto it: past a point the gesture is
+        shaped by how long the servo sits against its limiter rather than by
+        anything in this file.
+        """
+
+        quiet = 0.35 * LEVEL_REFERENCE
+        loud = self.steady(8.0, quiet) + self.steady(6.0, 4.0 * LEVEL_REFERENCE)
+
+        def peak(lift, swing, beat):
+            saved = (
+                gestures_module.EMPHASIS_LIFT,
+                gestures_module.EMPHASIS_SWING,
+                gestures_module.EMPHASIS_BEAT,
+            )
+            (
+                gestures_module.EMPHASIS_LIFT,
+                gestures_module.EMPHASIS_SWING,
+                gestures_module.EMPHASIS_BEAT,
+            ) = (lift, swing, beat)
+            try:
+                poses = feed_run(Gestures(None), loud)
+
+                return max(
+                    abs(b[axis] - a[axis]) / STEP
+                    for a, b in zip(poses, poses[1:])
+                    for axis in ("arm_l", "arm_r")
+                )
+            finally:
+                (
+                    gestures_module.EMPHASIS_LIFT,
+                    gestures_module.EMPHASIS_SWING,
+                    gestures_module.EMPHASIS_BEAT,
+                ) = saved
+
+        without = peak(0.0, 0.0, 0.0)
+        with_it = peak(
+            gestures_module.EMPHASIS_LIFT,
+            gestures_module.EMPHASIS_SWING,
+            gestures_module.EMPHASIS_BEAT,
+        )
+
+        self.assertLess(
+            with_it, without * 1.2,
+            f"emphasis took the arms from {without:.0f} to {with_it:.0f} deg/s",
+        )
 
 class TestAskedForPoses(unittest.TestCase):
     """"Turn your head left" has to survive the gesture generator.
