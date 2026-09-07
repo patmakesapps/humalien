@@ -108,18 +108,50 @@ def requested(value: int | str) -> Camera:
     return Camera(source, f"camera {text}")
 
 
-def _windows_cameras() -> list[Camera]:
+def _windows_cameras(log=None) -> list[Camera]:
     try:
+        import comtypes
         from pygrabber.dshow_graph import FilterGraph
     except ImportError:
         # Optional dependency. Without it there are no names to match on,
         # and the caller falls back to index 0.
         return []
 
+    # DirectShow is COM, and COM is per-THREAD. Eyes opens its camera on a
+    # worker thread, where nothing has called CoInitialize, and enumeration
+    # there fails with "CoInitialize has not been called" - so the Arducam
+    # could not be found by name and the robot quietly used the laptop
+    # webcam instead. Every check from a script passed, because a script
+    # runs on the main thread, where COM is already up.
+    #
+    # Initialising here rather than once at import is deliberate: which
+    # thread this runs on is the caller's business, and the balanced
+    # init/uninit pair is per-thread and cheap.
+    initialised = False
+
     try:
-        names = FilterGraph().get_input_devices()
-    except Exception:
+        comtypes.CoInitialize()
+        initialised = True
+    except OSError:
+        # Already initialised on this thread, possibly into a different
+        # apartment. Either way it is up, and not ours to tear down.
+        pass
+
+    try:
+        graph = FilterGraph()
+        names = graph.get_input_devices()
+        del graph
+    except Exception as error:
+        # Never silently again. Falling back to index 0 is the right
+        # behaviour and the wrong thing to do quietly - it is a different
+        # camera pointing somewhere else.
+        if log is not None:
+            log(f"Could not read the camera names ({error}) - falling back")
+
         return []
+    finally:
+        if initialised:
+            comtypes.CoUninitialize()
 
     return [
         Camera(i, name, (cv2.CAP_MSMF, cv2.CAP_DSHOW))
@@ -141,11 +173,11 @@ def _linux_cameras() -> list[Camera]:
     return cameras
 
 
-def attached() -> list[Camera]:
+def attached(log=None) -> list[Camera]:
     """Every capture device this machine can name, in platform order."""
 
     if sys.platform == "win32":
-        return _windows_cameras()
+        return _windows_cameras(log)
 
     if sys.platform.startswith("linux"):
         return _linux_cameras()
@@ -158,6 +190,7 @@ def in_preference_order(
     *,
     preferred: str | None = None,
     found: list[Camera] | None = None,
+    log=None,
 ) -> list[Camera]:
     """Which camera to try, best first. Never empty.
 
@@ -168,7 +201,7 @@ def in_preference_order(
     if explicit not in (None, ""):
         return [requested(explicit)]
 
-    found = attached() if found is None else found
+    found = attached(log) if found is None else found
 
     if not found:
         return [Camera(0, "camera 0")]
@@ -205,7 +238,7 @@ def open_camera(
     absent, so it is treated the same way and the next candidate is tried.
     """
 
-    candidates = in_preference_order(explicit, preferred=preferred)
+    candidates = in_preference_order(explicit, preferred=preferred, log=log)
 
     for camera in candidates:
         capture = camera.open(size)

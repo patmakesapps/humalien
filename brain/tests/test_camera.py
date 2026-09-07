@@ -1,5 +1,9 @@
+import asyncio
+import sys
 import unittest
+import unittest.mock
 
+import camera
 from camera import Camera, choose, in_preference_order, requested
 
 
@@ -49,6 +53,82 @@ class ExplicitRequestTests(unittest.TestCase):
         order = in_preference_order("/dev/video9", found=[WEBCAM, ARDUCAM])
 
         self.assertEqual([c.source for c in order], ["/dev/video9"])
+
+
+class WorkerThreadTests(unittest.TestCase):
+    """The bug that made the robot use the laptop webcam all evening.
+
+    Eyes opens its camera on a worker thread. On Windows the names come from
+    DirectShow, DirectShow is COM, and COM is per-thread - so enumeration
+    there died with "CoInitialize has not been called", the failure was
+    swallowed, and camera.py fell back to index 0 without a word. Every
+    check ran from a script, on the main thread, and passed.
+    """
+
+    @unittest.skipUnless(sys.platform == "win32", "COM is a Windows problem")
+    def test_the_same_cameras_are_found_off_the_main_thread(self):
+        if not camera.attached():
+            self.skipTest("no cameras attached to this machine")
+
+        async def from_a_worker():
+            return await asyncio.to_thread(camera.attached)
+
+        self.assertEqual(
+            [c.name for c in asyncio.run(from_a_worker())],
+            [c.name for c in camera.attached()],
+        )
+
+    @unittest.skipUnless(sys.platform == "win32", "COM is a Windows problem")
+    def test_the_preferred_camera_is_still_preferred_off_the_main_thread(self):
+        if not camera.attached():
+            self.skipTest("no cameras attached to this machine")
+
+        async def from_a_worker():
+            return await asyncio.to_thread(choose)
+
+        self.assertEqual(asyncio.run(from_a_worker()).name, choose().name)
+
+
+class QuietFailureTests(unittest.TestCase):
+    """Falling back to index 0 is right. Doing it silently is not.
+
+    A silent fallback is a different camera, pointing somewhere else, for a
+    whole session - which is exactly how the COM bug above went unnoticed.
+    """
+
+    @unittest.skipUnless(sys.platform == "win32", "the DirectShow path")
+    def test_being_unable_to_read_the_names_is_said_out_loud(self):
+        try:
+            from pygrabber import dshow_graph
+        except ImportError:
+            self.skipTest("pygrabber is not installed")
+
+        def broken():
+            raise OSError("CoInitialize has not been called")
+
+        said = []
+
+        with unittest.mock.patch.object(dshow_graph, "FilterGraph", broken):
+            found = camera._windows_cameras(said.append)
+
+        self.assertEqual(found, [])
+        self.assertEqual(len(said), 1)
+        self.assertIn("CoInitialize", said[0])
+
+    @unittest.skipUnless(sys.platform == "win32", "the DirectShow path")
+    def test_a_failure_still_leaves_a_camera_to_open(self):
+        try:
+            from pygrabber import dshow_graph
+        except ImportError:
+            self.skipTest("pygrabber is not installed")
+
+        def broken():
+            raise OSError("nope")
+
+        with unittest.mock.patch.object(dshow_graph, "FilterGraph", broken):
+            order = in_preference_order()
+
+        self.assertEqual([c.source for c in order], [0])
 
 
 if __name__ == "__main__":
