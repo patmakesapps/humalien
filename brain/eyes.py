@@ -28,6 +28,11 @@ WINDOW_NAME = "Humalien eyes"
 KNOWN_COLOR = (80, 220, 80)
 STRANGER_COLOR = (0, 180, 255)
 
+# The Arducam OV9782 is a 1280x800 global-shutter sensor. Left to its own
+# devices it comes up at 640x480, which throws away three quarters of the
+# frame a face has to be recognised from. Anything smaller gets what it can.
+CAPTURE_SIZE = (1280, 800)
+
 # Capture faster than recognition. Recognition is happy at 4 Hz, but picking
 # a sharp frame out of a moving hand needs candidates to choose from.
 CAPTURE_INTERVAL = 0.08
@@ -179,14 +184,19 @@ class Eyes:
     async def run(self) -> None:
         # None means "whichever camera camera.py prefers" - the Arducam if
         # it is plugged in, the built-in webcam if it is not.
-        capture, camera = await asyncio.to_thread(open_camera, self.camera, log=log)
+        capture, camera = await asyncio.to_thread(
+            open_camera, self.camera, size=CAPTURE_SIZE, log=log
+        )
 
         if capture is None:
             # Losing the eyes must not take the conversation down with them.
             log("No camera would open - Humalien is blind")
             await asyncio.Event().wait()
 
-        log(f"{camera} online")
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        log(f"{camera} online at {width}x{height}")
 
         recognised_at = 0.0
 
