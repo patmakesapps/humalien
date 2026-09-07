@@ -101,3 +101,6 @@ eye rig/
 
 # STL is build output, same rule as exports/ - the script is the source
 stl/
+
+# Scratch notes, local to whoever is at the keyboard.
+bots.txt
