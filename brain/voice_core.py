@@ -27,6 +27,9 @@ from realtime_client import RealtimeClient, load_persona
 from robot_tools import Robot, tools
 from waking import build_waker
 
+import camera as cameras
+import system_prompt
+
 
 # A sleep nobody ever wakes. Without this a robot whose wake word model is
 # missing, or whose name simply never gets heard over the room, is deaf until
@@ -69,6 +72,21 @@ for _stream in (sys.stdout, sys.stderr):
 
 def log(message: str) -> None:
     print(f"[VOICE CORE] {message}", flush=True)
+
+
+def describe_camera(pinned: int | str | None) -> str | None:
+    """Which camera Tubby is about to see through, for its instructions.
+
+    Named before the eyes open, because the session connects first and the
+    capture thread starts after it. Naming the device that WOULD be chosen
+    is close enough for an instruction; if it then fails to open, the look
+    tool says so at the time and the model handles that.
+    """
+
+    if not pinned and not cameras.attached():
+        return None
+
+    return cameras.choose(pinned).name
 
 
 def looks_like_image_trouble(event: dict) -> bool:
@@ -702,6 +720,24 @@ async def run_voice_core() -> None:
             )
 
             log(f"Microphone gate: {gate.name}")
+
+            # Built here rather than read from a file, because most of what
+            # Tubby needs to know about itself is only true of this run: what
+            # answered on the Pi, which camera came up, who it has met, what
+            # it already remembers. See system_prompt.py.
+            instructions = system_prompt.build(
+                persona=load_persona(persona_file),
+                tools=[t["name"] for t in tools.definitions()],
+                body={
+                    "camera": describe_camera(camera),
+                    "moves": gestures is not None,
+                    "eyes": mood is not None,
+                    "tracking": tracking,
+                },
+                people=[person.name for person in store.people()],
+                memories=store.recall(),
+            )
+
             log(f"Connecting to OpenAI Realtime using {model}")
 
             async with RealtimeClient(
@@ -712,7 +748,7 @@ async def run_voice_core() -> None:
                 noise_reduction=noise_reduction,
                 transcription_model=transcription_model,
                 tools=tools.definitions(),
-                persona=load_persona(persona_file),
+                persona=instructions,
             ) as realtime:
                 log("Connected to OpenAI Realtime")
 
