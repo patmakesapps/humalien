@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
+from camera import open_camera
 from describe import downscale
 from people import Person
 from perception import Perception, Sighting
@@ -65,7 +66,7 @@ class Eyes:
         self,
         perception: Perception,
         *,
-        camera: int | str = 0,
+        camera: int | str | None = None,
         interval: float = RECOGNISE_INTERVAL,
         show_video: bool = False,
         remember_seconds: float = REMEMBER_SECONDS,
@@ -176,14 +177,16 @@ class Eyes:
         self.recent.append(Snapshot(at=at, frame=small, sharpness=sharpness(small)))
 
     async def run(self) -> None:
-        capture = await asyncio.to_thread(cv2.VideoCapture, self.camera)
+        # None means "whichever camera camera.py prefers" - the Arducam if
+        # it is plugged in, the built-in webcam if it is not.
+        capture, camera = await asyncio.to_thread(open_camera, self.camera, log=log)
 
-        if not capture.isOpened():
+        if capture is None:
             # Losing the eyes must not take the conversation down with them.
-            log(f"Could not open camera {self.camera!r} - Humalien is blind")
+            log("No camera would open - Humalien is blind")
             await asyncio.Event().wait()
 
-        log(f"Camera {self.camera!r} online")
+        log(f"{camera} online")
 
         recognised_at = 0.0
 

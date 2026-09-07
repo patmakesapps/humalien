@@ -5,6 +5,12 @@ python-dotenv>=1,<2
 sounddevice>=0.5,<1
 opencv-python>=4.10,<5
 
+# Windows only. Names the video devices, which OpenCV will not do, so
+# the Arducam can be found by name instead of by an index that moves.
+# Without it camera selection falls back to index 0. On Linux the names
+# come from /dev/v4l/by-id and nothing extra is needed.
+pygrabber>=0.2,<1; sys_platform == "win32"
+
 # Optional. Offline wake word, so a sleeping robot can be woken by voice
 # without the microphone reaching the network. Without it sleep still works
 # and ends on a timeout instead. See waking.py.

@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import cv2
 from dotenv import load_dotenv
 
+from camera import open_camera
 from describe import OllamaDescriber
 from people import GREET_THRESHOLD, MATCH_THRESHOLD, PeopleStore
 from perception import Perception
@@ -39,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--camera", default=os.getenv("HUMALIEN_CAMERA", "0"))
+    parser.add_argument("--camera", default=os.getenv("HUMALIEN_CAMERA") or None)
     parser.add_argument("--db", default=os.getenv("HUMALIEN_DB", str(DEFAULT_DB)))
     parser.add_argument(
         "--model",
@@ -52,13 +53,6 @@ def parse_args() -> argparse.Namespace:
         help="Seconds between recognition passes (default: 0.25)",
     )
     return parser.parse_args()
-
-
-def camera_source(value: str) -> int | str:
-    try:
-        return int(value)
-    except ValueError:
-        return value
 
 
 def largest(sightings):
@@ -205,10 +199,15 @@ def forget(store: PeopleStore) -> str:
 def main() -> None:
     args = parse_args()
 
-    capture = cv2.VideoCapture(camera_source(args.camera))
+    capture, camera = open_camera(args.camera)
 
-    if not capture.isOpened():
-        raise RuntimeError(f"Could not open camera {args.camera!r}")
+    if capture is None:
+        raise RuntimeError(
+            "Could not open a camera. Run devtools/list_cameras.py to see "
+            "what is attached, then pin one with --camera."
+        )
+
+    print(f"Camera: {camera}")
 
     store = PeopleStore(args.db)
     perception = Perception(store)

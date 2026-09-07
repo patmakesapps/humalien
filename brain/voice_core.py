@@ -608,7 +608,9 @@ async def run_voice_core() -> None:
         "HUMALIEN_TRANSCRIPTION_MODEL",
         "gpt-4o-mini-transcribe",
     )
-    camera = os.getenv("HUMALIEN_CAMERA", "0")
+    # Unset means "find the Arducam, and settle for the webcam without
+    # one". Set it only to pin a specific device. See camera.py.
+    camera = os.getenv("HUMALIEN_CAMERA") or None
     database = os.getenv("HUMALIEN_DB", str(DEFAULT_DB))
     vision_model = os.getenv("HUMALIEN_VISION_MODEL", "gemma4:cloud")
     vision = os.getenv("HUMALIEN_VISION", "realtime")
@@ -631,7 +633,7 @@ async def run_voice_core() -> None:
     appearance = AppearanceStore(database)
     eyes = Eyes(
         Perception(store),
-        camera=int(camera) if camera.isdigit() else camera,
+        camera=camera,
         show_video=show_video,
     )
     describer = OllamaDescriber(model=vision_model)

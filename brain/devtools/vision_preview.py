@@ -9,18 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import cv2
 
+from camera import open_camera
 from gaze import GazeController, select_primary_face
 from vision import YuNetFaceDetector
 
 
 WINDOW_NAME = "Humalien vision preview"
-
-
-def camera_source(value: str) -> int | str:
-    try:
-        return int(value)
-    except ValueError:
-        return value
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,8 +25,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--camera",
-        default="0",
-        help="OpenCV camera index or device path (default: 0)",
+        default=None,
+        help=(
+            "Pin an OpenCV camera index or device path. "
+            "By default the Arducam is used, or the built-in webcam without one."
+        ),
     )
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
@@ -107,15 +104,19 @@ def draw_overlay(frame, face, target, fps: float) -> None:
 def main() -> None:
     args = parse_args()
 
-    capture = cv2.VideoCapture(camera_source(args.camera))
+    capture, camera = open_camera(args.camera)
+
+    if capture is None:
+        raise RuntimeError(
+            "Could not open a camera. Run devtools/list_cameras.py to see "
+            "what is attached, then pin one with --camera."
+        )
+
+    print(f"Using {camera}")
+
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
     capture.set(cv2.CAP_PROP_FPS, args.fps)
-
-    if not capture.isOpened():
-        raise RuntimeError(
-            f"Could not open camera {args.camera!r}. Try another --camera index."
-        )
 
     detector = YuNetFaceDetector()
     controller = GazeController()
