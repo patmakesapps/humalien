@@ -295,10 +295,62 @@ class PeopleStore:
                 (person_id,),
             ).fetchone()["n"]
 
-            if stored < MAX_FACES_PER_PERSON:
-                self._add_face(person_id, embedding, now)
+            # A full gallery used to mean learning stopped, permanently. It
+            # is the wrong reading of the cap: the cap is how many views are
+            # worth keeping, not a deadline after which somebody's face is
+            # allowed to stop changing. Faces do change - hair, glasses,
+            # light, a beard, and above all a new camera - and a person
+            # frozen at the first twelve views slowly stops being
+            # recognisable, which is what a threshold cannot fix.
+            if stored >= MAX_FACES_PER_PERSON:
+                self._evict_most_redundant(person_id)
+
+            self._add_face(person_id, embedding, now)
 
         self.connection.commit()
+
+    def _evict_most_redundant(self, person_id: int) -> None:
+        """Drop the stored view that adds the least, to make room for one more.
+
+        Least is the one that most nearly duplicates another view of the same
+        face - of the closest pair, the older. Not the oldest overall: age is
+        not the same as uselessness, and the only photo of somebody in
+        sunglasses stays valuable however old it is, while the fifth
+        near-identical head-on shot does not.
+
+        It also self-corrects after a change of camera or lighting. Views
+        from the old setup are near-duplicates of each other, so they are
+        what gets evicted first as new ones arrive.
+        """
+
+        rows = self.connection.execute(
+            "SELECT id, embedding FROM faces WHERE person_id = ? ORDER BY added_at",
+            (person_id,),
+        ).fetchall()
+
+        if len(rows) < 2:
+            return
+
+        matrix = np.stack(
+            [np.frombuffer(row["embedding"], dtype=np.float32) for row in rows]
+        )
+
+        # Stored normalized, so this is cosine similarity. A face is always
+        # identical to itself, so the diagonal is taken out of the running.
+        similarities = matrix @ matrix.T
+        np.fill_diagonal(similarities, -1.0)
+
+        first, second = np.unravel_index(
+            int(np.argmax(similarities)), similarities.shape
+        )
+
+        # Rows come back oldest first, so the lower index is the older of the
+        # pair - keep the more recent look of the two.
+        self.connection.execute(
+            "DELETE FROM faces WHERE id = ?",
+            (rows[min(int(first), int(second))]["id"],),
+        )
+        self._cache = None
 
     def _add_face(self, person_id: int, embedding, added_at: float) -> None:
         self.connection.execute(

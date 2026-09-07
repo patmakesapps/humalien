@@ -40,6 +40,20 @@ class Sighting:
     def name(self) -> str | None:
         return None if self.match is None else self.match.person.name
 
+    @property
+    def is_confident(self) -> bool:
+        """Sure enough to say this person's name out loud.
+
+        A match is two decisions, not one, and they were being run as one.
+        Above MATCH_THRESHOLD is "this is probably who that is" - enough to
+        keep learning their face and to count them as present. Saying a name
+        needs more, because the cost of being wrong is not symmetric:
+        staying quiet about somebody you know is a non-event, and calling
+        them by somebody else's name is the whole conversation.
+        """
+
+        return self.match is not None and self.match.confident_enough_to_greet
+
     def is_a_stranger(self, now: float) -> bool:
         """An unknown face that has settled in and is worth introducing to."""
 

@@ -92,9 +92,20 @@ class Eyes:
 
     @property
     def known(self) -> list[Person]:
-        """Everyone currently visible that Humalien has met."""
+        """Everyone currently visible that Humalien has met.
+
+        Includes weak matches. Good enough to keep learning a face and to
+        know the room is not empty; NOT good enough to use a name. Anything
+        that says a name out loud wants `named` instead.
+        """
 
         return [s.match.person for s in self.sightings if s.match is not None]
+
+    @property
+    def named(self) -> list[Person]:
+        """Everyone visible that Humalien is sure enough about to name."""
+
+        return [s.match.person for s in self.sightings if s.is_confident]
 
     def largest_stranger(self, *, now: float | None = None) -> Sighting | None:
         """An unrecognised face that has stayed long enough to be worth meeting."""

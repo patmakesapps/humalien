@@ -547,7 +547,11 @@ async def watch_the_room(
 
         idle = not state.response_active and not playback.is_speaking
 
-        present = {person.id: person for person in eyes.known}
+        # Confident matches only. This pushes a name at the model and then
+        # asks it to speak, so a weak match here is Humalien greeting
+        # somebody who is not in the room by a name that is not theirs.
+        # Somebody it cannot place is simply not an arrival.
+        present = {person.id: person for person in eyes.named}
 
         for person_id in present:
             last_seen[person_id] = now

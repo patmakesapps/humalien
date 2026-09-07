@@ -162,14 +162,18 @@ async def who_is_here(robot: Robot) -> dict:
             "times_seen": person.sighting_count,
             "you_remember": robot.store.facts(person.id),
         }
-        for person in robot.eyes.known
+        for person in robot.eyes.named
     ]
 
-    strangers = sum(1 for s in robot.eyes.sightings if s.match is None)
+    # A face that half-matches somebody is reported as a face, not as that
+    # somebody. Handing over a name this tool is not sure of is how the
+    # wrong name gets said out loud - the model has no way to know the
+    # difference once it is written down as a name.
+    unsure = sum(1 for s in robot.eyes.sightings if not s.is_confident)
 
-    log(f"who_is_here -> {[p['name'] for p in known]}, {strangers} stranger(s)")
+    log(f"who_is_here -> {[p['name'] for p in known]}, {unsure} unrecognised")
 
-    return {"people_you_know": known, "unrecognised_faces": strangers}
+    return {"people_you_know": known, "unrecognised_faces": unsure}
 
 
 @tools.tool(

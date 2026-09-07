@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 from conversation import ConversationState
-from people import PeopleStore, normalize
+from people import GREET_THRESHOLD, PeopleStore, normalize
 from robot_tools import OLLAMA, REALTIME, Robot, tools
 
 
@@ -18,6 +18,15 @@ class FakeSighting:
         self.match = match
         self.embedding = embedding(0)
         self.detection = type("D", (), {"area": area})()
+
+    @property
+    def is_confident(self):
+        """Mirrors perception.Sighting - sure enough to say the name."""
+
+        if self.match is None:
+            return False
+
+        return getattr(self.match, "similarity", 0.0) >= GREET_THRESHOLD
 
 
 class FakePerception:
@@ -39,6 +48,10 @@ class FakeEyes:
     @property
     def known(self):
         return [s.match.person for s in self.sightings if s.match is not None]
+
+    @property
+    def named(self):
+        return [s.match.person for s in self.sightings if s.is_confident]
 
     def largest_stranger(self, **kwargs):
         return self._stranger
@@ -281,6 +294,20 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(known["you_remember"], ["builds robots"])
         self.assertEqual(result["data"]["unrecognised_faces"], 0)
 
+    async def test_who_is_here_withholds_a_name_it_is_unsure_of(self):
+        # The wrong-name bug. A half-match used to come back as a name, and
+        # once it is written down as a name the model cannot tell it was a
+        # guess - so it says it out loud.
+        person = self.store.enroll("Pat", embedding(1))
+        weak = type("M", (), {"person": person, "similarity": 0.45})()
+
+        result = await self.run_tool(
+            self.build(sightings=[FakeSighting(match=weak)]), "who_is_here"
+        )
+
+        self.assertEqual(result["data"]["people_you_know"], [])
+        self.assertEqual(result["data"]["unrecognised_faces"], 1)
+
     async def test_who_is_here_counts_strangers(self):
         robot = self.build(sightings=[FakeSighting(), FakeSighting()])
 
@@ -431,7 +458,9 @@ class MemoryToolTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def seeing(self, person):
-        return FakeSighting(match=type("M", (), {"person": person})())
+        return FakeSighting(
+            match=type("M", (), {"person": person, "similarity": 0.9})()
+        )
 
     async def test_remember_keeps_something_general(self):
         await tools.execute(self.robot(), "remember", json.dumps(
