@@ -150,30 +150,133 @@ async def look(robot: Robot, question: str) -> dict:
 
 @tools.tool(
     "who_is_here",
-    "Quietly check who is in front of you and what you remember about them. "
-    "Instant and free. The result is private - it is your own perception, "
-    "never something to read out, describe, or mention. You do not need this "
-    "to greet somebody or make small talk.",
+    "Look at who is actually in front of you right now. This is what your "
+    "eyes and your face tracking have, not a guess - every face you can "
+    "see, who each one is, how sure you are, and which one you are looking "
+    "at. Use it whenever somebody asks who is there, who you can see, or "
+    "which of them is which, and use it before renaming somebody. Instant "
+    "and free. The result is your own perception - never read it out.",
 )
 async def who_is_here(robot: Robot) -> dict:
-    known = [
-        {
-            "name": person.name,
-            "times_seen": person.sighting_count,
-            "you_remember": robot.store.facts(person.id),
+    now = time.time()
+    attending = robot.eyes.attending
+
+    # Biggest first, which is nearest first, which is the order somebody
+    # standing in the room would list them in.
+    faces = sorted(
+        robot.eyes.sightings,
+        key=lambda sighting: sighting.detection.area,
+        reverse=True,
+    )
+
+    seen = []
+
+    for sighting in faces:
+        face = {
+            "you_are_looking_at_them": sighting is attending,
+            "seconds_in_view": round(now - sighting.first_seen_at, 1),
         }
-        for person in robot.eyes.named
-    ]
 
-    # A face that half-matches somebody is reported as a face, not as that
-    # somebody. Handing over a name this tool is not sure of is how the
-    # wrong name gets said out loud - the model has no way to know the
-    # difference once it is written down as a name.
-    unsure = sum(1 for s in robot.eyes.sightings if not s.is_confident)
+        if sighting.match is None:
+            face["who"] = None
+            face["how_sure"] = "never seen them before"
+        else:
+            person = sighting.match.person
+            face["who"] = person.name
+            face["times_seen_before"] = person.sighting_count
+            face["you_remember"] = robot.store.facts(person.id)
 
-    log(f"who_is_here -> {[p['name'] for p in known]}, {unsure} unrecognised")
+            # Said in words rather than left as a number, because the
+            # decision that matters - is it safe to use this name out loud -
+            # is a judgement, and the model is the one making it. A bare
+            # 0.46 reads as certainty to something that has to answer fast.
+            face["how_sure"] = (
+                "certain" if sighting.is_confident else "probably them, not certain"
+            )
 
-    return {"people_you_know": known, "unrecognised_faces": unsure}
+        seen.append(face)
+
+    log(f"who_is_here -> {[f['who'] for f in seen]}")
+
+    return {"faces_you_can_see": seen, "how_many": len(seen)}
+
+
+@tools.tool(
+    "rename",
+    "Change what you call somebody you have already met, because you were "
+    "told their real name or told you had them wrong - 'that is not Pat, "
+    "that is Calvin', 'her name is actually Sam'. Look first with "
+    "who_is_here and work out which of the people in front of you they "
+    "mean; you may rename the one you are looking at, or name any person "
+    "you know by what you currently call them. Renaming keeps everything "
+    "you remember about them - it is the same person under a new name, not "
+    "a new person. Do not announce it, just carry on.",
+    properties={
+        "new_name": {
+            "type": "string",
+            "description": "What to call them from now on.",
+        },
+        "currently_called": {
+            "type": "string",
+            "description": (
+                "What you call them at the moment, if you know. Leave it out "
+                "to rename whoever you are looking at."
+            ),
+        },
+    },
+    required=["new_name"],
+)
+async def rename(
+    robot: Robot,
+    new_name: str,
+    currently_called: str | None = None,
+) -> dict:
+    if not new_name.strip():
+        raise ToolError("A person needs a name.")
+
+    if currently_called:
+        matches = [
+            person
+            for person in robot.store.people()
+            if person.name.strip().lower() == currently_called.strip().lower()
+        ]
+
+        if not matches:
+            raise ToolError(
+                f"You do not know anybody called {currently_called}. "
+                "Check who_is_here for who is actually in front of you."
+            )
+
+        if len(matches) > 1:
+            # Two people under one name is a real state this database gets
+            # into. Renaming a coin toss between them is worse than asking.
+            raise ToolError(
+                f"You know {len(matches)} different people called "
+                f"{currently_called}, so you cannot tell which one they "
+                "mean. Ask which, or look at who is in front of you and "
+                "rename them without saying who they are now."
+            )
+
+        person = matches[0]
+    else:
+        looking_at = robot.eyes.attending
+
+        if looking_at is None or looking_at.match is None:
+            raise ToolError(
+                "You are not looking at anybody you recognise, so there is "
+                "nobody to rename. Use who_is_here to see who is there. If "
+                "they are somebody new, use remember_name instead."
+            )
+
+        person = looking_at.match.person
+
+    was = person.name
+
+    await asyncio.to_thread(robot.store.rename, person.id, new_name.strip())
+
+    log(f"rename {was!r} -> {new_name.strip()!r} (#{person.id})")
+
+    return {"was": was, "now": new_name.strip()}
 
 
 @tools.tool(

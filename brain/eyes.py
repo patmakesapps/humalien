@@ -84,6 +84,14 @@ class Eyes:
         self.frame = None
         self.sightings: list[Sighting] = []
 
+        # Which face the head is actually pointed at, published by the
+        # tracking loop. Humalien is already committed to somebody -
+        # attention.py went to some trouble to decide who - and without this
+        # the tools could not see that decision, so being asked who was in
+        # the room meant working it out again from scratch and getting a
+        # different answer than the neck.
+        self.attending: Sighting | None = None
+
         # Stored already downscaled, which is what a vision model gets
         # anyway, so nothing is lost and the buffer stays affordable.
         self.recent: deque[Snapshot] = deque(

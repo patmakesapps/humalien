@@ -452,6 +452,23 @@ async def follow_faces(
             now=now,
         )
 
+        # Hand the tracker's choice to the tools. attention.py returns one of
+        # the very boxes it was given, so the sighting it belongs to is the
+        # one holding that box - no re-matching, and no chance of the tools
+        # naming a different person than the head is looking at.
+        eyes.attending = (
+            None
+            if attended is None
+            else next(
+                (
+                    sighting
+                    for sighting in eyes.sightings
+                    if sighting.detection.box is attended.face
+                ),
+                None,
+            )
+        )
+
         target = controller.update(
             attended.face if attended is not None else None,
             frame_width=width,

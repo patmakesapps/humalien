@@ -14,10 +14,13 @@ def embedding(seed: int) -> np.ndarray:
 
 
 class FakeSighting:
-    def __init__(self, match=None, area=1000):
+    def __init__(self, match=None, area=1000, first_seen_at=None):
+        import time as _time
+
         self.match = match
         self.embedding = embedding(0)
         self.detection = type("D", (), {"area": area})()
+        self.first_seen_at = _time.time() if first_seen_at is None else first_seen_at
 
     @property
     def is_confident(self):
@@ -38,11 +41,20 @@ class FakePerception:
 
 
 class FakeEyes:
-    def __init__(self, store, *, frame=None, sightings=None, stranger=None):
+    def __init__(
+        self,
+        store,
+        *,
+        frame=None,
+        sightings=None,
+        stranger=None,
+        attending=None,
+    ):
         self.frame = frame
         self.sightings = sightings or []
         self.perception = FakePerception(store)
         self._stranger = stranger
+        self.attending = attending
         self.asked_for = None
 
     @property
@@ -280,24 +292,25 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["success"])
         self.assertIn("question", result["error"])
 
-    async def test_who_is_here_reports_names_and_memories(self):
+    async def test_who_is_here_reports_every_face_the_tracker_has(self):
         person = self.store.enroll("Pat", embedding(1))
         self.store.add_fact(person.id, "builds robots")
 
         match = type("M", (), {"person": person, "similarity": 0.9})()
-        robot = self.build(sightings=[FakeSighting(match=match)])
+        robot = self.build(sightings=[FakeSighting(match=match), FakeSighting()])
 
         result = await self.run_tool(robot, "who_is_here")
 
-        known = result["data"]["people_you_know"][0]
-        self.assertEqual(known["name"], "Pat")
-        self.assertEqual(known["you_remember"], ["builds robots"])
-        self.assertEqual(result["data"]["unrecognised_faces"], 0)
+        seen = result["data"]["faces_you_can_see"]
+        self.assertEqual(result["data"]["how_many"], 2)
+        self.assertEqual(seen[0]["who"], "Pat")
+        self.assertEqual(seen[0]["how_sure"], "certain")
+        self.assertEqual(seen[0]["you_remember"], ["builds robots"])
+        self.assertIsNone(seen[1]["who"])
 
-    async def test_who_is_here_withholds_a_name_it_is_unsure_of(self):
-        # The wrong-name bug. A half-match used to come back as a name, and
-        # once it is written down as a name the model cannot tell it was a
-        # guess - so it says it out loud.
+    async def test_who_is_here_says_when_it_is_not_sure_rather_than_hiding_it(self):
+        # Not silence and not a bare number: the model has to be able to
+        # tell a name it can say out loud from one it cannot.
         person = self.store.enroll("Pat", embedding(1))
         weak = type("M", (), {"person": person, "similarity": 0.45})()
 
@@ -305,16 +318,109 @@ class RobotToolsTests(unittest.IsolatedAsyncioTestCase):
             self.build(sightings=[FakeSighting(match=weak)]), "who_is_here"
         )
 
-        self.assertEqual(result["data"]["people_you_know"], [])
-        self.assertEqual(result["data"]["unrecognised_faces"], 1)
+        face = result["data"]["faces_you_can_see"][0]
+        self.assertEqual(face["who"], "Pat")
+        self.assertIn("not certain", face["how_sure"])
 
-    async def test_who_is_here_counts_strangers(self):
-        robot = self.build(sightings=[FakeSighting(), FakeSighting()])
+    async def test_who_is_here_marks_the_one_the_head_is_pointed_at(self):
+        # The neck already committed to somebody. The answer has to be the
+        # same person, not a second opinion.
+        person = self.store.enroll("Pat", embedding(1))
+        match = type("M", (), {"person": person, "similarity": 0.9})()
+        looked_at = FakeSighting(match=match, area=500)
+        bigger = FakeSighting(area=9000)
+
+        robot = self.build(sightings=[bigger, looked_at], attending=looked_at)
 
         result = await self.run_tool(robot, "who_is_here")
 
-        self.assertEqual(result["data"]["people_you_know"], [])
-        self.assertEqual(result["data"]["unrecognised_faces"], 2)
+        seen = result["data"]["faces_you_can_see"]
+        # Sorted biggest first, so the tracked face is not simply the first.
+        self.assertFalse(seen[0]["you_are_looking_at_them"])
+        self.assertTrue(seen[1]["you_are_looking_at_them"])
+
+    async def test_who_is_here_on_an_empty_room(self):
+        result = await self.run_tool(self.build(), "who_is_here")
+
+        self.assertEqual(result["data"]["faces_you_can_see"], [])
+        self.assertEqual(result["data"]["how_many"], 0)
+
+    async def test_rename_changes_who_you_are_looking_at(self):
+        # "that is not Pat, that is Calvin" - look, work out who they mean,
+        # act. No name given, because the person in front of it is the one.
+        person = self.store.enroll("Pat", embedding(1))
+        match = type("M", (), {"person": person, "similarity": 0.9})()
+        looking = FakeSighting(match=match)
+
+        robot = self.build(sightings=[looking], attending=looking)
+
+        result = await self.run_tool(robot, "rename", '{"new_name": "Calvin"}')
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["data"], {"was": "Pat", "now": "Calvin"})
+        self.assertEqual(self.store.person(person.id).name, "Calvin")
+
+    async def test_rename_keeps_everything_remembered_about_them(self):
+        # The same person under a new name, not a new person.
+        person = self.store.enroll("Pat", embedding(1))
+        self.store.add_fact(person.id, "builds robots")
+        match = type("M", (), {"person": person, "similarity": 0.9})()
+        looking = FakeSighting(match=match)
+
+        robot = self.build(sightings=[looking], attending=looking)
+
+        await self.run_tool(robot, "rename", '{"new_name": "Calvin"}')
+
+        self.assertEqual(self.store.facts(person.id), ["builds robots"])
+
+    async def test_rename_can_name_who_it_means(self):
+        person = self.store.enroll("Yvonne", embedding(2))
+        robot = self.build()
+
+        result = await self.run_tool(
+            robot, "rename", '{"new_name": "Sam", "currently_called": "yvonne"}'
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(self.store.person(person.id).name, "Sam")
+
+    async def test_rename_refuses_a_name_it_does_not_know(self):
+        result = await self.run_tool(
+            self.build(), "rename", '{"new_name": "Sam", "currently_called": "Nobody"}'
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("do not know anybody", result["error"])
+
+    async def test_rename_will_not_guess_between_two_people_of_one_name(self):
+        # This database really does have two Carters.
+        self.store.enroll("Carter", embedding(3))
+        self.store.enroll("Carter", embedding(4))
+
+        result = await self.run_tool(
+            self.build(), "rename", '{"new_name": "Sam", "currently_called": "Carter"}'
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("2 different people", result["error"])
+
+    async def test_rename_needs_somebody_in_front_of_it(self):
+        result = await self.run_tool(self.build(), "rename", '{"new_name": "Sam"}')
+
+        self.assertFalse(result["success"])
+        self.assertIn("not looking at anybody", result["error"])
+
+    async def test_rename_will_not_rename_a_stranger(self):
+        # A face it does not recognise has no name to change. That is what
+        # remember_name is for, and the error says so.
+        stranger = FakeSighting()
+
+        robot = self.build(sightings=[stranger], attending=stranger)
+
+        result = await self.run_tool(robot, "rename", '{"new_name": "Sam"}')
+
+        self.assertFalse(result["success"])
+        self.assertIn("remember_name", result["error"])
 
     async def test_remember_name_enrolls_the_stranger_in_view(self):
         robot = self.build(stranger=FakeSighting())
